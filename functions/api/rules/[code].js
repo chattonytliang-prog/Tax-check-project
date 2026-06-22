@@ -20,6 +20,16 @@ function normalizeRule(input, code) {
     suggestion: String(input.suggestion || '').trim(),
     enabled: input.enabled === false ? 0 : 1,
     conditionText: String(input.conditionText || '').trim(),
+    conditionJson:
+      input.conditionJson && typeof input.conditionJson === 'object'
+        ? {
+            field: String(input.conditionJson.field || ''),
+            operator: ['>', '>=', '<', '<=', '=', '!='].includes(input.conditionJson.operator)
+              ? input.conditionJson.operator
+              : '=',
+            value: input.conditionJson.value ?? '',
+          }
+        : { field: '', operator: '=', value: '' },
     materials,
   }
 }
@@ -49,7 +59,7 @@ export async function onRequestPut({ request, env, params }) {
         rule.basis,
         rule.suggestion,
         rule.enabled,
-        JSON.stringify({ conditionText: rule.conditionText, materials: rule.materials }),
+        JSON.stringify({ conditionText: rule.conditionText, conditionJson: rule.conditionJson, materials: rule.materials }),
         now,
         rule.code,
       )

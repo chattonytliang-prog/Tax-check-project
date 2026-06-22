@@ -100,6 +100,12 @@ type RiskResult = RiskRule & {
   triggeredAt: string
 }
 
+type RuleCondition = {
+  field: keyof Client | ''
+  operator: '>' | '>=' | '<' | '<=' | '=' | '!='
+  value: string | number | boolean
+}
+
 type ManagedRule = {
   code: string
   name: string
@@ -109,6 +115,7 @@ type ManagedRule = {
   suggestion: string
   enabled: boolean
   conditionText: string
+  conditionJson: RuleCondition
   materials: string[]
   createdAt?: string
   updatedAt?: string
@@ -278,8 +285,27 @@ const emptyManagedRule: ManagedRule = {
   suggestion: '',
   enabled: true,
   conditionText: '',
+  conditionJson: { field: '', operator: '=', value: '' },
   materials: [],
 }
+
+const conditionFields: Array<{ value: keyof Client; label: string }> = [
+  { value: 'taxpayerType', label: '纳税人类型' },
+  { value: 'consecutive12MonthSales', label: '连续 12 个月销售额' },
+  { value: 'monthlyRevenue', label: '月收入' },
+  { value: 'monthlyInvoice', label: '月开票金额' },
+  { value: 'collectionFlow', label: '收款流水' },
+  { value: 'annualRevenue', label: '年销售收入' },
+  { value: 'employees', label: '员工人数' },
+  { value: 'socialSecurityCount', label: '社保人数' },
+  { value: 'salaryDeclaredCount', label: '工资申报人数' },
+  { value: 'privateAccountCollection', label: '个人账户收款' },
+  { value: 'unbilledIncome', label: '存在未开票收入' },
+  { value: 'largeExpenseNoInvoice', label: '大额费用无票' },
+  { value: 'serviceFeeInvoices', label: '服务费发票异常' },
+  { value: 'inventoryAbnormal', label: '库存异常' },
+  { value: 'rdDocsInsufficient', label: '研发资料不足' },
+]
 
 const pctDiff = (a: number, b: number) => {
   if (!b) return a > 0 ? 1 : 0
@@ -676,8 +702,62 @@ function getOverallLevel(results: RiskResult[]): RiskLevel {
   return '低'
 }
 
-function detectRisks(client: Client): RiskResult[] {
-  return rules
+function parseComparableValue(raw: string | number | boolean, sample: unknown) {
+  if (typeof sample === 'number') return Number(raw || 0)
+  if (typeof sample === 'boolean') return raw === true || raw === 'true' || raw === '是'
+  return String(raw ?? '')
+}
+
+function evaluateCondition(client: Client, condition?: RuleCondition) {
+  if (!condition?.field) return false
+  const left = client[condition.field]
+  const right = parseComparableValue(condition.value, left)
+
+  switch (condition.operator) {
+    case '>':
+      return Number(left) > Number(right)
+    case '>=':
+      return Number(left) >= Number(right)
+    case '<':
+      return Number(left) < Number(right)
+    case '<=':
+      return Number(left) <= Number(right)
+    case '!=':
+      return left !== right
+    case '=':
+    default:
+      return left === right
+  }
+}
+
+function managedRuleToRisk(rule: ManagedRule): RiskRule {
+  return {
+    code: rule.code,
+    name: rule.name,
+    taxType: rule.taxType,
+    level: rule.level,
+    basis: rule.basis,
+    caseRef: rule.conditionText,
+    trigger: (client) => evaluateCondition(client, rule.conditionJson),
+    reason: (client) => {
+      const field = rule.conditionJson?.field
+      const value = field ? client[field] : ''
+      return field
+        ? `规则条件命中：${String(field)} 当前值为 ${String(value)}，条件为 ${rule.conditionJson.operator} ${String(rule.conditionJson.value)}。`
+        : rule.conditionText || '规则条件已命中。'
+    },
+    suggestion: rule.suggestion,
+    materials: rule.materials,
+  }
+}
+
+function detectRisks(client: Client, managed: ManagedRule[] = []): RiskResult[] {
+  const executableRules = managed
+    .filter((rule) => rule.enabled && rule.conditionJson?.field)
+    .map(managedRuleToRisk)
+  const sourceRules = executableRules.length ? executableRules : rules
+
+  return sourceRules
     .filter((rule) => rule.trigger(client))
     .sort((a, b) => riskRank(b.level) - riskRank(a.level))
     .map((rule) => ({ ...rule, triggeredAt: formatDate() }))
@@ -704,7 +784,7 @@ function buildReportContent(client: Client, risks: RiskResult[]) {
 
 二、综合风险结论
 本次系统共命中 ${risks.length} 项风险提示，其中高风险 ${highCount} 项，中风险 ${mediumCount} 项，综合风险等级为【${level}】。
-本结论基于当前录入数据和内置规则生成，建议由财税专业人员结合原始凭证、账套、申报表、合同、资金流水进一步复核。
+本结论基于当前录入数据和系统规则库生成，建议由财税专业人员结合原始凭证、账套、申报表、合同、资金流水进一步复核。
 
 三、主要风险摘要
 ${riskSummary || '未发现明显高频风险。建议继续完善资料后复核。'}
@@ -964,7 +1044,7 @@ function App() {
   }, [loggedIn, authUser, page])
 
   useEffect(() => {
-    if (!loggedIn || page !== 'rules') return
+    if (!loggedIn || !authUser) return
 
     let active = true
 
@@ -985,17 +1065,17 @@ function App() {
     return () => {
       active = false
     }
-  }, [loggedIn, page])
+  }, [loggedIn, authUser])
 
   const selectedClient = clients.find((client) => client.id === selectedClientId) || clients[0]
-  const currentRisks = useMemo(() => (selectedClient ? detectRisks(selectedClient) : []), [selectedClient])
+  const currentRisks = useMemo(() => (selectedClient ? detectRisks(selectedClient, managedRules) : []), [selectedClient, managedRules])
   const overallLevel = getOverallLevel(currentRisks)
 
   const clientRows = useMemo(() => {
     return clients
       .filter((client) => client.name.includes(query) || client.creditCode.includes(query))
       .map((client) => {
-        const risks = detectRisks(client)
+        const risks = detectRisks(client, managedRules)
         return {
           client,
           risks,
@@ -1003,16 +1083,16 @@ function App() {
           report: reports.find((report) => report.clientId === client.id),
         }
       })
-  }, [clients, query, reports])
+  }, [clients, query, reports, managedRules])
 
   const stats = useMemo(() => {
-    const clientStats = clients.map((client) => detectRisks(client))
+    const clientStats = clients.map((client) => detectRisks(client, managedRules))
     return {
       high: clientStats.filter((risks) => getOverallLevel(risks) === '高').length,
       medium: clientStats.filter((risks) => getOverallLevel(risks) === '中').length,
       detections: clientStats.reduce((sum, risks) => sum + risks.length, 0),
     }
-  }, [clients])
+  }, [clients, managedRules])
 
   const canUseAdmin = authUser?.role === 'admin' || authUser?.actor?.role === 'admin'
 
@@ -1103,6 +1183,10 @@ function App() {
             suggestion: rule.suggestion,
             enabled: true,
             conditionText: rule.caseRef,
+            conditionJson:
+              rule.code === 'R001'
+                ? { field: 'consecutive12MonthSales', operator: '>', value: 5000000 }
+                : { field: '', operator: '=', value: '' },
             materials: rule.materials,
           }),
         ),
@@ -1129,7 +1213,7 @@ function App() {
     try {
       await apiSend<{ client: Client }>('/api/clients', 'POST', {
         ...normalized,
-        riskLevel: getOverallLevel(detectRisks(normalized)),
+        riskLevel: getOverallLevel(detectRisks(normalized, managedRules)),
       })
       setDataStatus('connected')
     } catch (error) {
@@ -1139,7 +1223,7 @@ function App() {
   }
 
   const createReport = async () => {
-    const risks = detectRisks(selectedClient)
+    const risks = detectRisks(selectedClient, managedRules)
     const report: Report = {
       id: crypto.randomUUID(),
       clientId: selectedClient.id,
@@ -1795,6 +1879,47 @@ function App() {
                       placeholder="用于描述规则触发口径，下一阶段可升级为可执行条件"
                     />
                   </Field>
+                  <Field label="执行字段">
+                    <select
+                      value={ruleDraft.conditionJson.field}
+                      onChange={(event) =>
+                        setRuleDraft({
+                          ...ruleDraft,
+                          conditionJson: { ...ruleDraft.conditionJson, field: event.target.value as keyof Client },
+                        })
+                      }
+                    >
+                      <option value="">不参与自动检测</option>
+                      {conditionFields.map((field) => (
+                        <option key={field.value} value={field.value}>{field.label}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="操作符">
+                    <select
+                      value={ruleDraft.conditionJson.operator}
+                      onChange={(event) =>
+                        setRuleDraft({
+                          ...ruleDraft,
+                          conditionJson: { ...ruleDraft.conditionJson, operator: event.target.value as RuleCondition['operator'] },
+                        })
+                      }
+                    >
+                      {['>', '>=', '<', '<=', '=', '!='].map((operator) => <option key={operator}>{operator}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="比较值">
+                    <input
+                      value={String(ruleDraft.conditionJson.value)}
+                      onChange={(event) =>
+                        setRuleDraft({
+                          ...ruleDraft,
+                          conditionJson: { ...ruleDraft.conditionJson, value: event.target.value },
+                        })
+                      }
+                      placeholder="例如 5000000 / true / 小规模纳税人"
+                    />
+                  </Field>
                 </div>
                 <div className="rule-editor-textareas">
                   <Field label="风险依据">
@@ -1835,6 +1960,11 @@ function App() {
                   </div>
                   <h3>{rule.name}</h3>
                   <p>{rule.taxType || '未填写税种'} / {rule.enabled ? '启用' : '停用'}</p>
+                  {rule.conditionJson?.field && (
+                    <small>
+                      执行条件：{String(rule.conditionJson.field)} {rule.conditionJson.operator} {String(rule.conditionJson.value)}
+                    </small>
+                  )}
                   {rule.conditionText && <small>{rule.conditionText}</small>}
                   <small>{rule.basis}</small>
                   <p>{rule.suggestion}</p>
