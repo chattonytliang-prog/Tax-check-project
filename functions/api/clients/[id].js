@@ -8,8 +8,8 @@ export async function onRequestGet({ request, env, params }) {
     if (auth.response) return auth.response
 
     const row = await db
-      .prepare('SELECT payload_json FROM clients WHERE id = ?')
-      .bind(params.id)
+      .prepare('SELECT payload_json FROM clients WHERE id = ? AND owner_user_id = ?')
+      .bind(params.id, auth.user.id)
       .first()
 
     if (!row) {
@@ -35,7 +35,7 @@ export async function onRequestPut({ request, env, params }) {
       .prepare(
         `UPDATE clients
          SET name = ?, credit_code = ?, region = ?, industry = ?, taxpayer_type = ?, risk_level = ?, payload_json = ?, updated_at = ?
-         WHERE id = ?`,
+         WHERE id = ? AND owner_user_id = ?`,
       )
       .bind(
         client.name || '',
@@ -47,6 +47,7 @@ export async function onRequestPut({ request, env, params }) {
         payload,
         now,
         params.id,
+        auth.user.id,
       )
       .run()
 
@@ -62,7 +63,7 @@ export async function onRequestDelete({ request, env, params }) {
     const auth = await requireUser(request, db)
     if (auth.response) return auth.response
 
-    await db.prepare('DELETE FROM clients WHERE id = ?').bind(params.id).run()
+    await db.prepare('DELETE FROM clients WHERE id = ? AND owner_user_id = ?').bind(params.id, auth.user.id).run()
     return json({ ok: true })
   } catch (error) {
     return serverError(error)
