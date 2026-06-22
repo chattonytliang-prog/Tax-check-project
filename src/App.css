@@ -788,6 +788,106 @@ textarea:focus {
   min-height: 72vh;
 }
 
+.report-workspace {
+  display: grid;
+  gap: 16px;
+}
+
+.ai-review-panel {
+  border: 1px solid rgba(18, 174, 234, 0.22);
+  border-radius: 8px;
+  padding: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(238, 250, 250, 0.78));
+  box-shadow: 0 8px 30px rgba(5, 26, 34, 0.08);
+}
+
+.ai-review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.ai-review-header h3 {
+  margin: 4px 0 0;
+}
+
+.ai-review-status {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 11px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ai-review-status.active {
+  color: #087a7a;
+  border-color: rgba(12, 140, 130, 0.28);
+  background: rgba(86, 240, 238, 0.16);
+}
+
+.ai-review-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ai-review-card,
+.ai-review-empty {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.ai-review-card {
+  padding: 14px;
+}
+
+.ai-review-card h4,
+.ai-review-card p,
+.ai-review-empty p {
+  margin: 0;
+}
+
+.ai-review-card h4 {
+  margin-bottom: 10px;
+}
+
+.ai-review-card ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.ai-review-card li,
+.ai-review-card p,
+.ai-review-empty p {
+  color: #35474f;
+  line-height: 1.7;
+}
+
+.ai-review-card li + li {
+  margin-top: 6px;
+}
+
+.ai-review-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+}
+
+.ai-review-empty svg {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  color: var(--blue);
+}
+
 .ai-process-panel {
   min-height: 72vh;
   border: 1px solid rgba(18, 174, 234, 0.26);
@@ -945,6 +1045,7 @@ textarea:focus {
   .app-shell,
   .login-shell,
   .two-column,
+  .ai-review-grid,
   .report-editor {
     grid-template-columns: 1fr;
   }
@@ -986,6 +1087,7 @@ textarea:focus {
   }
 
   .page-header,
+  .ai-review-header,
   .compact-row {
     align-items: stretch;
     flex-direction: column;

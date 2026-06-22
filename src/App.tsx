@@ -8,6 +8,7 @@ import {
   Download,
   FileText,
   Gauge,
+  Info,
   LayoutDashboard,
   LogOut,
   Plus,
@@ -2177,6 +2178,23 @@ function ReportPage({
   const aiStepText = aiStage === 'reviewing'
     ? '正在比对企业输入数据、规则条件和命中结果，识别字段冲突、边界值和需要人工复核的事项。'
     : '正在把确定性规则结果和数据复核意见整合成正式税务风险体检报告。'
+  const reviewGroups = [
+    {
+      title: '输入数据疑点',
+      items: report?.aiReview?.dataQualityWarnings || [],
+      empty: 'AI 未发现明显字段冲突或缺失。',
+    },
+    {
+      title: '接近阈值提醒',
+      items: report?.aiReview?.nearThresholdWarnings || [],
+      empty: '暂无接近规则阈值的观察项。',
+    },
+    {
+      title: '命中风险复核',
+      items: report?.aiReview?.riskReviewNotes || [],
+      empty: '暂无额外复核说明。',
+    },
+  ]
 
   return (
     <section className="page">
@@ -2222,14 +2240,48 @@ function ReportPage({
           <small>在 AI 完成复核和生成前，系统不会展示未经核对的模板报告。</small>
         </div>
       ) : (
-        <div className="report-editor">
-          <aside>
-            <h3>报告目录</h3>
-            {['企业基本情况', '综合风险结论', '主要风险摘要', '风险明细', '后续处理建议', '免责声明'].map((item) => (
-              <span key={item}>{item}</span>
-            ))}
-          </aside>
-          <textarea value={draft} onChange={(event) => onUpdate(event.target.value)} />
+        <div className="report-workspace">
+          <section className="ai-review-panel">
+            <div className="ai-review-header">
+              <div>
+                <p className="eyebrow">AI 数据复核提示</p>
+                <h3>复核结果不改变规则引擎命中结论</h3>
+              </div>
+              <span className={report?.aiGenerated ? 'ai-review-status active' : 'ai-review-status'}>
+                {report?.aiGenerated ? 'AI 已复核' : '本地模板'}
+              </span>
+            </div>
+            {report?.aiReview ? (
+              <div className="ai-review-grid">
+                {reviewGroups.map((group) => (
+                  <article className="ai-review-card" key={group.title}>
+                    <h4>{group.title}</h4>
+                    {group.items.length ? (
+                      <ul>
+                        {group.items.map((item) => <li key={item}>{item}</li>)}
+                      </ul>
+                    ) : (
+                      <p>{group.empty}</p>
+                    )}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="ai-review-empty">
+                <Info />
+                <p>当前报告没有可展示的 AI 复核明细。重新生成报告后，系统会自动调用 AI 复核并在此展示数据疑点、阈值提醒和风险复核说明。</p>
+              </div>
+            )}
+          </section>
+          <div className="report-editor">
+            <aside>
+              <h3>报告目录</h3>
+              {['企业基本情况', '综合风险结论', '主要风险摘要', '风险明细', '后续处理建议', '免责声明'].map((item) => (
+                <span key={item}>{item}</span>
+              ))}
+            </aside>
+            <textarea value={draft} onChange={(event) => onUpdate(event.target.value)} />
+          </div>
         </div>
       )}
     </section>
