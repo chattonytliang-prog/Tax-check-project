@@ -1442,9 +1442,10 @@ function App() {
     }
   }
 
-  const draftCondition = isSimpleCondition(ruleDraft.conditionJson)
-    ? ruleDraft.conditionJson
-    : { field: '', operator: '=', value: '' } satisfies SimpleRuleCondition
+  const isDraftSimpleCondition = isSimpleCondition(ruleDraft.conditionJson)
+  const draftCondition: SimpleRuleCondition = isDraftSimpleCondition
+    ? (ruleDraft.conditionJson as SimpleRuleCondition)
+    : { field: '', operator: '=', value: '' }
 
   if (!loggedIn) {
     return (
@@ -1944,15 +1945,19 @@ function App() {
                   </Field>
                   <Field label="执行字段">
                     <select
-                      value={draftCondition.field}
+                      value={isDraftSimpleCondition ? draftCondition.field : '__complex'}
                       onChange={(event) =>
                         setRuleDraft({
                           ...ruleDraft,
-                          conditionJson: { ...draftCondition, field: event.target.value as keyof Client },
+                          conditionJson:
+                            event.target.value === '__complex'
+                              ? ruleDraft.conditionJson
+                              : { ...draftCondition, field: event.target.value as keyof Client },
                         })
                       }
                     >
                       <option value="">不参与自动检测</option>
+                      {!isDraftSimpleCondition && <option value="__complex">组合条件（自动检测）</option>}
                       {conditionFields.map((field) => (
                         <option key={field.value} value={field.value}>{field.label}</option>
                       ))}
@@ -1984,6 +1989,9 @@ function App() {
                     />
                   </Field>
                 </div>
+                {!isDraftSimpleCondition && (
+                  <p className="condition-note">当前规则使用组合条件：{conditionSummary(ruleDraft.conditionJson)}</p>
+                )}
                 <div className="rule-editor-textareas">
                   <Field label="风险依据">
                     <textarea value={ruleDraft.basis} onChange={(event) => setRuleDraft({ ...ruleDraft, basis: event.target.value })} />

@@ -649,6 +649,14 @@ th {
   padding: 12px;
 }
 
+.condition-note {
+  margin: 12px 0 0;
+  color: var(--teal);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.7;
+}
+
 .field {
   display: grid;
   gap: 8px;
