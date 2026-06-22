@@ -243,6 +243,8 @@ button svg,
   color: #9cf4f1;
   font-size: 12px;
   font-weight: 800;
+  display: grid;
+  gap: 4px;
 }
 
 .sidebar nav {
@@ -391,6 +393,10 @@ button svg,
 .row-actions button.danger-action:hover,
 .report-actions button.danger-action:hover {
   background: rgba(182, 49, 54, 0.08);
+}
+
+.admin-actions {
+  min-width: 260px;
 }
 
 .ghost-button {

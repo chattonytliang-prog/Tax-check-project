@@ -17,6 +17,9 @@ export async function onRequestPost({ request, env }) {
     if (!user) {
       return json({ error: 'Invalid username or password' }, { status: 401 })
     }
+    if (user.disabled_at) {
+      return json({ error: 'Account disabled' }, { status: 403 })
+    }
 
     const passwordHash = await hashPassword(password, user.password_salt)
     if (passwordHash !== user.password_hash) {
@@ -25,7 +28,7 @@ export async function onRequestPost({ request, env }) {
 
     const session = await createSession(db, user.id)
     return json(
-      { user: { id: user.id, username: user.username } },
+      { user: { id: user.id, username: user.username, role: user.role || 'user', actor: null } },
       {
         headers: { 'set-cookie': session.cookie },
       },

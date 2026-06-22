@@ -32,7 +32,7 @@ export async function onRequestPost({ request, env }) {
 
     const session = await createSession(db, id)
     return json(
-      { user: { id, username } },
+      { user: { id, username, role: 'user', actor: null } },
       {
         status: 201,
         headers: { 'set-cookie': session.cookie },

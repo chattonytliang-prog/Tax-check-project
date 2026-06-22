@@ -17,10 +17,11 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
+  UserCog,
 } from 'lucide-react'
 import './App.css'
 
-type Page = 'dashboard' | 'clients' | 'form' | 'result' | 'report' | 'reports' | 'rules'
+type Page = 'dashboard' | 'clients' | 'form' | 'result' | 'report' | 'reports' | 'rules' | 'admin'
 type RiskLevel = '高' | '中' | '低'
 type TaxpayerType = '小规模纳税人' | '一般纳税人' | '个体工商户'
 
@@ -112,6 +113,22 @@ type Report = {
 type AuthUser = {
   id: string
   username: string
+  role: 'user' | 'admin'
+  actor: {
+    id: string
+    username: string
+    role: 'user' | 'admin'
+  } | null
+}
+
+type AdminUser = {
+  id: string
+  username: string
+  role: 'user' | 'admin'
+  disabledAt: string | null
+  createdAt: string
+  clientsCount: number
+  reportsCount: number
 }
 
 const emptyClient: Client = {
@@ -818,6 +835,7 @@ function App() {
   const [selectedClientId, setSelectedClientId] = useState(demoClients[0].id)
   const [editingClient, setEditingClient] = useState<Client>({ ...emptyClient, id: crypto.randomUUID() })
   const [reports, setReports] = useState<Report[]>([])
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
   const [query, setQuery] = useState('')
   const [dataStatus, setDataStatus] = useState<'loading' | 'connected' | 'fallback'>('loading')
 
@@ -849,11 +867,12 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!loggedIn) return
+    if (!loggedIn || !authUser) return
 
     let active = true
 
     async function loadData() {
+      setDataStatus('loading')
       try {
         const [clientsResponse, reportsResponse] = await Promise.all([
           apiGet<{ clients: Client[] }>('/api/clients'),
@@ -887,7 +906,32 @@ function App() {
     return () => {
       active = false
     }
-  }, [loggedIn])
+  }, [loggedIn, authUser])
+
+  useEffect(() => {
+    if (!loggedIn || !authUser || page !== 'admin') return
+    const canUseAdmin = authUser.role === 'admin' || authUser.actor?.role === 'admin'
+    if (!canUseAdmin) return
+
+    let active = true
+
+    async function loadAdminUsers() {
+      try {
+        const response = await apiGet<{ users: AdminUser[] }>('/api/admin/users')
+        if (active) {
+          setAdminUsers(response.users)
+        }
+      } catch (error) {
+        console.warn('Failed to load admin users.', error)
+      }
+    }
+
+    loadAdminUsers()
+
+    return () => {
+      active = false
+    }
+  }, [loggedIn, authUser, page])
 
   const selectedClient = clients.find((client) => client.id === selectedClientId) || clients[0]
   const currentRisks = useMemo(() => (selectedClient ? detectRisks(selectedClient) : []), [selectedClient])
@@ -915,6 +959,13 @@ function App() {
       detections: clientStats.reduce((sum, risks) => sum + risks.length, 0),
     }
   }, [clients])
+
+  const canUseAdmin = authUser?.role === 'admin' || authUser?.actor?.role === 'admin'
+
+  const refreshAdminUsers = async () => {
+    const response = await apiGet<{ users: AdminUser[] }>('/api/admin/users')
+    setAdminUsers(response.users)
+  }
 
   const saveClient = async () => {
     const normalized = editingClient.name.trim()
@@ -1040,6 +1091,67 @@ function App() {
     setDataStatus('loading')
   }
 
+  const resetUserPassword = async (user: AdminUser) => {
+    const password = window.prompt(`请输入 ${user.username} 的新密码，至少 6 位：`)
+    if (!password) return
+
+    try {
+      await apiSend<{ ok: true }>(`/api/admin/users/${user.id}/reset-password`, 'POST', { password })
+      window.alert('密码已重置，用户需要用新密码重新登录。')
+      await refreshAdminUsers()
+    } catch (error) {
+      console.warn('Failed to reset password.', error)
+      window.alert('重置密码失败。')
+    }
+  }
+
+  const toggleUserDisabled = async (user: AdminUser) => {
+    const action = user.disabledAt ? '启用' : '禁用'
+    if (!window.confirm(`确定${action}用户「${user.username}」吗？`)) return
+
+    try {
+      await apiSend<{ ok: true }>(`/api/admin/users/${user.id}/${user.disabledAt ? 'enable' : 'disable'}`, 'POST', {})
+      await refreshAdminUsers()
+    } catch (error) {
+      console.warn('Failed to update user status.', error)
+      window.alert(`${action}失败。`)
+    }
+  }
+
+  const impersonateUser = async (user: AdminUser) => {
+    if (user.disabledAt) {
+      window.alert('该用户已被禁用，不能代入。')
+      return
+    }
+    if (!window.confirm(`确定进入「${user.username}」的工作台吗？`)) return
+
+    try {
+      const response = await apiSend<{ user: AuthUser }>('/api/admin/impersonate', 'POST', { userId: user.id })
+      setAuthUser(response.user)
+      setClients([])
+      setReports([])
+      setPage('dashboard')
+      setDataStatus('loading')
+    } catch (error) {
+      console.warn('Failed to impersonate user.', error)
+      window.alert('进入用户工作台失败。')
+    }
+  }
+
+  const stopImpersonation = async () => {
+    try {
+      const response = await apiSend<{ user: AuthUser }>('/api/admin/stop-impersonation', 'POST', {})
+      setAuthUser(response.user)
+      setClients([])
+      setReports([])
+      setPage('admin')
+      setDataStatus('loading')
+    } catch (error) {
+      console.warn('Failed to stop impersonation.', error)
+      window.alert('退出代入失败，请重新登录管理员账号。')
+    }
+  }
+
   if (!loggedIn) {
     return (
       <main className="login-shell">
@@ -1105,7 +1217,12 @@ function App() {
             <span>税务风控工作台</span>
           </div>
         </div>
-        {authUser && <div className="sidebar-user">当前用户：{authUser.username}</div>}
+        {authUser && (
+          <div className="sidebar-user">
+            <span>当前用户：{authUser.username}</span>
+            {authUser.actor && <span>管理员代入：{authUser.actor.username}</span>}
+          </div>
+        )}
         <nav>
           <button className={page === 'dashboard' ? 'active' : ''} onClick={() => setPage('dashboard')}>
             <LayoutDashboard /> 首页
@@ -1131,7 +1248,17 @@ function App() {
           <button className={page === 'rules' ? 'active' : ''} onClick={() => setPage('rules')}>
             <Settings2 /> 规则库
           </button>
+          {canUseAdmin && (
+            <button className={page === 'admin' ? 'active' : ''} onClick={() => setPage('admin')}>
+              <UserCog /> 管理员
+            </button>
+          )}
         </nav>
+        {authUser?.actor && (
+          <button className="ghost-button logout" onClick={stopImpersonation}>
+            <UserCog /> 退出代入
+          </button>
+        )}
         <button className="ghost-button logout" onClick={handleLogout}>
           <LogOut /> 退出
         </button>
@@ -1396,6 +1523,66 @@ function App() {
                 </div>
               )}
             </div>
+          </section>
+        )}
+
+        {page === 'admin' && canUseAdmin && (
+          <section className="page">
+            <header className="page-header">
+              <div>
+                <p className="eyebrow">账号管理</p>
+                <h2>测试用户后台</h2>
+              </div>
+              <button className="secondary-button" onClick={refreshAdminUsers}>
+                <RefreshCcw /> 刷新
+              </button>
+            </header>
+            <div className="table-panel">
+              <table>
+                <thead>
+                  <tr>
+                    <th>用户名</th>
+                    <th>角色</th>
+                    <th>状态</th>
+                    <th>企业</th>
+                    <th>报告</th>
+                    <th>注册时间</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {adminUsers.map((user) => (
+                    <tr key={user.id}>
+                      <td>
+                        <strong>{user.username}</strong>
+                        <small>{user.id}</small>
+                      </td>
+                      <td>{user.role === 'admin' ? '管理员' : '普通用户'}</td>
+                      <td>{user.disabledAt ? '已禁用' : '正常'}</td>
+                      <td>{user.clientsCount}</td>
+                      <td>{user.reportsCount}</td>
+                      <td>{user.createdAt}</td>
+                      <td className="row-actions admin-actions">
+                        <button onClick={() => impersonateUser(user)}>
+                          <UserCog /> 进入
+                        </button>
+                        <button onClick={() => resetUserPassword(user)}>重置密码</button>
+                        <button className="danger-action" onClick={() => toggleUserDisabled(user)}>
+                          {user.disabledAt ? '启用' : '禁用'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!adminUsers.length && (
+              <div className="empty-state wide">
+                <UserCog />
+                <h3>还没有加载到用户</h3>
+                <p>确认当前账号已经被设置为 admin，然后点击刷新。</p>
+              </div>
+            )}
           </section>
         )}
 

@@ -94,15 +94,28 @@ function sessionCookie(token) {
   return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_TTL_SECONDS}`
 }
 
-export async function createSession(db, userId) {
+export async function createSession(db, userId, actorUserId = null) {
   const token = randomSessionToken()
   const tokenHash = await sha256(token)
   const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000).toISOString()
 
-  await db
-    .prepare('INSERT INTO sessions (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)')
-    .bind(tokenHash, userId, expiresAt)
-    .run()
+  try {
+    await db
+      .prepare(
+        'INSERT INTO sessions (token_hash, user_id, actor_user_id, expires_at, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)',
+      )
+      .bind(tokenHash, userId, actorUserId, expiresAt)
+      .run()
+  } catch (error) {
+    if (actorUserId || !String(error).includes('actor_user_id')) {
+      throw error
+    }
+
+    await db
+      .prepare('INSERT INTO sessions (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)')
+      .bind(tokenHash, userId, expiresAt)
+      .run()
+  }
 
   return { token, cookie: sessionCookie(token) }
 }
@@ -119,23 +132,66 @@ export async function getCurrentUser(request, db) {
   if (!token) return null
 
   const tokenHash = await sha256(token)
-  const row = await db
-    .prepare(
-      `SELECT users.id, users.username, sessions.expires_at
-       FROM sessions
-       JOIN users ON users.id = sessions.user_id
-       WHERE sessions.token_hash = ?`,
-    )
-    .bind(tokenHash)
-    .first()
+  let row
+  try {
+    row = await db
+      .prepare(
+        `SELECT
+          users.id,
+          users.username,
+          users.role,
+          users.disabled_at,
+          sessions.expires_at,
+          sessions.actor_user_id,
+          actor.username AS actor_username,
+          actor.role AS actor_role,
+          actor.disabled_at AS actor_disabled_at
+         FROM sessions
+         JOIN users ON users.id = sessions.user_id
+         LEFT JOIN users AS actor ON actor.id = sessions.actor_user_id
+         WHERE sessions.token_hash = ?`,
+      )
+      .bind(tokenHash)
+      .first()
+  } catch (error) {
+    if (!String(error).includes('actor_user_id') && !String(error).includes('role') && !String(error).includes('disabled_at')) {
+      throw error
+    }
+
+    row = await db
+      .prepare(
+        `SELECT users.id, users.username, sessions.expires_at
+         FROM sessions
+         JOIN users ON users.id = sessions.user_id
+         WHERE sessions.token_hash = ?`,
+      )
+      .bind(tokenHash)
+      .first()
+  }
 
   if (!row) return null
   if (new Date(row.expires_at).getTime() <= Date.now()) {
     await db.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(tokenHash).run()
     return null
   }
+  if (row.disabled_at || row.actor_disabled_at) {
+    await db.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(tokenHash).run()
+    return null
+  }
 
-  return { id: row.id, username: row.username }
+  return {
+    id: row.id,
+    username: row.username,
+    role: row.role || 'user',
+    disabledAt: row.disabled_at || null,
+    actor: row.actor_user_id
+      ? {
+          id: row.actor_user_id,
+          username: row.actor_username,
+          role: row.actor_role || 'user',
+        }
+      : null,
+  }
 }
 
 export async function requireUser(request, db) {
@@ -144,4 +200,19 @@ export async function requireUser(request, db) {
     return { response: json({ error: 'Unauthorized' }, { status: 401 }) }
   }
   return { user }
+}
+
+export async function requireAdmin(request, db) {
+  const user = await getCurrentUser(request, db)
+  const actor = user?.actor || null
+  const admin = actor?.role === 'admin' ? actor : user?.role === 'admin' ? user : null
+
+  if (!user) {
+    return { response: json({ error: 'Unauthorized' }, { status: 401 }) }
+  }
+  if (!admin) {
+    return { response: json({ error: 'Forbidden' }, { status: 403 }) }
+  }
+
+  return { user, admin }
 }
