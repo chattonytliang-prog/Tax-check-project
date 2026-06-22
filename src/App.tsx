@@ -111,6 +111,12 @@ type RiskResult = RiskRule & {
   triggeredAt: string
 }
 
+type AiReview = {
+  dataQualityWarnings: string[]
+  nearThresholdWarnings: string[]
+  riskReviewNotes: string[]
+}
+
 type ManagedRule = {
   code: string
   name: string
@@ -134,6 +140,9 @@ type Report = {
   createdAt: string
   risks: RiskResult[]
   content: string
+  aiReview?: AiReview
+  aiGenerated?: boolean
+  aiModel?: string
 }
 
 type AuthUser = {
@@ -826,6 +835,12 @@ async function apiDelete<T>(url: string): Promise<T> {
   return response.json() as Promise<T>
 }
 
+function wait(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
 function StatCard({
   label,
   value,
@@ -903,7 +918,7 @@ function App() {
   const [editingRuleCode, setEditingRuleCode] = useState('')
   const [query, setQuery] = useState('')
   const [dataStatus, setDataStatus] = useState<'loading' | 'connected' | 'fallback'>('loading')
-  const [aiReportLoading, setAiReportLoading] = useState(false)
+  const [aiReportStage, setAiReportStage] = useState<'reviewing' | 'generating' | null>(null)
 
   useEffect(() => {
     let active = true
@@ -1176,8 +1191,11 @@ function App() {
   }
 
   const createReport = async () => {
+    if (!selectedClient || aiReportStage) return
+
+    const startedAt = Date.now()
     const risks = detectRisks(selectedClient, managedRules)
-    const report: Report = {
+    const baseReport: Report = {
       id: crypto.randomUUID(),
       clientId: selectedClient.id,
       clientName: selectedClient.name,
@@ -1186,8 +1204,53 @@ function App() {
       risks,
       content: buildReportContent(selectedClient, risks),
     }
-    setReports((current) => [report, ...current.filter((item) => item.clientId !== selectedClient.id)])
     setPage('report')
+
+    let report = baseReport
+    try {
+      setAiReportStage('reviewing')
+      const reviewStartedAt = Date.now()
+      const reviewResponse = await apiSend<{ review: AiReview; model: string; usage?: unknown }>('/api/ai/review', 'POST', {
+        client: selectedClient,
+        risks,
+      })
+      const reviewElapsed = Date.now() - reviewStartedAt
+      if (reviewElapsed < 2000) {
+        await wait(2000 - reviewElapsed)
+      }
+
+      setAiReportStage('generating')
+      const reportResponse = await apiSend<{ content: string; model: string; usage?: unknown }>('/api/ai/report', 'POST', {
+        client: selectedClient,
+        risks,
+        content: baseReport.content,
+        aiReview: reviewResponse.review,
+      })
+
+      report = {
+        ...baseReport,
+        content: reportResponse.content,
+        aiReview: reviewResponse.review,
+        aiGenerated: true,
+        aiModel: reportResponse.model || reviewResponse.model,
+      }
+    } catch (error) {
+      console.warn('AI report generation failed, using local report template.', error)
+      report = {
+        ...baseReport,
+        content: `${baseReport.content}\n\nAI 处理提示：本次 AI 数据复核或报告生成失败，系统已使用本地规则模板生成报告。`,
+        aiGenerated: false,
+      }
+      setDataStatus('fallback')
+    } finally {
+      const elapsed = Date.now() - startedAt
+      if (elapsed < 6000) {
+        await wait(6000 - elapsed)
+      }
+      setAiReportStage(null)
+    }
+
+    setReports((current) => [report, ...current.filter((item) => item.clientId !== selectedClient.id)])
 
     try {
       await apiSend<{ report: Report }>('/api/reports', 'POST', report)
@@ -1195,46 +1258,6 @@ function App() {
     } catch (error) {
       console.warn('Report saved locally only.', error)
       setDataStatus('fallback')
-    }
-  }
-
-  const enhanceReportWithAi = async () => {
-    if (!selectedClient || aiReportLoading) return
-
-    const risks = detectRisks(selectedClient, managedRules)
-    const existingReport = reports.find((report) => report.clientId === selectedClient.id)
-    const baseReport: Report = existingReport || {
-      id: crypto.randomUUID(),
-      clientId: selectedClient.id,
-      clientName: selectedClient.name,
-      riskLevel: getOverallLevel(risks),
-      createdAt: formatDate(),
-      risks,
-      content: buildReportContent(selectedClient, risks),
-    }
-
-    setAiReportLoading(true)
-    try {
-      const response = await apiSend<{ content: string; model: string; usage?: unknown }>('/api/ai/report', 'POST', {
-        client: selectedClient,
-        risks,
-        content: baseReport.content,
-      })
-      const enhancedReport = {
-        ...baseReport,
-        risks,
-        riskLevel: getOverallLevel(risks),
-        content: response.content,
-      }
-
-      setReports((current) => [enhancedReport, ...current.filter((item) => item.id !== enhancedReport.id)])
-      await apiSend<{ report: Report }>('/api/reports', 'POST', enhancedReport)
-      setDataStatus('connected')
-    } catch (error) {
-      console.warn('Failed to enhance report with AI.', error)
-      window.alert(error instanceof Error ? error.message : 'AI 优化报告失败')
-    } finally {
-      setAiReportLoading(false)
     }
   }
 
@@ -1668,8 +1691,8 @@ function App() {
                 <button className="secondary-button" onClick={() => setPage('form')}>
                   <RefreshCcw /> 编辑资料
                 </button>
-                <button className="primary-button" onClick={createReport}>
-                  <Sparkles /> 生成报告
+                <button className="primary-button" onClick={createReport} disabled={Boolean(aiReportStage)}>
+                  <Sparkles /> {aiReportStage === 'reviewing' ? 'AI 正在复核数据...' : aiReportStage === 'generating' ? 'AI 正在生成报告...' : '生成报告'}
                 </button>
               </div>
             </header>
@@ -1710,8 +1733,7 @@ function App() {
             client={selectedClient}
             risks={currentRisks}
             onGenerate={createReport}
-            onAiEnhance={enhanceReportWithAi}
-            aiLoading={aiReportLoading}
+            aiStage={aiReportStage}
             onUpdate={(content) =>
               setReports((current) =>
                 current.map((report) => (report.clientId === selectedClient.id ? { ...report, content } : report)),
@@ -2136,19 +2158,22 @@ function ReportPage({
   client,
   risks,
   onGenerate,
-  onAiEnhance,
-  aiLoading,
+  aiStage,
   onUpdate,
 }: {
   report?: Report
   client: Client
   risks: RiskResult[]
   onGenerate: () => void
-  onAiEnhance: () => void
-  aiLoading: boolean
+  aiStage: 'reviewing' | 'generating' | null
   onUpdate: (content: string) => void
 }) {
   const draft = report?.content || buildReportContent(client, risks)
+  const aiMessage = aiStage === 'reviewing'
+    ? 'AI 正在复核数据...'
+    : aiStage === 'generating'
+      ? 'AI 正在生成报告...'
+      : ''
 
   return (
     <section className="page">
@@ -2158,14 +2183,12 @@ function ReportPage({
           <h2>{client.name}</h2>
         </div>
         <div className="header-actions">
-          <button className="secondary-button" onClick={onGenerate}>
-            <Sparkles /> 重新生成
-          </button>
-          <button className="secondary-button" onClick={onAiEnhance} disabled={aiLoading}>
-            <Sparkles /> {aiLoading ? 'AI 生成中' : 'AI 优化报告'}
+          <button className="secondary-button" onClick={onGenerate} disabled={Boolean(aiStage)}>
+            <Sparkles /> {aiMessage || '重新生成'}
           </button>
           <button
             className="primary-button"
+            disabled={Boolean(aiStage)}
             onClick={() => downloadWord(report || {
               id: crypto.randomUUID(),
               clientId: client.id,
@@ -2180,6 +2203,13 @@ function ReportPage({
           </button>
         </div>
       </header>
+      {aiMessage && (
+        <div className="ai-progress-banner">
+          <Sparkles />
+          <span>{aiMessage}</span>
+          <small>规则引擎已完成确定性检测，AI 正在做辅助复核与报告生成。</small>
+        </div>
+      )}
       <div className="report-editor">
         <aside>
           <h3>报告目录</h3>

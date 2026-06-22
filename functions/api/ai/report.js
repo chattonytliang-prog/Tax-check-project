@@ -17,21 +17,26 @@ function compactRisk(risk) {
   }
 }
 
-function buildPrompt(client, risks, content) {
+function buildPrompt(client, risks, content, aiReview) {
   return `请基于以下企业税务风险体检资料，重写一份专业、清晰、适合企业老板和财务负责人阅读的税务风险体检报告。
 
 要求：
 1. 只能基于输入资料分析，不要编造不存在的数据、政策或案例。
-2. 保留风险提示性质，不要承诺最终税务处理结论。
-3. 输出中文纯文本，不要使用 Markdown 代码块。
-4. 结构包含：企业基本情况、综合风险结论、重点风险摘要、逐项风险分析、整改优先级、资料清单、免责声明。
-5. 语气专业、审慎、可执行。
+2. 已命中风险只能来自“命中风险”列表，不得新增未命中的风险，不得删除已命中的风险。
+3. AI 数据复核中发现的疑点，只能写入“数据复核提示”或“观察项”，不能写成已命中风险。
+4. 保留风险提示性质，不要承诺最终税务处理结论。
+5. 输出中文纯文本，不要使用 Markdown 代码块。
+6. 结构包含：企业基本情况、综合风险结论、AI 数据复核提示、重点风险摘要、逐项风险分析、整改优先级、资料清单、免责声明。
+7. 语气专业、审慎、可执行。
 
 企业资料：
 ${JSON.stringify(client, null, 2)}
 
 命中风险：
 ${JSON.stringify(risks.map(compactRisk), null, 2)}
+
+AI 数据复核：
+${JSON.stringify(aiReview || {}, null, 2)}
 
 原始报告：
 ${content || ''}`
@@ -47,7 +52,7 @@ export async function onRequestPost({ request, env }) {
     const auth = await requireUser(request, db)
     if (auth.response) return auth.response
 
-    const { client, risks = [], content = '' } = await readJson(request)
+    const { client, risks = [], content = '', aiReview = null } = await readJson(request)
     if (!client?.id || !client?.name) {
       return badRequest('Client id and name are required')
     }
@@ -76,7 +81,7 @@ export async function onRequestPost({ request, env }) {
           },
           {
             role: 'user',
-            content: buildPrompt(client, risks, content),
+            content: buildPrompt(client, risks, content, aiReview),
           },
         ],
         temperature: 0.2,

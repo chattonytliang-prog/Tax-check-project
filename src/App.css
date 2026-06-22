@@ -788,6 +788,33 @@ textarea:focus {
   min-height: 72vh;
 }
 
+.ai-progress-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(18, 174, 234, 0.3);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background:
+    linear-gradient(135deg, rgba(86, 240, 238, 0.18), rgba(255, 255, 255, 0.76));
+  box-shadow: var(--shadow-soft);
+  color: var(--ink);
+}
+
+.ai-progress-banner svg {
+  width: 20px;
+  height: 20px;
+  color: var(--blue);
+}
+
+.ai-progress-banner span {
+  font-weight: 800;
+}
+
+.ai-progress-banner small {
+  color: var(--muted);
+}
+
 .report-editor aside {
   background:
     radial-gradient(circle at 20% 0%, rgba(86, 240, 238, 0.22), transparent 32%),
