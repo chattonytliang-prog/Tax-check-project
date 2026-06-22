@@ -784,7 +784,11 @@ function evaluateCondition(client: Client, condition?: RuleCondition): boolean {
   const rawLeft = condition.transform === 'absDiff'
     ? Math.abs(Number(client[condition.field]) - Number(condition.compareField ? client[condition.compareField] : 0))
     : client[condition.field]
-  const rightBase = condition.compareField ? client[condition.compareField] : condition.value
+  const rightBase = condition.transform === 'absDiff'
+    ? condition.value
+    : condition.compareField
+      ? client[condition.compareField]
+      : condition.value
   const right = typeof rightBase === 'number'
     ? rightBase * (condition.multiplier ?? 1)
     : parseComparableValue(rightBase, rawLeft)
