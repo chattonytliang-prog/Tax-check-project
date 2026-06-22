@@ -732,7 +732,8 @@ async function apiSend<T>(url: string, method: 'POST' | 'PUT', body: unknown): P
     body: JSON.stringify(body),
   })
   if (!response.ok) {
-    throw new Error(`API request failed: ${response.status}`)
+    const data = await response.json().catch(() => null)
+    throw new Error(data?.error || data?.detail || `API request failed: ${response.status}`)
   }
   return response.json() as Promise<T>
 }
@@ -972,7 +973,14 @@ function App() {
       setDataStatus('loading')
     } catch (error) {
       console.warn('Authentication failed.', error)
-      setAuthError(authMode === 'login' ? '用户名或密码不正确。' : '注册失败，请确认用户名未被占用，密码至少 6 位。')
+      const message = error instanceof Error ? error.message : ''
+      if (message === 'Username already exists') {
+        setAuthError('这个用户名已经被注册，请换一个用户名。')
+      } else if (message === 'Invalid username or password') {
+        setAuthError('用户名或密码不正确。')
+      } else {
+        setAuthError(authMode === 'login' ? '登录失败，请稍后重试。' : '注册失败，请稍后重试。')
+      }
     } finally {
       setAuthLoading(false)
     }

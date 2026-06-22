@@ -2,7 +2,7 @@ import { json } from '../_utils.js'
 
 const SESSION_COOKIE = 'tax_session'
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7
-const PASSWORD_ITERATIONS = 210000
+const PASSWORD_ITERATIONS = 100000
 const encoder = new TextEncoder()
 
 function bytesToBase64(bytes) {
