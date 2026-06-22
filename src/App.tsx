@@ -297,19 +297,48 @@ const emptyManagedRule: ManagedRule = {
 const conditionFields: Array<{ value: keyof Client; label: string }> = [
   { value: 'taxpayerType', label: '纳税人类型' },
   { value: 'consecutive12MonthSales', label: '连续 12 个月销售额' },
+  { value: 'relatedEntitiesNearThreshold', label: '关联主体接近阈值' },
+  { value: 'nearVatExemption', label: '接近小规模免税临界点' },
   { value: 'monthlyRevenue', label: '月收入' },
   { value: 'monthlyInvoice', label: '月开票金额' },
   { value: 'collectionFlow', label: '收款流水' },
   { value: 'annualRevenue', label: '年销售收入' },
+  { value: 'entertainmentExpense', label: '业务招待费' },
+  { value: 'adExpense', label: '广告宣传费' },
+  { value: 'payrollTotal', label: '工资薪金总额' },
+  { value: 'welfareExpense', label: '职工福利费' },
+  { value: 'unionExpense', label: '工会经费' },
+  { value: 'educationExpense', label: '职工教育经费' },
+  { value: 'taxableIncome', label: '应纳税所得额' },
+  { value: 'employeeAnnualAvg', label: '年平均从业人数' },
+  { value: 'assetsTotal', label: '资产总额' },
   { value: 'employees', label: '员工人数' },
   { value: 'socialSecurityCount', label: '社保人数' },
   { value: 'salaryDeclaredCount', label: '工资申报人数' },
+  { value: 'platformRevenue', label: '平台收入' },
   { value: 'privateAccountCollection', label: '个人账户收款' },
   { value: 'unbilledIncome', label: '存在未开票收入' },
+  { value: 'longTermZeroDeclaration', label: '长期零申报' },
+  { value: 'prepaidLongTerm', label: '预收款长期挂账' },
   { value: 'largeExpenseNoInvoice', label: '大额费用无票' },
   { value: 'serviceFeeInvoices', label: '服务费发票异常' },
+  { value: 'supplierNoInput', label: '供应商无进项' },
+  { value: 'invoiceNameMismatch', label: '发票品名不匹配' },
+  { value: 'purchaseSalesMismatch', label: '进销不匹配' },
+  { value: 'fundsReturn', label: '资金回流' },
+  { value: 'abnormalInvoice', label: '异常发票' },
+  { value: 'nonFinancialInterestAbnormal', label: '非金融利息异常' },
+  { value: 'intercompanyManagementFee', label: '企业间管理费' },
+  { value: 'relatedPricingAbnormal', label: '关联定价异常' },
+  { value: 'salarySplit', label: '工资拆分发放' },
+  { value: 'noIitWithholding', label: '未履行个税扣缴' },
+  { value: 'individualVendorRelated', label: '关联个体户/个人独资' },
+  { value: 'smallProfitEnjoyed', label: '享受小微企业优惠' },
+  { value: 'taxBenefitDataMissing', label: '税费优惠资料不足' },
+  { value: 'rdDeductionEnjoyed', label: '享受研发加计扣除' },
   { value: 'inventoryAbnormal', label: '库存异常' },
   { value: 'rdDocsInsufficient', label: '研发资料不足' },
+  { value: 'agencyComplianceRisk', label: '涉税服务合规风险' },
 ]
 
 const builtInRuleConditions: Record<string, RuleCondition> = {
@@ -1443,8 +1472,14 @@ function App() {
   }
 
   const isDraftSimpleCondition = isSimpleCondition(ruleDraft.conditionJson)
+  const simpleDraftCondition = isDraftSimpleCondition ? (ruleDraft.conditionJson as SimpleRuleCondition) : null
+  const isDraftEditableSimpleCondition =
+    Boolean(simpleDraftCondition) &&
+    !simpleDraftCondition?.compareField &&
+    !simpleDraftCondition?.multiplier &&
+    !simpleDraftCondition?.transform
   const draftCondition: SimpleRuleCondition = isDraftSimpleCondition
-    ? (ruleDraft.conditionJson as SimpleRuleCondition)
+    ? simpleDraftCondition as SimpleRuleCondition
     : { field: '', operator: '=', value: '' }
 
   if (!loggedIn) {
@@ -1945,19 +1980,19 @@ function App() {
                   </Field>
                   <Field label="执行字段">
                     <select
-                      value={isDraftSimpleCondition ? draftCondition.field : '__complex'}
+                      value={isDraftEditableSimpleCondition ? draftCondition.field : '__advanced'}
                       onChange={(event) =>
                         setRuleDraft({
                           ...ruleDraft,
                           conditionJson:
-                            event.target.value === '__complex'
+                            event.target.value === '__advanced'
                               ? ruleDraft.conditionJson
                               : { ...draftCondition, field: event.target.value as keyof Client },
                         })
                       }
                     >
                       <option value="">不参与自动检测</option>
-                      {!isDraftSimpleCondition && <option value="__complex">组合条件（自动检测）</option>}
+                      {!isDraftEditableSimpleCondition && <option value="__advanced">高级条件（自动检测）</option>}
                       {conditionFields.map((field) => (
                         <option key={field.value} value={field.value}>{field.label}</option>
                       ))}
@@ -1989,8 +2024,8 @@ function App() {
                     />
                   </Field>
                 </div>
-                {!isDraftSimpleCondition && (
-                  <p className="condition-note">当前规则使用组合条件：{conditionSummary(ruleDraft.conditionJson)}</p>
+                {conditionSummary(ruleDraft.conditionJson) !== '不参与自动检测' && (
+                  <p className="condition-note">当前执行条件：{conditionSummary(ruleDraft.conditionJson)}</p>
                 )}
                 <div className="rule-editor-textareas">
                   <Field label="风险依据">
