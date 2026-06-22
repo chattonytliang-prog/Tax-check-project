@@ -863,6 +863,7 @@ function App() {
   const [reports, setReports] = useState<Report[]>([])
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
   const [managedRules, setManagedRules] = useState<ManagedRule[]>([])
+  const [restrictedRuleCount, setRestrictedRuleCount] = useState(0)
   const [ruleDraft, setRuleDraft] = useState<ManagedRule>(emptyManagedRule)
   const [editingRuleCode, setEditingRuleCode] = useState('')
   const [query, setQuery] = useState('')
@@ -969,9 +970,10 @@ function App() {
 
     async function loadRules() {
       try {
-        const response = await apiGet<{ rules: ManagedRule[] }>('/api/rules')
+        const response = await apiGet<{ rules: ManagedRule[]; restrictedCount?: number }>('/api/rules')
         if (active) {
           setManagedRules(response.rules)
+          setRestrictedRuleCount(response.restrictedCount || 0)
         }
       } catch (error) {
         console.warn('Failed to load managed rules.', error)
@@ -1020,8 +1022,9 @@ function App() {
   }
 
   const refreshRules = async () => {
-    const response = await apiGet<{ rules: ManagedRule[] }>('/api/rules')
+    const response = await apiGet<{ rules: ManagedRule[]; restrictedCount?: number }>('/api/rules')
     setManagedRules(response.rules)
+    setRestrictedRuleCount(response.restrictedCount || 0)
   }
 
   const resetRuleDraft = () => {
@@ -1847,6 +1850,17 @@ function App() {
                   )}
                 </article>
               ))}
+              {restrictedRuleCount > 0 && (
+                <article className="rule-card locked-rule-card">
+                  <div>
+                    <span className="rule-code">LOCKED</span>
+                    <span className="level-badge level-medium">受限</span>
+                  </div>
+                  <h3>其他规则无权限查看</h3>
+                  <p>当前账号仅开放前 5 条规则预览。</p>
+                  <small>还有 {restrictedRuleCount} 条规则需要管理员权限。</small>
+                </article>
+              )}
               {!managedRules.length && (
                 <div className="empty-state wide">
                   <Settings2 />

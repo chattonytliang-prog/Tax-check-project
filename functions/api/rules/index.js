@@ -48,8 +48,17 @@ export async function onRequestGet({ request, env }) {
     const auth = await requireUser(request, db)
     if (auth.response) return auth.response
 
-    const { results } = await db.prepare('SELECT * FROM risk_rules ORDER BY code ASC').all()
-    return json({ rules: results.map(parseRule) })
+    const canViewAll = auth.user.role === 'admin' || auth.user.actor?.role === 'admin'
+    const total = await db.prepare('SELECT COUNT(*) AS count FROM risk_rules').first()
+    const statement = canViewAll
+      ? db.prepare('SELECT * FROM risk_rules ORDER BY code ASC')
+      : db.prepare('SELECT * FROM risk_rules ORDER BY code ASC LIMIT 5')
+    const { results } = await statement.all()
+
+    return json({
+      rules: results.map(parseRule),
+      restrictedCount: canViewAll ? 0 : Math.max(0, (total?.count || 0) - results.length),
+    })
   } catch (error) {
     return serverError(error)
   }
