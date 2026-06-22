@@ -100,6 +100,20 @@ type RiskResult = RiskRule & {
   triggeredAt: string
 }
 
+type ManagedRule = {
+  code: string
+  name: string
+  taxType: string
+  level: RiskLevel
+  basis: string
+  suggestion: string
+  enabled: boolean
+  conditionText: string
+  materials: string[]
+  createdAt?: string
+  updatedAt?: string
+}
+
 type Report = {
   id: string
   clientId: string
@@ -254,6 +268,18 @@ const demoClients: Client[] = [
     inventoryAbnormal: true,
   },
 ]
+
+const emptyManagedRule: ManagedRule = {
+  code: '',
+  name: '',
+  taxType: '',
+  level: '中',
+  basis: '',
+  suggestion: '',
+  enabled: true,
+  conditionText: '',
+  materials: [],
+}
 
 const pctDiff = (a: number, b: number) => {
   if (!b) return a > 0 ? 1 : 0
@@ -836,6 +862,9 @@ function App() {
   const [editingClient, setEditingClient] = useState<Client>({ ...emptyClient, id: crypto.randomUUID() })
   const [reports, setReports] = useState<Report[]>([])
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
+  const [managedRules, setManagedRules] = useState<ManagedRule[]>([])
+  const [ruleDraft, setRuleDraft] = useState<ManagedRule>(emptyManagedRule)
+  const [editingRuleCode, setEditingRuleCode] = useState('')
   const [query, setQuery] = useState('')
   const [dataStatus, setDataStatus] = useState<'loading' | 'connected' | 'fallback'>('loading')
 
@@ -933,6 +962,29 @@ function App() {
     }
   }, [loggedIn, authUser, page])
 
+  useEffect(() => {
+    if (!loggedIn || page !== 'rules') return
+
+    let active = true
+
+    async function loadRules() {
+      try {
+        const response = await apiGet<{ rules: ManagedRule[] }>('/api/rules')
+        if (active) {
+          setManagedRules(response.rules)
+        }
+      } catch (error) {
+        console.warn('Failed to load managed rules.', error)
+      }
+    }
+
+    loadRules()
+
+    return () => {
+      active = false
+    }
+  }, [loggedIn, page])
+
   const selectedClient = clients.find((client) => client.id === selectedClientId) || clients[0]
   const currentRisks = useMemo(() => (selectedClient ? detectRisks(selectedClient) : []), [selectedClient])
   const overallLevel = getOverallLevel(currentRisks)
@@ -965,6 +1017,98 @@ function App() {
   const refreshAdminUsers = async () => {
     const response = await apiGet<{ users: AdminUser[] }>('/api/admin/users')
     setAdminUsers(response.users)
+  }
+
+  const refreshRules = async () => {
+    const response = await apiGet<{ rules: ManagedRule[] }>('/api/rules')
+    setManagedRules(response.rules)
+  }
+
+  const resetRuleDraft = () => {
+    setRuleDraft(emptyManagedRule)
+    setEditingRuleCode('')
+  }
+
+  const saveManagedRule = async () => {
+    if (!ruleDraft.code.trim() || !ruleDraft.name.trim()) {
+      window.alert('规则编号和规则名称不能为空。')
+      return
+    }
+
+    const payload = {
+      ...ruleDraft,
+      materials: ruleDraft.materials,
+    }
+
+    try {
+      await apiSend<{ rule: ManagedRule }>(
+        editingRuleCode ? `/api/rules/${editingRuleCode}` : '/api/rules',
+        editingRuleCode ? 'PUT' : 'POST',
+        payload,
+      )
+      await refreshRules()
+      resetRuleDraft()
+    } catch (error) {
+      console.warn('Failed to save rule.', error)
+      window.alert('保存规则失败。')
+    }
+  }
+
+  const editManagedRule = (rule: ManagedRule) => {
+    setEditingRuleCode(rule.code)
+    setRuleDraft({ ...rule })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const deleteManagedRule = async (rule: ManagedRule) => {
+    if (!window.confirm(`确定删除规则「${rule.code} ${rule.name}」吗？`)) return
+
+    try {
+      await apiDelete<{ ok: true }>(`/api/rules/${rule.code}`)
+      await refreshRules()
+      if (editingRuleCode === rule.code) {
+        resetRuleDraft()
+      }
+    } catch (error) {
+      console.warn('Failed to delete rule.', error)
+      window.alert('删除规则失败。')
+    }
+  }
+
+  const toggleManagedRule = async (rule: ManagedRule) => {
+    try {
+      await apiSend<{ ok: true; enabled: boolean }>(`/api/rules/${rule.code}/toggle`, 'POST', {})
+      await refreshRules()
+    } catch (error) {
+      console.warn('Failed to toggle rule.', error)
+      window.alert('切换规则状态失败。')
+    }
+  }
+
+  const importBuiltInRules = async () => {
+    if (!window.confirm('确定把当前内置规则导入 D1 规则库吗？同编号规则会被覆盖。')) return
+
+    try {
+      await Promise.all(
+        rules.map((rule) =>
+          apiSend<{ rule: ManagedRule }>('/api/rules', 'POST', {
+            code: rule.code,
+            name: rule.name,
+            taxType: rule.taxType,
+            level: rule.level,
+            basis: rule.basis,
+            suggestion: rule.suggestion,
+            enabled: true,
+            conditionText: rule.caseRef,
+            materials: rule.materials,
+          }),
+        ),
+      )
+      await refreshRules()
+    } catch (error) {
+      console.warn('Failed to import built-in rules.', error)
+      window.alert('导入内置规则失败。')
+    }
   }
 
   const saveClient = async () => {
@@ -1591,21 +1735,125 @@ function App() {
             <header className="page-header">
               <div>
                 <p className="eyebrow">规则库</p>
-                <h2>内置 30 条测试规则</h2>
+                <h2>规则库后台</h2>
+              </div>
+              <div className="header-actions">
+                <button className="secondary-button" onClick={refreshRules}>
+                  <RefreshCcw /> 刷新
+                </button>
+                {canUseAdmin && (
+                  <button className="primary-button" onClick={importBuiltInRules}>
+                    <Plus /> 导入内置规则
+                  </button>
+                )}
               </div>
             </header>
+            {canUseAdmin && (
+              <section className="form-section rule-editor">
+                <div className="panel-title">
+                  <h3>{editingRuleCode ? `编辑规则 ${editingRuleCode}` : '新增规则'}</h3>
+                  {editingRuleCode && <button className="text-button" onClick={resetRuleDraft}>取消编辑</button>}
+                </div>
+                <div className="form-grid">
+                  <Field label="规则编号">
+                    <input
+                      value={ruleDraft.code}
+                      disabled={Boolean(editingRuleCode)}
+                      onChange={(event) => setRuleDraft({ ...ruleDraft, code: event.target.value.toUpperCase() })}
+                      placeholder="R031"
+                    />
+                  </Field>
+                  <Field label="规则名称">
+                    <input value={ruleDraft.name} onChange={(event) => setRuleDraft({ ...ruleDraft, name: event.target.value })} />
+                  </Field>
+                  <Field label="税种">
+                    <input value={ruleDraft.taxType} onChange={(event) => setRuleDraft({ ...ruleDraft, taxType: event.target.value })} />
+                  </Field>
+                  <Field label="风险等级">
+                    <select value={ruleDraft.level} onChange={(event) => setRuleDraft({ ...ruleDraft, level: event.target.value as RiskLevel })}>
+                      <option>高</option>
+                      <option>中</option>
+                      <option>低</option>
+                    </select>
+                  </Field>
+                  <Field label="启用状态">
+                    <select
+                      value={ruleDraft.enabled ? 'enabled' : 'disabled'}
+                      onChange={(event) => setRuleDraft({ ...ruleDraft, enabled: event.target.value === 'enabled' })}
+                    >
+                      <option value="enabled">启用</option>
+                      <option value="disabled">停用</option>
+                    </select>
+                  </Field>
+                  <Field label="触发条件说明">
+                    <input
+                      value={ruleDraft.conditionText}
+                      onChange={(event) => setRuleDraft({ ...ruleDraft, conditionText: event.target.value })}
+                      placeholder="用于描述规则触发口径，下一阶段可升级为可执行条件"
+                    />
+                  </Field>
+                </div>
+                <div className="rule-editor-textareas">
+                  <Field label="风险依据">
+                    <textarea value={ruleDraft.basis} onChange={(event) => setRuleDraft({ ...ruleDraft, basis: event.target.value })} />
+                  </Field>
+                  <Field label="整改建议">
+                    <textarea value={ruleDraft.suggestion} onChange={(event) => setRuleDraft({ ...ruleDraft, suggestion: event.target.value })} />
+                  </Field>
+                  <Field label="所需材料，每行一项">
+                    <textarea
+                      value={ruleDraft.materials.join('\n')}
+                      onChange={(event) =>
+                        setRuleDraft({
+                          ...ruleDraft,
+                          materials: event.target.value
+                            .split('\n')
+                            .map((item) => item.trim())
+                            .filter(Boolean),
+                        })
+                      }
+                    />
+                  </Field>
+                </div>
+                <div className="header-actions">
+                  <button className="primary-button" onClick={saveManagedRule}>
+                    <ShieldCheck /> 保存规则
+                  </button>
+                  <button className="secondary-button" onClick={resetRuleDraft}>清空</button>
+                </div>
+              </section>
+            )}
             <div className="rules-grid">
-              {rules.map((rule) => (
+              {managedRules.map((rule) => (
                 <article className="rule-card" key={rule.code}>
                   <div>
                     <span className="rule-code">{rule.code}</span>
                     <LevelBadge level={rule.level} />
                   </div>
                   <h3>{rule.name}</h3>
-                  <p>{rule.taxType}</p>
+                  <p>{rule.taxType || '未填写税种'} / {rule.enabled ? '启用' : '停用'}</p>
+                  {rule.conditionText && <small>{rule.conditionText}</small>}
                   <small>{rule.basis}</small>
+                  <p>{rule.suggestion}</p>
+                  <div className="chips">{rule.materials.map((item) => <span key={item}>{item}</span>)}</div>
+                  {canUseAdmin && (
+                    <div className="report-actions">
+                      <button onClick={() => editManagedRule(rule)}>编辑</button>
+                      <button onClick={() => toggleManagedRule(rule)}>{rule.enabled ? '停用' : '启用'}</button>
+                      <button className="danger-action" onClick={() => deleteManagedRule(rule)}>
+                        <Trash2 /> 删除
+                      </button>
+                    </div>
+                  )}
                 </article>
               ))}
+              {!managedRules.length && (
+                <div className="empty-state wide">
+                  <Settings2 />
+                  <h3>规则库还没有入库规则</h3>
+                  <p>管理员可以点击“导入内置规则”，先把当前 30 条测试规则写入 D1，再继续编辑维护。</p>
+                </div>
+              )}
             </div>
           </section>
         )}

@@ -633,6 +633,22 @@ th {
   gap: 14px;
 }
 
+.rule-editor {
+  margin-bottom: 18px;
+}
+
+.rule-editor-textareas {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.rule-editor-textareas textarea {
+  min-height: 120px;
+  padding: 12px;
+}
+
 .field {
   display: grid;
   gap: 8px;
