@@ -114,6 +114,39 @@ button svg,
   backdrop-filter: blur(18px);
 }
 
+.auth-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 4px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(6, 22, 28, 0.06);
+}
+
+.auth-switch button {
+  border: 0;
+  border-radius: 6px;
+  min-height: 36px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.auth-switch button.active {
+  background: white;
+  color: var(--ink);
+  box-shadow: 0 8px 20px rgba(5, 26, 34, 0.08);
+}
+
+.auth-error {
+  margin: 0 0 14px;
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .login-aside {
   margin: 28px;
   border-radius: 8px;
@@ -203,6 +236,13 @@ button svg,
   color: #9fcbd1;
   font-size: 12px;
   margin-top: 2px;
+}
+
+.sidebar-user {
+  margin: -8px 12px 18px;
+  color: #9cf4f1;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .sidebar nav {
@@ -324,6 +364,14 @@ button svg,
 
 .primary-button:hover {
   background: linear-gradient(135deg, #07333d, #09879c 56%, #43e5ef);
+}
+
+.primary-button:disabled,
+.secondary-button:disabled,
+.ghost-button:disabled,
+.text-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
 }
 
 .secondary-button,

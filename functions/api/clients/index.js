@@ -1,8 +1,12 @@
 import { badRequest, json, nowIso, readJson, requireDb, serverError } from '../_utils.js'
+import { requireUser } from '../auth/_auth.js'
 
-export async function onRequestGet({ env }) {
+export async function onRequestGet({ request, env }) {
   try {
     const db = requireDb(env)
+    const auth = await requireUser(request, db)
+    if (auth.response) return auth.response
+
     const { results } = await db
       .prepare('SELECT payload_json FROM clients ORDER BY updated_at DESC')
       .all()
@@ -16,6 +20,9 @@ export async function onRequestGet({ env }) {
 export async function onRequestPost({ request, env }) {
   try {
     const db = requireDb(env)
+    const auth = await requireUser(request, db)
+    if (auth.response) return auth.response
+
     const client = await readJson(request)
     if (!client.id || !client.name) {
       return badRequest('Client id and name are required')

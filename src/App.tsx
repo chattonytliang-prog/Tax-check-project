@@ -108,6 +108,11 @@ type Report = {
   content: string
 }
 
+type AuthUser = {
+  id: string
+  username: string
+}
+
 const emptyClient: Client = {
   id: '',
   name: '',
@@ -791,6 +796,12 @@ function BoolField({
 
 function App() {
   const [loggedIn, setLoggedIn] = useState(false)
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null)
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
+  const [authUsername, setAuthUsername] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authError, setAuthError] = useState('')
+  const [authLoading, setAuthLoading] = useState(true)
   const [page, setPage] = useState<Page>('dashboard')
   const [clients, setClients] = useState<Client[]>(demoClients)
   const [selectedClientId, setSelectedClientId] = useState(demoClients[0].id)
@@ -800,6 +811,35 @@ function App() {
   const [dataStatus, setDataStatus] = useState<'loading' | 'connected' | 'fallback'>('loading')
 
   useEffect(() => {
+    let active = true
+
+    async function checkSession() {
+      try {
+        const response = await apiGet<{ user: AuthUser }>('/api/auth/me')
+        if (!active) return
+        setAuthUser(response.user)
+        setLoggedIn(true)
+      } catch {
+        if (!active) return
+        setAuthUser(null)
+        setLoggedIn(false)
+      } finally {
+        if (active) {
+          setAuthLoading(false)
+        }
+      }
+    }
+
+    checkSession()
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!loggedIn) return
+
     let active = true
 
     async function loadData() {
@@ -819,6 +859,12 @@ function App() {
         setDataStatus('connected')
       } catch (error) {
         console.warn('Using local demo data because API is unavailable.', error)
+        if (error instanceof Error && error.message.includes('401')) {
+          setLoggedIn(false)
+          setAuthUser(null)
+          setAuthLoading(false)
+          return
+        }
         if (active) {
           setDataStatus('fallback')
         }
@@ -830,7 +876,7 @@ function App() {
     return () => {
       active = false
     }
-  }, [])
+  }, [loggedIn])
 
   const selectedClient = clients.find((client) => client.id === selectedClientId) || clients[0]
   const currentRisks = useMemo(() => (selectedClient ? detectRisks(selectedClient) : []), [selectedClient])
@@ -906,6 +952,40 @@ function App() {
     }
   }
 
+  const handleAuthSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setAuthError('')
+    setAuthLoading(true)
+
+    try {
+      const response = await apiSend<{ user: AuthUser }>(
+        authMode === 'login' ? '/api/auth/login' : '/api/auth/register',
+        'POST',
+        {
+          username: authUsername,
+          password: authPassword,
+        },
+      )
+      setAuthUser(response.user)
+      setLoggedIn(true)
+      setAuthPassword('')
+      setDataStatus('loading')
+    } catch (error) {
+      console.warn('Authentication failed.', error)
+      setAuthError(authMode === 'login' ? '用户名或密码不正确。' : '注册失败，请确认用户名未被占用，密码至少 6 位。')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
+    setLoggedIn(false)
+    setAuthUser(null)
+    setAuthPassword('')
+    setDataStatus('loading')
+  }
+
   if (!loggedIn) {
     return (
       <main className="login-shell">
@@ -916,17 +996,39 @@ function App() {
           <p className="eyebrow">内部税务风控工作台</p>
           <h1>合耀税务风控工作台</h1>
           <p className="login-copy">录入企业财税画像，自动命中风险规则，生成可复核、可流转的税务风险体检报告。</p>
-          <div className="login-card">
-            <Field label="账号">
-              <input value="demo@tax-risk.local" readOnly />
+          <form className="login-card" onSubmit={handleAuthSubmit}>
+            <div className="auth-switch">
+              <button type="button" className={authMode === 'login' ? 'active' : ''} onClick={() => setAuthMode('login')}>
+                登录
+              </button>
+              <button type="button" className={authMode === 'register' ? 'active' : ''} onClick={() => setAuthMode('register')}>
+                注册
+              </button>
+            </div>
+            <Field label="用户名">
+              <input
+                value={authUsername}
+                onChange={(event) => setAuthUsername(event.target.value)}
+                placeholder="3-32 位字母、数字或下划线"
+                autoComplete="username"
+                disabled={authLoading}
+              />
             </Field>
             <Field label="密码">
-              <input value="demo2026" type="password" readOnly />
+              <input
+                value={authPassword}
+                onChange={(event) => setAuthPassword(event.target.value)}
+                type="password"
+                placeholder="至少 6 位"
+                autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
+                disabled={authLoading}
+              />
             </Field>
-            <button className="primary-button full" onClick={() => setLoggedIn(true)}>
-              进入试用工作台
+            {authError && <p className="auth-error">{authError}</p>}
+            <button className="primary-button full" type="submit" disabled={authLoading}>
+              {authLoading ? '处理中...' : authMode === 'login' ? '登录工作台' : '注册并进入'}
             </button>
-          </div>
+          </form>
         </section>
         <aside className="login-aside">
           <div>
@@ -949,6 +1051,7 @@ function App() {
             <span>税务风控工作台</span>
           </div>
         </div>
+        {authUser && <div className="sidebar-user">当前用户：{authUser.username}</div>}
         <nav>
           <button className={page === 'dashboard' ? 'active' : ''} onClick={() => setPage('dashboard')}>
             <LayoutDashboard /> 首页
@@ -975,7 +1078,7 @@ function App() {
             <Settings2 /> 规则库
           </button>
         </nav>
-        <button className="ghost-button logout" onClick={() => setLoggedIn(false)}>
+        <button className="ghost-button logout" onClick={handleLogout}>
           <LogOut /> 退出
         </button>
       </aside>
