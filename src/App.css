@@ -788,31 +788,99 @@ textarea:focus {
   min-height: 72vh;
 }
 
-.ai-progress-banner {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border: 1px solid rgba(18, 174, 234, 0.3);
+.ai-process-panel {
+  min-height: 72vh;
+  border: 1px solid rgba(18, 174, 234, 0.26);
   border-radius: 8px;
-  padding: 14px 16px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 16px;
+  padding: 40px;
+  text-align: center;
   background:
-    linear-gradient(135deg, rgba(86, 240, 238, 0.18), rgba(255, 255, 255, 0.76));
-  box-shadow: var(--shadow-soft);
-  color: var(--ink);
+    radial-gradient(circle at 50% 16%, rgba(86, 240, 238, 0.28), transparent 26%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.86), rgba(227, 246, 249, 0.7));
+  box-shadow: var(--shadow);
+  overflow: hidden;
 }
 
-.ai-progress-banner svg {
-  width: 20px;
-  height: 20px;
-  color: var(--blue);
+.ai-orbit {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: white;
+  background:
+    radial-gradient(circle, rgba(86, 240, 238, 0.98), rgba(18, 174, 234, 0.78) 46%, rgba(6, 22, 28, 0.96));
+  box-shadow: 0 0 0 10px rgba(86, 240, 238, 0.08), 0 24px 70px rgba(18, 174, 234, 0.3);
+  animation: aiPulse 1.6s ease-in-out infinite;
 }
 
-.ai-progress-banner span {
+.ai-orbit svg {
+  width: 34px;
+  height: 34px;
+}
+
+.ai-process-panel .eyebrow {
+  margin: 0;
+}
+
+.ai-process-panel h3 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 48px);
+  letter-spacing: 0;
+}
+
+.ai-process-panel p {
+  max-width: 720px;
+  margin: 0;
+  color: #39505a;
+  line-height: 1.8;
+}
+
+.ai-process-panel small {
+  color: var(--muted);
+}
+
+.ai-process-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  gap: 10px;
+  width: min(720px, 100%);
+  margin: 10px 0 4px;
+}
+
+.ai-process-steps span {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.66);
+  color: var(--muted);
   font-weight: 800;
 }
 
-.ai-progress-banner small {
-  color: var(--muted);
+.ai-process-steps span.done {
+  color: var(--teal);
+  border-color: rgba(12, 140, 130, 0.28);
+  background: rgba(86, 240, 238, 0.12);
+}
+
+.ai-process-steps span.active {
+  color: var(--ink);
+  border-color: rgba(18, 174, 234, 0.44);
+  background: white;
+  box-shadow: 0 14px 32px rgba(18, 174, 234, 0.16);
+}
+
+@keyframes aiPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
 }
 
 .report-editor aside {
@@ -930,6 +998,7 @@ textarea:focus {
   .risk-list,
   .report-grid,
   .rules-grid,
+  .ai-process-steps,
   .sidebar nav {
     grid-template-columns: 1fr;
   }

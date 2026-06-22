@@ -2174,6 +2174,9 @@ function ReportPage({
     : aiStage === 'generating'
       ? 'AI 正在生成报告...'
       : ''
+  const aiStepText = aiStage === 'reviewing'
+    ? '正在比对企业输入数据、规则条件和命中结果，识别字段冲突、边界值和需要人工复核的事项。'
+    : '正在把确定性规则结果和数据复核意见整合成正式税务风险体检报告。'
 
   return (
     <section className="page">
@@ -2203,22 +2206,32 @@ function ReportPage({
           </button>
         </div>
       </header>
-      {aiMessage && (
-        <div className="ai-progress-banner">
-          <Sparkles />
-          <span>{aiMessage}</span>
-          <small>规则引擎已完成确定性检测，AI 正在做辅助复核与报告生成。</small>
+      {aiStage ? (
+        <div className="ai-process-panel">
+          <div className="ai-orbit" aria-hidden="true">
+            <Sparkles />
+          </div>
+          <p className="eyebrow">AI 税务风控流程</p>
+          <h3>{aiMessage}</h3>
+          <p>{aiStepText}</p>
+          <div className="ai-process-steps">
+            <span className="done">规则引擎检测完成</span>
+            <span className={aiStage === 'reviewing' ? 'active' : 'done'}>AI 复核数据</span>
+            <span className={aiStage === 'generating' ? 'active' : ''}>AI 生成报告</span>
+          </div>
+          <small>在 AI 完成复核和生成前，系统不会展示未经核对的模板报告。</small>
+        </div>
+      ) : (
+        <div className="report-editor">
+          <aside>
+            <h3>报告目录</h3>
+            {['企业基本情况', '综合风险结论', '主要风险摘要', '风险明细', '后续处理建议', '免责声明'].map((item) => (
+              <span key={item}>{item}</span>
+            ))}
+          </aside>
+          <textarea value={draft} onChange={(event) => onUpdate(event.target.value)} />
         </div>
       )}
-      <div className="report-editor">
-        <aside>
-          <h3>报告目录</h3>
-          {['企业基本情况', '综合风险结论', '主要风险摘要', '风险明细', '后续处理建议', '免责声明'].map((item) => (
-            <span key={item}>{item}</span>
-          ))}
-        </aside>
-        <textarea value={draft} onChange={(event) => onUpdate(event.target.value)} />
-      </div>
     </section>
   )
 }
