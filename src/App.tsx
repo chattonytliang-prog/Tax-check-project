@@ -100,11 +100,16 @@ type RiskResult = RiskRule & {
   triggeredAt: string
 }
 
-type RuleCondition = {
+type SimpleRuleCondition = {
   field: keyof Client | ''
   operator: '>' | '>=' | '<' | '<=' | '=' | '!='
   value: string | number | boolean
+  compareField?: keyof Client
+  multiplier?: number
+  transform?: 'absDiff'
 }
+
+type RuleCondition = SimpleRuleCondition | { all: RuleCondition[] } | { any: RuleCondition[] }
 
 type ManagedRule = {
   code: string
@@ -306,6 +311,39 @@ const conditionFields: Array<{ value: keyof Client; label: string }> = [
   { value: 'inventoryAbnormal', label: '库存异常' },
   { value: 'rdDocsInsufficient', label: '研发资料不足' },
 ]
+
+const builtInRuleConditions: Record<string, RuleCondition> = {
+  R001: { all: [{ field: 'taxpayerType', operator: '=', value: '小规模纳税人' }, { field: 'consecutive12MonthSales', operator: '>', value: 5000000 }] },
+  R002: { field: 'relatedEntitiesNearThreshold', operator: '=', value: true },
+  R003: { all: [{ field: 'taxpayerType', operator: '!=', value: '一般纳税人' }, { field: 'nearVatExemption', operator: '=', value: true }] },
+  R004: { field: 'collectionFlow', operator: '>', value: 0, compareField: 'monthlyInvoice', multiplier: 1.2 },
+  R005: { field: 'privateAccountCollection', operator: '=', value: true },
+  R006: { all: [{ field: 'longTermZeroDeclaration', operator: '=', value: true }, { any: [{ field: 'employees', operator: '>', value: 0 }, { field: 'collectionFlow', operator: '>', value: 0 }, { field: 'monthlyInvoice', operator: '>', value: 0 }] }] },
+  R007: { field: 'prepaidLongTerm', operator: '=', value: true },
+  R008: { field: 'largeExpenseNoInvoice', operator: '=', value: true },
+  R009: { field: 'serviceFeeInvoices', operator: '=', value: true },
+  R010: { field: 'supplierNoInput', operator: '=', value: true },
+  R011: { field: 'invoiceNameMismatch', operator: '=', value: true },
+  R012: { field: 'purchaseSalesMismatch', operator: '=', value: true },
+  R013: { field: 'fundsReturn', operator: '=', value: true },
+  R014: { field: 'abnormalInvoice', operator: '=', value: true },
+  R015: { any: [{ field: 'entertainmentExpense', operator: '>', value: 0, compareField: 'annualRevenue', multiplier: 0.005 }, { field: 'entertainmentExpense', operator: '>', value: 0 }] },
+  R016: { field: 'adExpense', operator: '>', value: 0, compareField: 'annualRevenue', multiplier: 0.15 },
+  R017: { any: [{ field: 'welfareExpense', operator: '>', value: 0, compareField: 'payrollTotal', multiplier: 0.14 }, { field: 'unionExpense', operator: '>', value: 0, compareField: 'payrollTotal', multiplier: 0.02 }, { field: 'educationExpense', operator: '>', value: 0, compareField: 'payrollTotal', multiplier: 0.08 }] },
+  R018: { field: 'nonFinancialInterestAbnormal', operator: '=', value: true },
+  R019: { field: 'intercompanyManagementFee', operator: '=', value: true },
+  R020: { field: 'relatedPricingAbnormal', operator: '=', value: true },
+  R021: { field: 'salaryDeclaredCount', operator: '>=', value: 3, compareField: 'socialSecurityCount', transform: 'absDiff' },
+  R022: { field: 'salarySplit', operator: '=', value: true },
+  R023: { field: 'noIitWithholding', operator: '=', value: true },
+  R024: { all: [{ field: 'platformRevenue', operator: '>', value: 0 }, { field: 'platformRevenue', operator: '>', value: 0, compareField: 'monthlyRevenue', multiplier: 1.2 }] },
+  R025: { field: 'individualVendorRelated', operator: '=', value: true },
+  R026: { all: [{ field: 'smallProfitEnjoyed', operator: '=', value: true }, { any: [{ field: 'taxableIncome', operator: '>', value: 3000000 }, { field: 'employeeAnnualAvg', operator: '>', value: 300 }, { field: 'assetsTotal', operator: '>', value: 50000000 }] }] },
+  R027: { field: 'taxBenefitDataMissing', operator: '=', value: true },
+  R028: { all: [{ field: 'rdDeductionEnjoyed', operator: '=', value: true }, { field: 'rdDocsInsufficient', operator: '=', value: true }] },
+  R029: { field: 'inventoryAbnormal', operator: '=', value: true },
+  R030: { field: 'agencyComplianceRisk', operator: '=', value: true },
+}
 
 const pctDiff = (a: number, b: number) => {
   if (!b) return a > 0 ? 1 : 0
@@ -708,10 +746,20 @@ function parseComparableValue(raw: string | number | boolean, sample: unknown) {
   return String(raw ?? '')
 }
 
-function evaluateCondition(client: Client, condition?: RuleCondition) {
-  if (!condition?.field) return false
-  const left = client[condition.field]
-  const right = parseComparableValue(condition.value, left)
+function evaluateCondition(client: Client, condition?: RuleCondition): boolean {
+  if (!condition) return false
+  if ('all' in condition) return condition.all.every((item) => evaluateCondition(client, item))
+  if ('any' in condition) return condition.any.some((item) => evaluateCondition(client, item))
+  if (!condition.field) return false
+
+  const rawLeft = condition.transform === 'absDiff'
+    ? Math.abs(Number(client[condition.field]) - Number(condition.compareField ? client[condition.compareField] : 0))
+    : client[condition.field]
+  const rightBase = condition.compareField ? client[condition.compareField] : condition.value
+  const right = typeof rightBase === 'number'
+    ? rightBase * (condition.multiplier ?? 1)
+    : parseComparableValue(rightBase, rawLeft)
+  const left = rawLeft
 
   switch (condition.operator) {
     case '>':
@@ -730,6 +778,24 @@ function evaluateCondition(client: Client, condition?: RuleCondition) {
   }
 }
 
+function isSimpleCondition(condition: RuleCondition): condition is SimpleRuleCondition {
+  return !('all' in condition) && !('any' in condition)
+}
+
+function conditionSummary(condition?: RuleCondition): string {
+  if (!condition) return '未设置执行条件'
+  if ('all' in condition) return `全部满足：${condition.all.map(conditionSummary).join('；')}`
+  if ('any' in condition) return `任一满足：${condition.any.map(conditionSummary).join('；')}`
+  if (!condition.field) return '不参与自动检测'
+  const right = condition.compareField
+    ? `${String(condition.compareField)}${condition.multiplier ? ` × ${condition.multiplier}` : ''}`
+    : String(condition.value)
+  const left = condition.transform === 'absDiff'
+    ? `|${String(condition.field)} - ${String(condition.compareField || '')}|`
+    : String(condition.field)
+  return `${left} ${condition.operator} ${right}`
+}
+
 function managedRuleToRisk(rule: ManagedRule): RiskRule {
   return {
     code: rule.code,
@@ -739,12 +805,8 @@ function managedRuleToRisk(rule: ManagedRule): RiskRule {
     basis: rule.basis,
     caseRef: rule.conditionText,
     trigger: (client) => evaluateCondition(client, rule.conditionJson),
-    reason: (client) => {
-      const field = rule.conditionJson?.field
-      const value = field ? client[field] : ''
-      return field
-        ? `规则条件命中：${String(field)} 当前值为 ${String(value)}，条件为 ${rule.conditionJson.operator} ${String(rule.conditionJson.value)}。`
-        : rule.conditionText || '规则条件已命中。'
+    reason: () => {
+      return `规则条件命中：${conditionSummary(rule.conditionJson)}。`
     },
     suggestion: rule.suggestion,
     materials: rule.materials,
@@ -753,7 +815,7 @@ function managedRuleToRisk(rule: ManagedRule): RiskRule {
 
 function detectRisks(client: Client, managed: ManagedRule[] = []): RiskResult[] {
   const executableRules = managed
-    .filter((rule) => rule.enabled && rule.conditionJson?.field)
+    .filter((rule) => rule.enabled && conditionSummary(rule.conditionJson) !== '不参与自动检测')
     .map(managedRuleToRisk)
   const sourceRules = executableRules.length ? executableRules : rules
 
@@ -1183,10 +1245,7 @@ function App() {
             suggestion: rule.suggestion,
             enabled: true,
             conditionText: rule.caseRef,
-            conditionJson:
-              rule.code === 'R001'
-                ? { field: 'consecutive12MonthSales', operator: '>', value: 5000000 }
-                : { field: '', operator: '=', value: '' },
+            conditionJson: builtInRuleConditions[rule.code] || { field: '', operator: '=', value: '' },
             materials: rule.materials,
           }),
         ),
@@ -1382,6 +1441,10 @@ function App() {
       window.alert('退出代入失败，请重新登录管理员账号。')
     }
   }
+
+  const draftCondition = isSimpleCondition(ruleDraft.conditionJson)
+    ? ruleDraft.conditionJson
+    : { field: '', operator: '=', value: '' } satisfies SimpleRuleCondition
 
   if (!loggedIn) {
     return (
@@ -1881,11 +1944,11 @@ function App() {
                   </Field>
                   <Field label="执行字段">
                     <select
-                      value={ruleDraft.conditionJson.field}
+                      value={draftCondition.field}
                       onChange={(event) =>
                         setRuleDraft({
                           ...ruleDraft,
-                          conditionJson: { ...ruleDraft.conditionJson, field: event.target.value as keyof Client },
+                          conditionJson: { ...draftCondition, field: event.target.value as keyof Client },
                         })
                       }
                     >
@@ -1897,11 +1960,11 @@ function App() {
                   </Field>
                   <Field label="操作符">
                     <select
-                      value={ruleDraft.conditionJson.operator}
+                      value={draftCondition.operator}
                       onChange={(event) =>
                         setRuleDraft({
                           ...ruleDraft,
-                          conditionJson: { ...ruleDraft.conditionJson, operator: event.target.value as RuleCondition['operator'] },
+                          conditionJson: { ...draftCondition, operator: event.target.value as SimpleRuleCondition['operator'] },
                         })
                       }
                     >
@@ -1910,11 +1973,11 @@ function App() {
                   </Field>
                   <Field label="比较值">
                     <input
-                      value={String(ruleDraft.conditionJson.value)}
+                      value={String(draftCondition.value)}
                       onChange={(event) =>
                         setRuleDraft({
                           ...ruleDraft,
-                          conditionJson: { ...ruleDraft.conditionJson, value: event.target.value },
+                          conditionJson: { ...draftCondition, value: event.target.value },
                         })
                       }
                       placeholder="例如 5000000 / true / 小规模纳税人"
@@ -1960,11 +2023,7 @@ function App() {
                   </div>
                   <h3>{rule.name}</h3>
                   <p>{rule.taxType || '未填写税种'} / {rule.enabled ? '启用' : '停用'}</p>
-                  {rule.conditionJson?.field && (
-                    <small>
-                      执行条件：{String(rule.conditionJson.field)} {rule.conditionJson.operator} {String(rule.conditionJson.value)}
-                    </small>
-                  )}
+                  {conditionSummary(rule.conditionJson) !== '不参与自动检测' && <small>执行条件：{conditionSummary(rule.conditionJson)}</small>}
                   {rule.conditionText && <small>{rule.conditionText}</small>}
                   <small>{rule.basis}</small>
                   <p>{rule.suggestion}</p>

@@ -19,6 +19,26 @@ function parseRule(row) {
   }
 }
 
+function normalizeCondition(condition) {
+  if (!condition || typeof condition !== 'object') {
+    return { field: '', operator: '=', value: '' }
+  }
+  if (Array.isArray(condition.all)) {
+    return { all: condition.all.map(normalizeCondition) }
+  }
+  if (Array.isArray(condition.any)) {
+    return { any: condition.any.map(normalizeCondition) }
+  }
+  return {
+    field: String(condition.field || ''),
+    operator: ['>', '>=', '<', '<=', '=', '!='].includes(condition.operator) ? condition.operator : '=',
+    value: condition.value ?? '',
+    compareField: condition.compareField ? String(condition.compareField) : undefined,
+    multiplier: Number.isFinite(Number(condition.multiplier)) ? Number(condition.multiplier) : undefined,
+    transform: condition.transform === 'absDiff' ? 'absDiff' : undefined,
+  }
+}
+
 function normalizeRule(input) {
   const code = String(input.code || '').trim().toUpperCase()
   const name = String(input.name || '').trim()
@@ -39,16 +59,7 @@ function normalizeRule(input) {
     suggestion: String(input.suggestion || '').trim(),
     enabled: input.enabled === false ? 0 : 1,
     conditionText: String(input.conditionText || '').trim(),
-    conditionJson:
-      input.conditionJson && typeof input.conditionJson === 'object'
-        ? {
-            field: String(input.conditionJson.field || ''),
-            operator: ['>', '>=', '<', '<=', '=', '!='].includes(input.conditionJson.operator)
-              ? input.conditionJson.operator
-              : '=',
-            value: input.conditionJson.value ?? '',
-          }
-        : { field: '', operator: '=', value: '' },
+    conditionJson: normalizeCondition(input.conditionJson),
     materials,
   }
 }
