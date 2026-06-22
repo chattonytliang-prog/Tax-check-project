@@ -241,6 +241,33 @@ button svg,
   padding: 32px;
 }
 
+.data-status {
+  max-width: 1440px;
+  margin: 0 auto 16px;
+  min-height: 40px;
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.data-status.connected {
+  border-color: rgba(12, 140, 130, 0.28);
+  background: rgba(86, 240, 238, 0.1);
+  color: #087a7a;
+}
+
+.data-status.fallback {
+  border-color: rgba(183, 106, 32, 0.24);
+  background: rgba(183, 106, 32, 0.08);
+  color: #8d5018;
+}
+
 .page {
   max-width: 1440px;
   margin: 0 auto;

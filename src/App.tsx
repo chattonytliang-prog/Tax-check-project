@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   BarChart3,
@@ -712,6 +712,26 @@ function escapeHtml(value: string) {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
+async function apiGet<T>(url: string): Promise<T> {
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status}`)
+  }
+  return response.json() as Promise<T>
+}
+
+async function apiSend<T>(url: string, method: 'POST' | 'PUT', body: unknown): Promise<T> {
+  const response = await fetch(url, {
+    method,
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status}`)
+  }
+  return response.json() as Promise<T>
+}
+
 function StatCard({
   label,
   value,
@@ -777,6 +797,40 @@ function App() {
   const [editingClient, setEditingClient] = useState<Client>({ ...emptyClient, id: crypto.randomUUID() })
   const [reports, setReports] = useState<Report[]>([])
   const [query, setQuery] = useState('')
+  const [dataStatus, setDataStatus] = useState<'loading' | 'connected' | 'fallback'>('loading')
+
+  useEffect(() => {
+    let active = true
+
+    async function loadData() {
+      try {
+        const [clientsResponse, reportsResponse] = await Promise.all([
+          apiGet<{ clients: Client[] }>('/api/clients'),
+          apiGet<{ reports: Report[] }>('/api/reports'),
+        ])
+
+        if (!active) return
+
+        setClients(clientsResponse.clients)
+        setReports(reportsResponse.reports)
+        if (clientsResponse.clients[0]) {
+          setSelectedClientId(clientsResponse.clients[0].id)
+        }
+        setDataStatus('connected')
+      } catch (error) {
+        console.warn('Using local demo data because API is unavailable.', error)
+        if (active) {
+          setDataStatus('fallback')
+        }
+      }
+    }
+
+    loadData()
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   const selectedClient = clients.find((client) => client.id === selectedClientId) || clients[0]
   const currentRisks = useMemo(() => (selectedClient ? detectRisks(selectedClient) : []), [selectedClient])
@@ -805,7 +859,7 @@ function App() {
     }
   }, [clients])
 
-  const saveClient = () => {
+  const saveClient = async () => {
     const normalized = editingClient.name.trim()
       ? editingClient
       : { ...editingClient, name: `未命名企业 ${clients.length + 1}` }
@@ -816,9 +870,20 @@ function App() {
     })
     setSelectedClientId(normalized.id)
     setPage('result')
+
+    try {
+      await apiSend<{ client: Client }>('/api/clients', 'POST', {
+        ...normalized,
+        riskLevel: getOverallLevel(detectRisks(normalized)),
+      })
+      setDataStatus('connected')
+    } catch (error) {
+      console.warn('Client saved locally only.', error)
+      setDataStatus('fallback')
+    }
   }
 
-  const createReport = () => {
+  const createReport = async () => {
     const risks = detectRisks(selectedClient)
     const report: Report = {
       id: crypto.randomUUID(),
@@ -831,6 +896,14 @@ function App() {
     }
     setReports((current) => [report, ...current.filter((item) => item.clientId !== selectedClient.id)])
     setPage('report')
+
+    try {
+      await apiSend<{ report: Report }>('/api/reports', 'POST', report)
+      setDataStatus('connected')
+    } catch (error) {
+      console.warn('Report saved locally only.', error)
+      setDataStatus('fallback')
+    }
   }
 
   if (!loggedIn) {
@@ -908,6 +981,11 @@ function App() {
       </aside>
 
       <main className="workspace">
+        <div className={`data-status ${dataStatus}`}>
+          {dataStatus === 'loading' && '正在连接云端数据库...'}
+          {dataStatus === 'connected' && '云端数据库已连接，企业档案和报告会保存到 D1。'}
+          {dataStatus === 'fallback' && '当前为演示数据模式：请在 Cloudflare Pages 绑定 D1 数据库后使用持久化能力。'}
+        </div>
         {page === 'dashboard' && (
           <section className="page">
             <header className="page-header">
