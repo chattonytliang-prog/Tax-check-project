@@ -903,6 +903,7 @@ function App() {
   const [editingRuleCode, setEditingRuleCode] = useState('')
   const [query, setQuery] = useState('')
   const [dataStatus, setDataStatus] = useState<'loading' | 'connected' | 'fallback'>('loading')
+  const [aiReportLoading, setAiReportLoading] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -1194,6 +1195,46 @@ function App() {
     } catch (error) {
       console.warn('Report saved locally only.', error)
       setDataStatus('fallback')
+    }
+  }
+
+  const enhanceReportWithAi = async () => {
+    if (!selectedClient || aiReportLoading) return
+
+    const risks = detectRisks(selectedClient, managedRules)
+    const existingReport = reports.find((report) => report.clientId === selectedClient.id)
+    const baseReport: Report = existingReport || {
+      id: crypto.randomUUID(),
+      clientId: selectedClient.id,
+      clientName: selectedClient.name,
+      riskLevel: getOverallLevel(risks),
+      createdAt: formatDate(),
+      risks,
+      content: buildReportContent(selectedClient, risks),
+    }
+
+    setAiReportLoading(true)
+    try {
+      const response = await apiSend<{ content: string; model: string; usage?: unknown }>('/api/ai/report', 'POST', {
+        client: selectedClient,
+        risks,
+        content: baseReport.content,
+      })
+      const enhancedReport = {
+        ...baseReport,
+        risks,
+        riskLevel: getOverallLevel(risks),
+        content: response.content,
+      }
+
+      setReports((current) => [enhancedReport, ...current.filter((item) => item.id !== enhancedReport.id)])
+      await apiSend<{ report: Report }>('/api/reports', 'POST', enhancedReport)
+      setDataStatus('connected')
+    } catch (error) {
+      console.warn('Failed to enhance report with AI.', error)
+      window.alert(error instanceof Error ? error.message : 'AI 优化报告失败')
+    } finally {
+      setAiReportLoading(false)
     }
   }
 
@@ -1669,6 +1710,8 @@ function App() {
             client={selectedClient}
             risks={currentRisks}
             onGenerate={createReport}
+            onAiEnhance={enhanceReportWithAi}
+            aiLoading={aiReportLoading}
             onUpdate={(content) =>
               setReports((current) =>
                 current.map((report) => (report.clientId === selectedClient.id ? { ...report, content } : report)),
@@ -2093,12 +2136,16 @@ function ReportPage({
   client,
   risks,
   onGenerate,
+  onAiEnhance,
+  aiLoading,
   onUpdate,
 }: {
   report?: Report
   client: Client
   risks: RiskResult[]
   onGenerate: () => void
+  onAiEnhance: () => void
+  aiLoading: boolean
   onUpdate: (content: string) => void
 }) {
   const draft = report?.content || buildReportContent(client, risks)
@@ -2113,6 +2160,9 @@ function ReportPage({
         <div className="header-actions">
           <button className="secondary-button" onClick={onGenerate}>
             <Sparkles /> 重新生成
+          </button>
+          <button className="secondary-button" onClick={onAiEnhance} disabled={aiLoading}>
+            <Sparkles /> {aiLoading ? 'AI 生成中' : 'AI 优化报告'}
           </button>
           <button
             className="primary-button"
