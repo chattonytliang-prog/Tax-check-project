@@ -63,7 +63,21 @@ export async function onRequestDelete({ request, env, params }) {
     const auth = await requireUser(request, db)
     if (auth.response) return auth.response
 
-    await db.prepare('DELETE FROM clients WHERE id = ? AND owner_user_id = ?').bind(params.id, auth.user.id).run()
+    await db.batch([
+      db
+        .prepare(
+          `DELETE FROM risk_results
+           WHERE client_id = ?
+           AND EXISTS (
+             SELECT 1 FROM clients
+             WHERE clients.id = risk_results.client_id
+             AND clients.owner_user_id = ?
+           )`,
+        )
+        .bind(params.id, auth.user.id),
+      db.prepare('DELETE FROM reports WHERE client_id = ? AND owner_user_id = ?').bind(params.id, auth.user.id),
+      db.prepare('DELETE FROM clients WHERE id = ? AND owner_user_id = ?').bind(params.id, auth.user.id),
+    ])
     return json({ ok: true })
   } catch (error) {
     return serverError(error)

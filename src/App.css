@@ -382,6 +382,17 @@ button svg,
   color: var(--ink);
 }
 
+.row-actions button.danger-action,
+.report-actions button.danger-action {
+  border-color: rgba(182, 49, 54, 0.24);
+  color: var(--red);
+}
+
+.row-actions button.danger-action:hover,
+.report-actions button.danger-action:hover {
+  background: rgba(182, 49, 54, 0.08);
+}
+
 .ghost-button {
   background: transparent;
 }

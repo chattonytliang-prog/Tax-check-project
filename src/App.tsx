@@ -16,6 +16,7 @@ import {
   Settings2,
   ShieldCheck,
   Sparkles,
+  Trash2,
 } from 'lucide-react'
 import './App.css'
 
@@ -738,6 +739,15 @@ async function apiSend<T>(url: string, method: 'POST' | 'PUT', body: unknown): P
   return response.json() as Promise<T>
 }
 
+async function apiDelete<T>(url: string): Promise<T> {
+  const response = await fetch(url, { method: 'DELETE' })
+  if (!response.ok) {
+    const data = await response.json().catch(() => null)
+    throw new Error(data?.error || data?.detail || `API request failed: ${response.status}`)
+  }
+  return response.json() as Promise<T>
+}
+
 function StatCard({
   label,
   value,
@@ -949,6 +959,42 @@ function App() {
       setDataStatus('connected')
     } catch (error) {
       console.warn('Report saved locally only.', error)
+      setDataStatus('fallback')
+    }
+  }
+
+  const deleteClient = async (client: Client) => {
+    if (!window.confirm(`确定删除企业「${client.name}」吗？相关报告也会一起删除。`)) {
+      return
+    }
+
+    const remainingClients = clients.filter((item) => item.id !== client.id)
+    setClients(remainingClients)
+    setReports((current) => current.filter((report) => report.clientId !== client.id))
+    if (selectedClientId === client.id) {
+      setSelectedClientId(remainingClients[0]?.id || '')
+    }
+
+    try {
+      await apiDelete<{ ok: true }>(`/api/clients/${client.id}`)
+      setDataStatus('connected')
+    } catch (error) {
+      console.warn('Client deleted locally only.', error)
+      setDataStatus('fallback')
+    }
+  }
+
+  const deleteReport = async (report: Report) => {
+    if (!window.confirm(`确定删除「${report.clientName}」的这份报告吗？`)) {
+      return
+    }
+
+    setReports((current) => current.filter((item) => item.id !== report.id))
+    try {
+      await apiDelete<{ ok: true }>(`/api/reports/${report.id}`)
+      setDataStatus('connected')
+    } catch (error) {
+      console.warn('Report deleted locally only.', error)
       setDataStatus('fallback')
     }
   }
@@ -1222,6 +1268,9 @@ function App() {
                         >
                           编辑
                         </button>
+                        <button className="danger-action" onClick={() => deleteClient(client)}>
+                          <Trash2 /> 删除
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -1332,6 +1381,9 @@ function App() {
                     </button>
                     <button onClick={() => downloadWord(report)}>
                       <Download /> Word
+                    </button>
+                    <button className="danger-action" onClick={() => deleteReport(report)}>
+                      <Trash2 /> 删除
                     </button>
                   </div>
                 </article>
