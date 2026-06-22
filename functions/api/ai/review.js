@@ -16,14 +16,58 @@ function compactRisk(risk) {
   }
 }
 
-function buildPrompt(client, risks) {
+function calculateEstablishmentFacts(client, now = new Date()) {
+  const establishedAt = client?.establishedAt ? new Date(`${client.establishedAt}T00:00:00Z`) : null
+  if (!establishedAt || Number.isNaN(establishedAt.getTime())) {
+    return {
+      asOfDate: now.toISOString().slice(0, 10),
+      establishedAt: client?.establishedAt || '',
+      monthsSinceEstablished: null,
+      isEstablishedLessThan12Months: null,
+    }
+  }
+
+  let months = (now.getUTCFullYear() - establishedAt.getUTCFullYear()) * 12
+    + (now.getUTCMonth() - establishedAt.getUTCMonth())
+  if (now.getUTCDate() < establishedAt.getUTCDate()) {
+    months -= 1
+  }
+
+  return {
+    asOfDate: now.toISOString().slice(0, 10),
+    establishedAt: client.establishedAt,
+    monthsSinceEstablished: Math.max(months, 0),
+    isEstablishedLessThan12Months: months < 12,
+  }
+}
+
+function hasFalseShortEstablishmentClaim(text, establishmentFacts) {
+  if (establishmentFacts.monthsSinceEstablished === null || establishmentFacts.monthsSinceEstablished < 12) {
+    return false
+  }
+  return /成立[^。！？\n]*(不足|不满)\s*(12|十二|一)\s*(个?月|年)/.test(text)
+    || /(不足|不满)\s*(12|十二)\s*个?月[^。！？\n]*成立/.test(text)
+}
+
+function sanitizeReview(review, establishmentFacts) {
+  return {
+    dataQualityWarnings: review.dataQualityWarnings.filter((item) => !hasFalseShortEstablishmentClaim(item, establishmentFacts)),
+    nearThresholdWarnings: review.nearThresholdWarnings.filter((item) => !hasFalseShortEstablishmentClaim(item, establishmentFacts)),
+    riskReviewNotes: review.riskReviewNotes.filter((item) => !hasFalseShortEstablishmentClaim(item, establishmentFacts)),
+  }
+}
+
+function buildPrompt(client, risks, establishmentFacts) {
   return `请复核以下企业输入数据与规则引擎检测结果的合理性。
 
 重要边界：
 1. 规则引擎已命中的风险就是“已命中风险”，你不得新增、删除或覆盖命中结论。
 2. 如果发现数据异常、字段冲突、接近阈值、需要复核，只能写入提示项，不能写成已命中风险。
 3. 如果规则未触发，不要把它表述为已触发；只能说“建议复核”或“观察项”。
-4. 输出必须是严格 JSON，不要 Markdown，不要解释 JSON 之外的内容。
+4. 企业成立时长必须以“系统计算事实”为准，不得自行推断。
+5. 只有当 isEstablishedLessThan12Months 为 true 时，才允许写“成立不足 12 个月 / 成立不足一年 / 不满 12 个月”等表述。
+6. 如果 isEstablishedLessThan12Months 为 false，禁止出现任何“成立不足 12 个月”或同义表述。
+7. 输出必须是严格 JSON，不要 Markdown，不要解释 JSON 之外的内容。
 
 JSON 格式：
 {
@@ -31,6 +75,9 @@ JSON 格式：
   "nearThresholdWarnings": ["接近阈值或边界状态提醒，每条一句"],
   "riskReviewNotes": ["对已命中规则的复核解释，每条一句"]
 }
+
+系统计算事实：
+${JSON.stringify(establishmentFacts, null, 2)}
 
 企业输入数据：
 ${JSON.stringify(client, null, 2)}
@@ -82,6 +129,7 @@ export async function onRequestPost({ request, env }) {
       return json({ error: 'Client not found' }, { status: 404 })
     }
 
+    const establishmentFacts = calculateEstablishmentFacts(client)
     const model = env.DEEPSEEK_MODEL || DEFAULT_MODEL
     const response = await fetch(DEEPSEEK_API_URL, {
       method: 'POST',
@@ -94,11 +142,11 @@ export async function onRequestPost({ request, env }) {
         messages: [
           {
             role: 'system',
-            content: '你是企业税务风控数据复核助手，只能复核输入数据和解释规则引擎结果，不得新增或删除风险命中结论。',
+            content: '你是企业税务风控数据复核助手，只能复核输入数据和解释规则引擎结果，不得新增或删除风险命中结论。涉及日期、期间、成立时长时，必须服从系统计算事实。',
           },
           {
             role: 'user',
-            content: buildPrompt(client, risks),
+            content: buildPrompt(client, risks, establishmentFacts),
           },
         ],
         temperature: 0.1,
@@ -125,12 +173,14 @@ export async function onRequestPost({ request, env }) {
       return json({ error: 'DeepSeek returned invalid review JSON' }, { status: 502 })
     }
 
+    const review = sanitizeReview({
+      dataQualityWarnings: normalizeStringArray(parsed.dataQualityWarnings),
+      nearThresholdWarnings: normalizeStringArray(parsed.nearThresholdWarnings),
+      riskReviewNotes: normalizeStringArray(parsed.riskReviewNotes),
+    }, establishmentFacts)
+
     return json({
-      review: {
-        dataQualityWarnings: normalizeStringArray(parsed.dataQualityWarnings),
-        nearThresholdWarnings: normalizeStringArray(parsed.nearThresholdWarnings),
-        riskReviewNotes: normalizeStringArray(parsed.riskReviewNotes),
-      },
+      review,
       model,
       usage: data.usage || null,
     })
