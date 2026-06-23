@@ -829,6 +829,21 @@ th {
   margin-top: 14px;
 }
 
+.material-gap-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px dashed rgba(18, 174, 234, 0.32);
+  border-radius: 8px;
+  background: rgba(237, 249, 251, 0.62);
+}
+
+.material-gap-panel strong {
+  color: #087a7a;
+  font-size: 13px;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

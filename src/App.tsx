@@ -2522,6 +2522,9 @@ function ClientForm({ client, onChange }: { client: Client; onChange: (client: C
     ['relatedPricingAbnormal', '关联交易价格异常'],
     ['agencyComplianceRisk', '涉税服务/内部协助风险'],
   ]
+  const vatMaterialGaps = ['月度增值税申报表及附表', '开票明细与发票样本', '进项抵扣及进项转出明细', '会员卡/预收款明细', '视同销售场景说明']
+  const citMaterialGaps = ['企业所得税季度及年度申报表', '汇算清缴申报表及测算底稿', '无票/替票/个人抬头发票明细', '三费扣除限额测算', '关联资金拆借及管理费资料']
+  const iitMaterialGaps = ['工资薪金个税申报明细', '临时工/劳务/佣金付款明细', '绩效和年终奖发放明细', '非现金福利及员工餐住宿资料', '社保缴纳清单']
   const renderChecks = (items: Array<[keyof Client, string]>) => items.map(([key, label]) => (
     <BoolField
       key={String(key)}
@@ -2530,6 +2533,14 @@ function ClientForm({ client, onChange }: { client: Client; onChange: (client: C
       onChange={(value) => patch(key, value as never)}
     />
   ))
+  const renderMaterialGaps = (items: string[]) => (
+    <div className="material-gap-panel">
+      <strong>缺这些资料会影响判断</strong>
+      <div className="chips">
+        {items.map((item) => <span key={item}>{item}</span>)}
+      </div>
+    </div>
+  )
 
   return (
     <div className="form-layout">
@@ -2538,7 +2549,7 @@ function ClientForm({ client, onChange }: { client: Client; onChange: (client: C
           <p className="eyebrow">录入路线</p>
           <h3>按税务健康检查口径采集资料</h3>
           <p className="section-helper">
-            先录入企业共用画像，再按增值税、企业所得税、个人所得税与综合线索补充关键字段。当前版本只采集可量化信息和风险标记，不要求访谈、抽凭或上传底稿。
+            先录入企业共用画像，再按增值税、企业所得税、个人所得税与综合线索补充关键字段。多主体项目建议按主体分别建档，集团口径另行汇总。当前版本只采集可量化信息和风险标记，不要求访谈、抽凭或上传底稿。
           </p>
         </div>
         <div className="intake-score">
@@ -2562,7 +2573,7 @@ function ClientForm({ client, onChange }: { client: Client; onChange: (client: C
           <Field label="地区"><input value={client.region} onChange={(e) => patch('region', e.target.value)} /></Field>
           <Field label="行业">
             <select value={client.industry} onChange={(e) => patch('industry', e.target.value)}>
-              {['商贸', '电商', '服务', '建筑', '劳务', '直播自媒体', '制造', '个体户'].map((item) => <option key={item}>{item}</option>)}
+              {['餐饮', '商贸', '电商', '服务', '建筑', '劳务', '直播自媒体', '制造', '零售', '个体户'].map((item) => <option key={item}>{item}</option>)}
             </select>
           </Field>
           <Field label="纳税人类型">
@@ -2609,6 +2620,7 @@ function ClientForm({ client, onChange }: { client: Client; onChange: (client: C
           <Field label="连续 12 个月销售额"><input type="number" value={client.consecutive12MonthSales} onChange={num('consecutive12MonthSales')} /></Field>
           <Field label="平台收入"><input type="number" value={client.platformRevenue} onChange={num('platformRevenue')} /></Field>
         </div>
+        {renderMaterialGaps(vatMaterialGaps)}
         <div className="check-grid tax-check-grid">
           {renderChecks(vatChecks)}
         </div>
@@ -2632,6 +2644,7 @@ function ClientForm({ client, onChange }: { client: Client; onChange: (client: C
           <Field label="资产总额"><input type="number" value={client.assetsTotal} onChange={num('assetsTotal')} /></Field>
           <Field label="全年平均人数"><input type="number" value={client.employeeAnnualAvg} onChange={num('employeeAnnualAvg')} /></Field>
         </div>
+        {renderMaterialGaps(citMaterialGaps)}
         <div className="check-grid tax-check-grid">
           {renderChecks(citChecks)}
         </div>
@@ -2649,6 +2662,7 @@ function ClientForm({ client, onChange }: { client: Client; onChange: (client: C
           <Field label="劳务人员人数"><input type="number" value={client.laborCount} onChange={num('laborCount')} /></Field>
           <Field label="工资薪金总额"><input type="number" value={client.payrollTotal} onChange={num('payrollTotal')} /></Field>
         </div>
+        {renderMaterialGaps(iitMaterialGaps)}
         <div className="check-grid tax-check-grid">
           {renderChecks(iitChecks)}
         </div>
