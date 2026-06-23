@@ -476,6 +476,13 @@ button svg,
   gap: 16px;
 }
 
+.analytics-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(300px, 0.8fr);
+  gap: 16px;
+  margin: 16px 0;
+}
+
 .panel,
 .table-panel,
 .form-section,
@@ -491,6 +498,116 @@ button svg,
 
 .panel {
   padding: 20px;
+}
+
+.chart-panel,
+.three-panel {
+  min-height: 420px;
+}
+
+.chart-panel {
+  display: grid;
+  grid-template-rows: auto minmax(220px, 1fr) auto;
+  gap: 12px;
+}
+
+.chart-panel .panel-title {
+  margin-bottom: 0;
+}
+
+.chart-panel .panel-title p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.chart-canvas {
+  width: 100%;
+  min-height: 230px;
+}
+
+.mini-table {
+  font-size: 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.mini-table th,
+.mini-table td {
+  padding: 9px 10px;
+}
+
+.mini-table th:last-child,
+.mini-table td:last-child {
+  text-align: right;
+}
+
+.three-panel {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(220px, 1fr) auto;
+  gap: 12px;
+  overflow: hidden;
+  color: white;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(86, 240, 238, 0.24), transparent 34%),
+    linear-gradient(180deg, #07191f, #041014);
+  border-color: rgba(86, 240, 238, 0.2);
+}
+
+.three-panel h3 {
+  margin: 0;
+}
+
+.three-panel p {
+  color: #d7f6f6;
+  line-height: 1.7;
+  margin: 8px 0 0;
+}
+
+.risk-orbit {
+  width: 100%;
+  min-height: 230px;
+}
+
+.risk-orbit canvas {
+  display: block;
+}
+
+.orbit-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: #d7f6f6;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.orbit-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.orbit-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.legend-high {
+  background: var(--red);
+}
+
+.legend-medium {
+  background: var(--orange);
+}
+
+.legend-low {
+  background: var(--cyan);
 }
 
 .panel-title {
@@ -1166,6 +1283,7 @@ textarea:focus {
   .ai-review-grid,
   .readiness-panel,
   .intake-overview,
+  .analytics-grid,
   .report-editor {
     grid-template-columns: 1fr;
   }

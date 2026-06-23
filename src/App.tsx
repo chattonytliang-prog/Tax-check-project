@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { EChartsOption } from 'echarts'
+import type { EChartsType } from 'echarts/core'
+import type * as ThreeNamespace from 'three'
 import {
   AlertTriangle,
   BarChart3,
@@ -972,6 +975,233 @@ function BoolField({
   )
 }
 
+type ChartDatum = {
+  name: string
+  value: number
+}
+
+function EChartPanel({
+  title,
+  subtitle,
+  option,
+  rows,
+}: {
+  title: string
+  subtitle?: string
+  option: EChartsOption
+  rows: ChartDatum[]
+}) {
+  const chartRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!chartRef.current) return
+
+    let disposed = false
+    let chart: EChartsType | null = null
+    let observer: ResizeObserver | null = null
+    let resize: (() => void) | null = null
+    const container = chartRef.current
+
+    async function mountChart() {
+      const [echartsCore, charts, components, renderers] = await Promise.all([
+        import('echarts/core'),
+        import('echarts/charts'),
+        import('echarts/components'),
+        import('echarts/renderers'),
+      ])
+      echartsCore.use([
+        charts.BarChart,
+        charts.PieChart,
+        components.GridComponent,
+        components.TooltipComponent,
+        renderers.CanvasRenderer,
+      ])
+      if (disposed) return
+      chart = echartsCore.init(container)
+      chart.setOption(option)
+      resize = () => chart?.resize()
+      observer = new ResizeObserver(resize)
+      observer.observe(container)
+      window.addEventListener('resize', resize)
+    }
+
+    mountChart()
+
+    return () => {
+      disposed = true
+      observer?.disconnect()
+      if (resize) window.removeEventListener('resize', resize)
+      chart?.dispose()
+    }
+  }, [option])
+
+  return (
+    <section className="panel chart-panel">
+      <div className="panel-title">
+        <div>
+          <h3>{title}</h3>
+          {subtitle && <p>{subtitle}</p>}
+        </div>
+      </div>
+      <div ref={chartRef} className="chart-canvas" />
+      <table className="mini-table">
+        <thead>
+          <tr>
+            <th>项目</th>
+            <th>数量</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.name}>
+              <td>{row.name}</td>
+              <td>{row.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  )
+}
+
+function RiskOrbit({
+  high,
+  medium,
+  low,
+}: {
+  high: number
+  medium: number
+  low: number
+}) {
+  const mountRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const currentMount = mountRef.current
+    if (!currentMount) return
+    const mountEl: HTMLDivElement = currentMount
+
+    let disposed = false
+    let renderer: ThreeNamespace.WebGLRenderer | null = null
+    let observer: ResizeObserver | null = null
+    let animationId = 0
+    const geometries: ThreeNamespace.BufferGeometry[] = []
+    const materials: ThreeNamespace.Material[] = []
+
+    async function mountScene() {
+      const THREE = await import('three')
+      if (disposed) return
+
+      const scene = new THREE.Scene()
+      const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100)
+      camera.position.z = 6
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      mountEl.appendChild(renderer.domElement)
+
+      const group = new THREE.Group()
+      scene.add(group)
+
+      const shellGeometry = new THREE.IcosahedronGeometry(1.7, 2)
+      const shellMaterial = new THREE.MeshBasicMaterial({ color: 0x56f0ee, wireframe: true, transparent: true, opacity: 0.18 })
+      const shell = new THREE.Mesh(shellGeometry, shellMaterial)
+      geometries.push(shellGeometry)
+      materials.push(shellMaterial)
+      group.add(shell)
+
+      const issueTotal = Math.max(high + medium + low, 1)
+      const points: ThreeNamespace.Mesh[] = []
+      const palette = [
+        { count: high, color: 0xb63136, radius: 0.07 },
+        { count: medium, color: 0xb76a20, radius: 0.055 },
+        { count: Math.max(low, issueTotal === 1 ? 8 : low), color: 0x56f0ee, radius: 0.045 },
+      ]
+
+      palette.forEach(({ count, color, radius }) => {
+        Array.from({ length: Math.min(Math.max(count, 0), 24) }).forEach((_, index) => {
+          const phi = Math.acos(-1 + (2 * (index + 0.5)) / Math.max(count, 1))
+          const theta = Math.sqrt(Math.max(count, 1) * Math.PI) * phi
+          const geometry = new THREE.SphereGeometry(radius, 12, 12)
+          const material = new THREE.MeshBasicMaterial({ color })
+          const dot = new THREE.Mesh(geometry, material)
+          dot.position.set(
+            2.05 * Math.cos(theta) * Math.sin(phi),
+            2.05 * Math.sin(theta) * Math.sin(phi),
+            2.05 * Math.cos(phi),
+          )
+          geometries.push(geometry)
+          materials.push(material)
+          points.push(dot)
+          group.add(dot)
+        })
+      })
+
+      const ringGeometry = new THREE.TorusGeometry(2.35, 0.008, 8, 96)
+      const ringMaterial = new THREE.MeshBasicMaterial({ color: 0x12aeea, transparent: true, opacity: 0.5 })
+      const ring = new THREE.Mesh(ringGeometry, ringMaterial)
+      geometries.push(ringGeometry)
+      materials.push(ringMaterial)
+      ring.rotation.x = Math.PI / 2.8
+      group.add(ring)
+
+      const resize = () => {
+        if (!renderer) return
+        const width = mountEl.clientWidth
+        const height = mountEl.clientHeight
+        renderer.setSize(width, height)
+        camera.aspect = width / Math.max(height, 1)
+        camera.updateProjectionMatrix()
+      }
+      const animate = () => {
+        if (!renderer || disposed) return
+        group.rotation.y += 0.006
+        shell.rotation.x += 0.002
+        points.forEach((dot, index) => {
+          dot.scale.setScalar(1 + Math.sin(Date.now() / 420 + index) * 0.12)
+        })
+        renderer.render(scene, camera)
+        animationId = requestAnimationFrame(animate)
+      }
+
+      resize()
+      animate()
+      observer = new ResizeObserver(resize)
+      observer.observe(mountEl)
+    }
+
+    mountScene()
+
+    return () => {
+      disposed = true
+      cancelAnimationFrame(animationId)
+      observer?.disconnect()
+      if (renderer?.domElement.parentElement === mountEl) {
+        mountEl.removeChild(renderer.domElement)
+      }
+      renderer?.dispose()
+      geometries.forEach((geometry) => geometry.dispose())
+      materials.forEach((material) => material.dispose())
+    }
+  }, [high, medium, low])
+
+  const total = high + medium + low
+
+  return (
+    <section className="panel three-panel">
+      <div>
+        <p className="eyebrow">Three.js 风险态势</p>
+        <h3>{total ? `${total} 个风险事项` : '暂无明显风险事项'}</h3>
+        <p>红色代表高风险，橙色代表中风险，青色代表持续关注项。</p>
+      </div>
+      <div ref={mountRef} className="risk-orbit" />
+      <div className="orbit-legend">
+        <span><i className="legend-high" />高 {high}</span>
+        <span><i className="legend-medium" />中 {medium}</span>
+        <span><i className="legend-low" />低 {low}</span>
+      </div>
+    </section>
+  )
+}
+
 function App() {
   const [loggedIn, setLoggedIn] = useState(false)
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
@@ -1139,6 +1369,84 @@ function App() {
       detections: clientStats.reduce((sum, risks) => sum + risks.length, 0),
     }
   }, [clients, managedRules])
+  const dashboardLevelRows = useMemo<ChartDatum[]>(() => {
+    const clientStats = clients.map((client) => detectRisks(client, managedRules))
+    return [
+      { name: '高风险企业', value: clientStats.filter((risks) => getOverallLevel(risks) === '高').length },
+      { name: '中风险企业', value: clientStats.filter((risks) => getOverallLevel(risks) === '中').length },
+      { name: '低风险企业', value: clientStats.filter((risks) => getOverallLevel(risks) === '低').length },
+    ]
+  }, [clients, managedRules])
+  const dashboardTaxRows = useMemo<ChartDatum[]>(() => {
+    const totals = new Map<string, number>()
+    clients.flatMap((client) => detectRisks(client, managedRules)).forEach((risk) => {
+      const name = risk.taxType || '未分类'
+      totals.set(name, (totals.get(name) || 0) + 1)
+    })
+    const rows = Array.from(totals, ([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
+    return rows.length ? rows : [{ name: '暂无风险事项', value: 0 }]
+  }, [clients, managedRules])
+  const dashboardLevelOption = useMemo<EChartsOption>(() => ({
+    color: ['#b63136', '#b76a20', '#0c8c82'],
+    tooltip: { trigger: 'item' },
+    series: [
+      {
+        type: 'pie',
+        radius: ['52%', '78%'],
+        center: ['50%', '50%'],
+        label: { color: '#102027', formatter: '{b}\n{c}' },
+        data: dashboardLevelRows,
+      },
+    ],
+  }), [dashboardLevelRows])
+  const dashboardTaxOption = useMemo<EChartsOption>(() => ({
+    color: ['#12aeea'],
+    tooltip: { trigger: 'axis' },
+    grid: { left: 24, right: 16, top: 18, bottom: 32, containLabel: true },
+    xAxis: { type: 'category', data: dashboardTaxRows.map((row) => row.name), axisLabel: { color: '#637781' } },
+    yAxis: { type: 'value', minInterval: 1, axisLabel: { color: '#637781' }, splitLine: { lineStyle: { color: 'rgba(31, 71, 82, 0.12)' } } },
+    series: [{ type: 'bar', data: dashboardTaxRows.map((row) => row.value), barMaxWidth: 34, itemStyle: { borderRadius: [6, 6, 0, 0] } }],
+  }), [dashboardTaxRows])
+  const currentRiskLevelRows = useMemo<ChartDatum[]>(() => [
+    { name: '高风险', value: currentRisks.filter((risk) => risk.level === '高').length },
+    { name: '中风险', value: currentRisks.filter((risk) => risk.level === '中').length },
+    { name: '低风险', value: currentRisks.filter((risk) => risk.level === '低').length },
+  ], [currentRisks])
+  const currentRiskTaxRows = useMemo<ChartDatum[]>(() => {
+    const totals = new Map<string, number>()
+    currentRisks.forEach((risk) => totals.set(risk.taxType || '未分类', (totals.get(risk.taxType || '未分类') || 0) + 1))
+    const rows = Array.from(totals, ([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
+    return rows.length ? rows : [{ name: '暂无风险事项', value: 0 }]
+  }, [currentRisks])
+  const currentPriorityRows = useMemo<ChartDatum[]>(() => {
+    const totals = new Map<string, number>()
+    currentRisks.forEach((risk) => {
+      const priority = riskPriority(risk)
+      totals.set(priority, (totals.get(priority) || 0) + 1)
+    })
+    const rows = Array.from(totals, ([name, value]) => ({ name, value }))
+    return rows.length ? rows : [{ name: '暂无整改事项', value: 0 }]
+  }, [currentRisks])
+  const currentTaxOption = useMemo<EChartsOption>(() => ({
+    color: ['#12aeea', '#0c8c82', '#b76a20', '#b63136', '#56f0ee'],
+    tooltip: { trigger: 'item' },
+    series: [
+      {
+        type: 'pie',
+        radius: '72%',
+        label: { color: '#102027', formatter: '{b}: {c}' },
+        data: currentRiskTaxRows,
+      },
+    ],
+  }), [currentRiskTaxRows])
+  const currentPriorityOption = useMemo<EChartsOption>(() => ({
+    color: ['#b63136', '#b76a20', '#0c8c82'],
+    tooltip: { trigger: 'axis' },
+    grid: { left: 20, right: 16, top: 18, bottom: 28, containLabel: true },
+    xAxis: { type: 'value', minInterval: 1, axisLabel: { color: '#637781' }, splitLine: { lineStyle: { color: 'rgba(31, 71, 82, 0.12)' } } },
+    yAxis: { type: 'category', data: currentPriorityRows.map((row) => row.name), axisLabel: { color: '#637781' } },
+    series: [{ type: 'bar', data: currentPriorityRows.map((row) => row.value), barMaxWidth: 28, itemStyle: { borderRadius: [0, 6, 6, 0] } }],
+  }), [currentPriorityRows])
 
   const canUseAdmin = authUser?.role === 'admin' || authUser?.actor?.role === 'admin'
 
@@ -1627,6 +1935,25 @@ function App() {
               <StatCard label="高风险企业" value={stats.high} icon={<Gauge />} tone="red" />
               <StatCard label="已生成报告" value={reports.length} icon={<FileText />} tone="green" />
             </div>
+            <div className="analytics-grid">
+              <EChartPanel
+                title="企业风险等级分布"
+                subtitle="按当前规则引擎检测结果统计"
+                option={dashboardLevelOption}
+                rows={dashboardLevelRows}
+              />
+              <EChartPanel
+                title="税种风险命中分布"
+                subtitle="汇总所有企业当前命中的风险事项"
+                option={dashboardTaxOption}
+                rows={dashboardTaxRows}
+              />
+              <RiskOrbit
+                high={stats.high}
+                medium={stats.medium}
+                low={Math.max(clients.length - stats.high - stats.medium, 0)}
+              />
+            </div>
             <div className="two-column">
               <section className="panel">
                 <div className="panel-title">
@@ -1777,6 +2104,25 @@ function App() {
               <StatCard label="风险事项" value={currentRisks.length} icon={<ClipboardList />} tone="orange" />
               <StatCard label="高风险" value={currentRisks.filter((risk) => risk.level === '高').length} icon={<AlertTriangle />} tone="red" />
               <StatCard label="中风险" value={currentRisks.filter((risk) => risk.level === '中').length} icon={<BarChart3 />} />
+            </div>
+            <div className="analytics-grid result-analytics">
+              <EChartPanel
+                title="当前企业税种分布"
+                subtitle="按风险事项涉及税种汇总"
+                option={currentTaxOption}
+                rows={currentRiskTaxRows}
+              />
+              <EChartPanel
+                title="整改优先级分布"
+                subtitle="用于安排后续复核和整改顺序"
+                option={currentPriorityOption}
+                rows={currentPriorityRows}
+              />
+              <RiskOrbit
+                high={currentRiskLevelRows.find((row) => row.name === '高风险')?.value || 0}
+                medium={currentRiskLevelRows.find((row) => row.name === '中风险')?.value || 0}
+                low={currentRiskLevelRows.find((row) => row.name === '低风险')?.value || 0}
+              />
             </div>
             {currentCompleteness && (
               <section className="panel readiness-panel">
