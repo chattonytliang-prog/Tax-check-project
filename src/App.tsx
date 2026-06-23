@@ -3889,6 +3889,12 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
     </div>
   )
 
+  const renderUnitNote = (items: string[]) => (
+    <div className="unit-note" aria-label="字段计量单位">
+      {items.map((item) => <span key={item}>{item}</span>)}
+    </div>
+  )
+
   return (
     <div className="form-layout">
       <section className="form-section intake-overview">
@@ -4012,6 +4018,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <div>
             <h3>快速体检数据（共用）</h3>
             <p className="section-helper">用于先跑通整体经营规模、收入成本、收款流水和人员匹配关系。</p>
+            {renderUnitNote(['金额单位：元', '人数单位：人'])}
           </div>
           <span>Step 3</span>
         </div>
@@ -4032,6 +4039,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <div>
             <h3>趋势与预算数据</h3>
             <p className="section-helper">用于执行同比、环比、预实差异、主体利润率和有费用无收入类规则。</p>
+            {renderUnitNote(['金额单位：元', '人数单位：人'])}
           </div>
           <span>趋势</span>
         </div>
@@ -4061,6 +4069,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <div>
             <h3>房租装修与人员费用</h3>
             <p className="section-helper">用于执行无人员有费用、人均租房面积、福利性质餐费和装修费用合理性规则。</p>
+            {renderUnitNote(['金额单位：元', '面积单位：平方米'])}
           </div>
           <span>费用</span>
         </div>
@@ -4078,6 +4087,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <div>
             <h3>VAT 增值税资料</h3>
             <p className="section-helper">建议来源：增值税申报表、开票明细、平台账单、银行或第三方收款流水。</p>
+            {renderUnitNote(['金额单位：元', '税率差/比例：小数'])}
           </div>
           <span>VAT</span>
         </div>
@@ -4110,6 +4120,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <div>
             <h3>CIT 企业所得税资料</h3>
             <p className="section-helper">覆盖年度利润、扣除限额、优惠适用和费用真实性等企业所得税检查点。</p>
+            {renderUnitNote(['金额单位：元', '人数单位：人'])}
           </div>
           <span>CIT</span>
         </div>
@@ -4137,6 +4148,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <div>
             <h3>IIT 个税与薪酬资料</h3>
             <p className="section-helper">用于检查员工、社保、工资申报、劳务佣金和个税扣缴情形是否匹配。</p>
+            {renderUnitNote(['金额单位：元', '人数单位：人'])}
           </div>
           <span>IIT</span>
         </div>
