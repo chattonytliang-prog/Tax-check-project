@@ -949,6 +949,30 @@ th {
   white-space: nowrap;
 }
 
+.section-title-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.section-clear-button {
+  min-height: 28px;
+  border: 1px solid rgba(182, 49, 54, 0.22);
+  border-radius: 999px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.section-clear-button:hover {
+  background: rgba(182, 49, 54, 0.08);
+}
+
 .section-helper {
   margin: 0;
   font-size: 13px;

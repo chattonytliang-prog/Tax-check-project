@@ -3952,6 +3952,138 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
       {items.map((item) => <span key={item}>{item}</span>)}
     </div>
   )
+  const clearNumberDrafts = (keys: Array<keyof Client>) => {
+    setNumberDrafts((current) => {
+      const next = { ...current }
+      keys.forEach((key) => delete next[String(key)])
+      return next
+    })
+  }
+  const clearIntakeSection = (
+    sectionName: string,
+    patchData: Partial<Client>,
+    numericKeys: Array<keyof Client> = [],
+    derivedKeys: Array<keyof Client> = [],
+  ) => {
+    const confirmed = window.confirm(`确定清空${sectionName}数据吗？此操作只影响当前录入草稿。`)
+    if (!confirmed) return
+    const manualDerivedFields = { ...(client.manualDerivedFields || {}) }
+    const manualDerivedReasons = { ...(client.manualDerivedReasons || {}) }
+    derivedKeys.forEach((key) => {
+      delete manualDerivedFields[String(key)]
+      delete manualDerivedReasons[String(key)]
+    })
+    clearNumberDrafts([...numericKeys, ...derivedKeys])
+    onChange(deriveClientMetrics({ ...client, ...patchData, manualDerivedFields, manualDerivedReasons }))
+  }
+  const clearProjectSection = () => clearIntakeSection('项目结构', {
+    projectScope: '单主体',
+    groupName: '',
+    entityRole: '单体企业',
+  })
+  const clearBasicSection = () => clearIntakeSection('基础资料', {
+    name: '',
+    creditCode: '',
+    region: '',
+    industry: '',
+    taxpayerType: '',
+    establishedAt: '',
+  })
+  const clearQuickSection = () => clearIntakeSection('快速体检', {
+    monthlyRevenue: 0,
+    monthlyCost: 0,
+    monthlyProfit: 0,
+    collectionFlow: 0,
+    employees: 0,
+    socialSecurityCount: 0,
+    salaryDeclaredCount: 0,
+  }, ['monthlyRevenue', 'monthlyCost', 'monthlyProfit', 'collectionFlow', 'employees', 'socialSecurityCount', 'salaryDeclaredCount'], ['annualRevenue'])
+  const clearTrendSection = () => clearIntakeSection('趋势与预算', {
+    previousQuarterEmployees: 0,
+    previousQuarterRevenue: 0,
+    previousQuarterCostExpense: 0,
+    previousYearEbitProfit: 0,
+    budgetEbitProfit: 0,
+    budgetRevenue: 0,
+    previousYearRevenue: 0,
+  }, ['previousQuarterEmployees', 'previousQuarterRevenue', 'previousQuarterCostExpense', 'previousYearEbitProfit', 'budgetEbitProfit', 'budgetRevenue', 'previousYearRevenue'], ['quarterRevenue', 'quarterCostExpense', 'ytdRevenue', 'ytdCostExpense', 'ytdProfit', 'ebitProfit', 'mainBusinessRevenue', 'mainBusinessCost', 'goodsSalesRevenue', 'goodsCost'])
+  const clearCostSection = () => clearIntakeSection('房租装修与人员费用', {
+    peopleRelatedExpense: 0,
+    rentalArea: 0,
+    subleaseArea: 0,
+    monthlyMealBenefitExpense: 0,
+    decorationExpense: 0,
+  }, ['peopleRelatedExpense', 'rentalArea', 'subleaseArea', 'monthlyMealBenefitExpense', 'decorationExpense'])
+  const clearVatSection = () => clearIntakeSection('VAT 增值税资料', {
+    monthlyInvoice: 0,
+    consecutive12MonthSales: 0,
+    platformRevenue: 0,
+    redVatSpecialInvoiceAmount: 0,
+    outputTax: 0,
+    inputTax: 0,
+    vatTaxPayable: 0,
+    theoreticalVatTax: 0,
+    budgetVatTax: 0,
+    priorTaxableSales: 0,
+    priorVatTaxPayable: 0,
+    vatRateSpread: 0,
+    advertisingServiceRevenue: 0,
+    cultureConstructionFeePaid: 0,
+    endingVatCredit: 0,
+    unbilledIncome: false,
+    nearVatExemption: false,
+    longTermZeroDeclaration: false,
+    prepaidLongTerm: false,
+    supplierNoInput: false,
+    invoiceNameMismatch: false,
+    abnormalInvoice: false,
+  }, ['monthlyInvoice', 'consecutive12MonthSales', 'platformRevenue', 'redVatSpecialInvoiceAmount', 'outputTax', 'inputTax', 'vatTaxPayable', 'theoreticalVatTax', 'budgetVatTax', 'priorTaxableSales', 'priorVatTaxPayable', 'vatRateSpread', 'advertisingServiceRevenue', 'cultureConstructionFeePaid', 'endingVatCredit'], ['taxableSales'])
+  const clearCitSection = () => clearIntakeSection('CIT 企业所得税资料', {
+    entertainmentExpense: 0,
+    adExpense: 0,
+    welfareExpense: 0,
+    unionExpense: 0,
+    educationExpense: 0,
+    taxableIncome: 0,
+    assetsTotal: 0,
+    employeeAnnualAvg: 0,
+    nonOperatingExpense: 0,
+    nonOperatingIncome: 0,
+    otherReceivableAgencyBalance: 0,
+    largeExpenseNoInvoice: false,
+    serviceFeeInvoices: false,
+    inventoryAbnormal: false,
+    longTermLoss: false,
+    nonFinancialInterestAbnormal: false,
+    smallProfitEnjoyed: false,
+    taxBenefitDataMissing: false,
+    rdDeductionEnjoyed: false,
+    rdDocsInsufficient: false,
+  }, ['entertainmentExpense', 'adExpense', 'welfareExpense', 'unionExpense', 'educationExpense', 'taxableIncome', 'assetsTotal', 'employeeAnnualAvg', 'nonOperatingExpense', 'nonOperatingIncome', 'otherReceivableAgencyBalance'])
+  const clearIitSection = () => clearIntakeSection('IIT 个税与薪酬资料', {
+    laborCount: 0,
+    payrollTotal: 0,
+    nonPayrollPersonalPayment: 0,
+    salarySplit: false,
+    noIitWithholding: false,
+    individualVendorRelated: false,
+  }, ['laborCount', 'payrollTotal', 'nonPayrollPersonalPayment'])
+  const clearComprehensiveSection = () => clearIntakeSection('综合风险线索', {
+    privateAccountCollection: false,
+    relatedTransactions: false,
+    purchaseSalesMismatch: false,
+    relatedEntitiesNearThreshold: false,
+    fundsReturn: false,
+    intercompanyManagementFee: false,
+    relatedPricingAbnormal: false,
+    agencyComplianceRisk: false,
+  })
+  const renderSectionActions = (label: string, badge: string, onClear: () => void) => (
+    <div className="section-title-actions">
+      <button type="button" className="section-clear-button" onClick={onClear}>清空{label}</button>
+      <span>{badge}</span>
+    </div>
+  )
 
   return (
     <div className="form-layout">
@@ -3997,7 +4129,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
             <h3>项目结构</h3>
             <p className="section-helper">真实健康检查通常按主体分别建档；选择集团项目后，系统会在工作台和结果页生成集团口径汇总。</p>
           </div>
-          <span>Step 1</span>
+          {renderSectionActions('项目结构', 'Step 1', clearProjectSection)}
         </div>
         <div className="form-grid">
           <Field label="项目口径">
@@ -4047,7 +4179,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
             <h3>基础资料（共用）</h3>
             <p className="section-helper">用于确定审阅主体、地区、行业、纳税人身份和适用检查口径。</p>
           </div>
-          <span>Step 2</span>
+          {renderSectionActions('基础资料', 'Step 2', clearBasicSection)}
         </div>
         <div className="form-grid">
           <Field label="企业名称"><input value={client.name} onChange={(e) => patch('name', e.target.value)} /></Field>
@@ -4092,7 +4224,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
             <p className="section-helper">用于先跑通整体经营规模、收入成本、收款流水和人员匹配关系。</p>
             {renderUnitNote(['金额单位：元', '人数单位：人'])}
           </div>
-          <span>Step 3</span>
+          {renderSectionActions('快检数据', 'Step 3', clearQuickSection)}
         </div>
         <div className="form-grid">
           <Field label="月收入"><input type="number" value={numberValue('monthlyRevenue')} onChange={num('monthlyRevenue')} onBlur={() => clearNumberDraft('monthlyRevenue')} /></Field>
@@ -4113,7 +4245,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
             <p className="section-helper">用于执行同比、环比、预实差异、主体利润率和有费用无收入类规则。</p>
             {renderUnitNote(['金额单位：元', '人数单位：人'])}
           </div>
-          <span>趋势</span>
+          {renderSectionActions('趋势数据', '趋势', clearTrendSection)}
         </div>
         <div className="form-grid">
           <Field label="上季度末人数"><input type="number" value={numberValue('previousQuarterEmployees')} onChange={num('previousQuarterEmployees')} onBlur={() => clearNumberDraft('previousQuarterEmployees')} /></Field>
@@ -4143,7 +4275,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
             <p className="section-helper">用于执行无人员有费用、人均租房面积、福利性质餐费和装修费用合理性规则。</p>
             {renderUnitNote(['金额单位：元', '面积单位：平方米'])}
           </div>
-          <span>费用</span>
+          {renderSectionActions('费用数据', '费用', clearCostSection)}
         </div>
         <div className="form-grid">
           <Field label="人员相关成本费用"><input type="number" value={numberValue('peopleRelatedExpense')} onChange={num('peopleRelatedExpense')} onBlur={() => clearNumberDraft('peopleRelatedExpense')} /></Field>
@@ -4161,7 +4293,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
             <p className="section-helper">建议来源：增值税申报表、开票明细、平台账单、银行或第三方收款流水。</p>
             {renderUnitNote(['金额单位：元', '税率差/比例：小数'])}
           </div>
-          <span>VAT</span>
+          {renderSectionActions('VAT 数据', 'VAT', clearVatSection)}
         </div>
         <div className="form-grid">
           <Field label="月开票金额"><input type="number" value={numberValue('monthlyInvoice')} onChange={num('monthlyInvoice')} onBlur={() => clearNumberDraft('monthlyInvoice')} /></Field>
@@ -4194,7 +4326,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
             <p className="section-helper">覆盖年度利润、扣除限额、优惠适用和费用真实性等企业所得税检查点。</p>
             {renderUnitNote(['金额单位：元', '人数单位：人'])}
           </div>
-          <span>CIT</span>
+          {renderSectionActions('CIT 数据', 'CIT', clearCitSection)}
         </div>
         <div className="form-grid">
           <Field label="业务招待费"><input type="number" value={numberValue('entertainmentExpense')} onChange={num('entertainmentExpense')} onBlur={() => clearNumberDraft('entertainmentExpense')} /></Field>
@@ -4222,7 +4354,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
             <p className="section-helper">用于检查员工、社保、工资申报、劳务佣金和个税扣缴情形是否匹配。</p>
             {renderUnitNote(['金额单位：元', '人数单位：人'])}
           </div>
-          <span>IIT</span>
+          {renderSectionActions('IIT 数据', 'IIT', clearIitSection)}
         </div>
         <div className="form-grid">
           <Field label="劳务人员人数"><input type="number" value={numberValue('laborCount')} onChange={num('laborCount')} onBlur={() => clearNumberDraft('laborCount')} /></Field>
@@ -4241,7 +4373,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
             <h3>综合风险线索</h3>
             <p className="section-helper">记录跨税种、资金流、关联方和业务实质类线索，作为报告复核重点。</p>
           </div>
-          <span>综合</span>
+          {renderSectionActions('综合线索', '综合', clearComprehensiveSection)}
         </div>
         <div className="check-grid tax-check-grid">
           {renderChecks(comprehensiveChecks)}
