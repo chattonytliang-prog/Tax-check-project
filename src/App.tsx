@@ -2797,7 +2797,7 @@ function App() {
               </div>
               <div className="rule-filter-footer">
                 <span>
-                  共 {managedRules.length} 条规则，当前显示 {filteredRules.length} 条
+                  共 {managedRules.length} 条规则，筛选命中 {filteredRules.length} 条，本页显示 {visibleRules.length} 条
                   {rulePageSize !== 'all' && filteredRules.length > 0
                     ? `，第 ${(normalizedRulePage - 1) * rulePageSize + 1}-${Math.min(normalizedRulePage * rulePageSize, filteredRules.length)} 条`
                     : ''}
