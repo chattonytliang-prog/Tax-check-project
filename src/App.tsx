@@ -1334,8 +1334,8 @@ const intakeRequirementLabels: Record<string, IntakeRequirement> = {
   地区: 'required',
   行业: 'required',
   纳税人类型: 'required',
-  成立时间: 'recommended',
-  统一社会信用代码: 'optional',
+  成立时间: 'required',
+  统一社会信用代码: 'required',
   月收入: 'recommended',
   月成本费用: 'recommended',
   月利润: 'recommended',
@@ -1426,9 +1426,11 @@ function validateClientForSave(client: Client): IntakeValidationIssue[] {
   }
 
   add('name', '企业名称', isBlankText(client.name))
+  add('creditCode', '统一社会信用代码', isBlankText(client.creditCode))
   add('region', '地区', isBlankText(client.region))
   add('industry', '行业', !hasValidIndustry(client.industry))
   add('taxpayerType', '纳税人类型', isBlankText(client.taxpayerType))
+  add('establishedAt', '成立时间', isBlankText(client.establishedAt))
   add('groupName', '集团项目名称', getProjectScope(client) === '集团项目' && isBlankText(client.groupName), '集团项目需要填写集团项目名称')
   add('entityRole', '主体角色', getProjectScope(client) === '集团项目' && isBlankText(client.entityRole), '集团项目需要选择主体角色')
 
@@ -1436,7 +1438,7 @@ function validateClientForSave(client: Client): IntakeValidationIssue[] {
 }
 
 function saveRequirementLabels(client: Client) {
-  const labels = ['项目口径', '企业名称', '地区', '行业', '纳税人类型']
+  const labels = ['项目口径', '企业名称', '统一社会信用代码', '地区', '行业', '纳税人类型', '成立时间']
   if (getProjectScope(client) === '集团项目') {
     labels.push('集团项目名称', '主体角色')
   }
@@ -1444,7 +1446,7 @@ function saveRequirementLabels(client: Client) {
 }
 
 function reportRequirementLabels() {
-  return ['成立时间', '月收入', '月成本费用', '月利润', '收款流水', '员工人数', '社保人数', '工资申报人数', '月开票金额', '连续 12 个月销售额', '工资薪金总额']
+  return ['月收入', '月成本费用', '月利润', '收款流水', '员工人数', '社保人数', '工资申报人数', '月开票金额', '连续 12 个月销售额', '工资薪金总额']
 }
 
 function validateClientForReport(client: Client): IntakeValidationIssue[] {
@@ -1453,7 +1455,6 @@ function validateClientForReport(client: Client): IntakeValidationIssue[] {
     if (missing) issues.push({ field, label, message: `${label}缺失，报告只能作为线索参考` })
   }
 
-  add('establishedAt', '成立时间', isBlankText(client.establishedAt))
   add('monthlyRevenue', '月收入', isMissingPositiveNumber(client.monthlyRevenue))
   add('monthlyCost', '月成本费用', isMissingPositiveNumber(client.monthlyCost))
   add('monthlyProfit', '月利润', !Number.isFinite(client.monthlyProfit) || client.monthlyProfit === 0)
@@ -4133,7 +4134,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
   const countMissingLabels = (labels: string[]) => labels.filter((label) => missingSaveLabels.has(label) || missingReportLabels.has(label)).length
   const sectionNavItems = [
     { id: 'intake-project', label: '项目', missing: countMissingLabels(['项目口径', '集团项目名称', '主体角色']) },
-    { id: 'intake-basic', label: '基础', missing: countMissingLabels(['企业名称', '地区', '行业', '纳税人类型', '成立时间']) },
+    { id: 'intake-basic', label: '基础', missing: countMissingLabels(['企业名称', '统一社会信用代码', '地区', '行业', '纳税人类型', '成立时间']) },
     { id: 'intake-quick', label: '快检', missing: countMissingLabels(['月收入', '月成本费用', '月利润', '收款流水', '员工人数', '社保人数', '工资申报人数']) },
     { id: 'intake-trend', label: '趋势', missing: 0 },
     { id: 'intake-cost', label: '费用', missing: 0 },
@@ -4510,13 +4511,13 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <div>
             <h3>基础资料（共用）</h3>
             <p className="section-helper">用于确定审阅主体、地区、行业、纳税人身份和适用检查口径。</p>
-            {renderSectionRequirementSummary(['企业名称', '地区', '行业', '纳税人类型', '成立时间'])}
+            {renderSectionRequirementSummary(['企业名称', '统一社会信用代码', '地区', '行业', '纳税人类型', '成立时间'])}
           </div>
           {renderSectionActions('基础资料', 'Step 2', clearBasicSection)}
         </div>
         <div className="form-grid">
           <Field label="企业名称" missing={missingStateForLabel('企业名称')}><input value={client.name} onChange={(e) => patch('name', e.target.value)} /></Field>
-          <Field label="统一社会信用代码"><input value={client.creditCode} onChange={(e) => patch('creditCode', e.target.value)} /></Field>
+          <Field label="统一社会信用代码" missing={missingStateForLabel('统一社会信用代码')}><input value={client.creditCode} onChange={(e) => patch('creditCode', e.target.value)} /></Field>
           <Field label="地区" missing={missingStateForLabel('地区')}><input value={client.region} onChange={(e) => patch('region', e.target.value)} /></Field>
           <Field label="行业" missing={missingStateForLabel('行业')}>
             <select
