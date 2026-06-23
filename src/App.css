@@ -1133,6 +1133,56 @@ th {
   font-weight: 800;
 }
 
+.field-label-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+}
+
+.field-requirement {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-style: normal;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.field-requirement.required {
+  color: var(--red);
+  background: rgba(182, 49, 54, 0.08);
+  border-color: rgba(182, 49, 54, 0.18);
+}
+
+.field-requirement.recommended {
+  color: var(--orange);
+  background: rgba(183, 106, 32, 0.1);
+  border-color: rgba(183, 106, 32, 0.2);
+}
+
+.field-requirement.conditional {
+  color: #0b7285;
+  background: rgba(18, 174, 234, 0.1);
+  border-color: rgba(18, 174, 234, 0.22);
+}
+
+.field-requirement.optional {
+  color: var(--muted);
+  background: rgba(99, 119, 129, 0.08);
+  border-color: rgba(99, 119, 129, 0.14);
+}
+
+.field-requirement.computed {
+  color: #087a7a;
+  background: rgba(86, 240, 238, 0.14);
+  border-color: rgba(12, 140, 130, 0.2);
+}
+
 .field input,
 .field select,
 textarea {
@@ -1157,6 +1207,56 @@ textarea:focus {
   background: rgba(241, 247, 249, 0.92);
   color: #4a6470;
   cursor: not-allowed;
+}
+
+.intake-requirement-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.intake-requirement-panel > div {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 8px 24px rgba(5, 26, 34, 0.06);
+}
+
+.intake-requirement-panel strong {
+  color: var(--ink);
+}
+
+.requirement-progress {
+  margin-left: 6px;
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.intake-requirement-panel small {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.section-required-summary {
+  width: fit-content;
+  margin: 10px 0 0;
+  padding: 4px 9px;
+  border: 1px solid rgba(12, 140, 130, 0.18);
+  border-radius: 999px;
+  color: #087a7a;
+  background: rgba(86, 240, 238, 0.12);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.section-required-summary.warning {
+  color: var(--orange);
+  background: rgba(183, 106, 32, 0.1);
+  border-color: rgba(183, 106, 32, 0.2);
 }
 
 .derived-field-shell {
@@ -1679,6 +1779,7 @@ textarea:focus {
   .ai-review-grid,
   .readiness-panel,
   .intake-overview,
+  .intake-requirement-panel,
   .analytics-grid,
   .group-summary-grid,
   .report-editor {
@@ -1747,6 +1848,7 @@ textarea:focus {
   .report-grid,
   .rules-grid,
   .ai-process-steps,
+  .intake-requirement-panel,
   .sidebar nav {
     grid-template-columns: 1fr;
   }

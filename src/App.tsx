@@ -47,6 +47,7 @@ type EntityRole = '单体企业' | '集团总部' | '经营主体' | '关联主�
 type RulePageSize = 10 | 20 | 50 | 'all'
 type ClientManualDerivedFields = Record<string, boolean>
 type ClientManualDerivedReasons = Record<string, string>
+type IntakeRequirement = 'required' | 'recommended' | 'conditional' | 'optional' | 'computed'
 
 const customIndustryOption = '其他手动填写'
 const customIndustryPrefix = '其他：'
@@ -434,6 +435,8 @@ const blankClient: Client = {
   endingVatCredit: 0,
   nonPayrollPersonalPayment: 0,
 }
+
+const blankDraftClient = () => deriveClientMetrics({ ...blankClient, id: crypto.randomUUID() })
 
 const demoClients: Client[] = [
   {
@@ -1301,24 +1304,11 @@ function getOverallLevel(results: RiskResult[]): RiskLevel {
 }
 
 function getDataCompleteness(client: Client, risks: RiskResult[] = []) {
-  const checks = [
-    Boolean(client.name),
-    Boolean(client.creditCode),
-    Boolean(client.region),
-    hasValidIndustry(client.industry),
-    Boolean(client.taxpayerType),
-    Boolean(client.establishedAt),
-    client.monthlyRevenue > 0,
-    client.annualRevenue > 0,
-    client.monthlyInvoice > 0,
-    client.collectionFlow > 0,
-    client.monthlyCost > 0,
-    client.employees > 0,
-    client.socialSecurityCount > 0,
-    client.salaryDeclaredCount > 0,
-    client.payrollTotal > 0,
-  ]
-  const score = Math.round((checks.filter(Boolean).length / checks.length) * 100)
+  const saveTotal = saveRequirementLabels(client).length
+  const reportTotal = reportRequirementLabels().length
+  const total = saveTotal + reportTotal
+  const missing = validateClientForSave(client).length + validateClientForReport(client).length
+  const score = Math.round(((total - missing) / total) * 100)
   const label = score >= 85 ? '资料较完整' : score >= 55 ? '资料部分缺失' : '资料不足'
   const note = score >= 85
     ? '当前录入信息可支持初步风险判断，建议结合原始凭证、申报表和合同继续复核。'
@@ -1330,6 +1320,167 @@ function getDataCompleteness(client: Client, risks: RiskResult[] = []) {
   return { score, label, note, suggestedMaterials }
 }
 
+type IntakeValidationIssue = {
+  field: keyof Client
+  label: string
+  message: string
+}
+
+const intakeRequirementLabels: Record<string, IntakeRequirement> = {
+  项目口径: 'required',
+  集团项目名称: 'conditional',
+  主体角色: 'conditional',
+  企业名称: 'required',
+  地区: 'required',
+  行业: 'required',
+  纳税人类型: 'required',
+  成立时间: 'recommended',
+  统一社会信用代码: 'optional',
+  月收入: 'recommended',
+  月成本费用: 'recommended',
+  月利润: 'recommended',
+  年销售收入: 'computed',
+  收款流水: 'recommended',
+  员工人数: 'recommended',
+  社保人数: 'recommended',
+  工资申报人数: 'recommended',
+  上季度末人数: 'optional',
+  本季度收入: 'computed',
+  上季度收入: 'optional',
+  本季度成本费用: 'computed',
+  上季度成本费用: 'optional',
+  本年累计收入: 'computed',
+  本年累计成本费用: 'computed',
+  本年累计利润: 'computed',
+  'EBIT 利润': 'computed',
+  '上年 EBIT 利润': 'optional',
+  '预算 EBIT 利润': 'optional',
+  预算收入: 'optional',
+  上年同期收入: 'optional',
+  主营业务收入: 'computed',
+  主营业务成本: 'computed',
+  商品销售收入: 'computed',
+  商品销售成本: 'computed',
+  人员相关成本费用: 'optional',
+  '承租面积（平方米）': 'optional',
+  '转租面积（平方米）': 'optional',
+  月福利性质餐费: 'optional',
+  装修费用: 'optional',
+  月开票金额: 'recommended',
+  '连续 12 个月销售额': 'recommended',
+  平台收入: 'optional',
+  红字专票金额: 'optional',
+  销项税额: 'optional',
+  进项税额: 'optional',
+  '增值税应纳/入库税额': 'optional',
+  增值税应税销售额: 'computed',
+  理论增值税税额: 'optional',
+  预算增值税税额: 'optional',
+  上期应税销售额: 'optional',
+  上期增值税税额: 'optional',
+  进销项税率差: 'optional',
+  广告服务收入: 'optional',
+  文化事业建设费实缴: 'optional',
+  期末留抵税额: 'optional',
+  业务招待费: 'optional',
+  广告宣传费: 'optional',
+  职工福利费: 'optional',
+  工会经费: 'optional',
+  职工教育经费: 'optional',
+  应纳税所得额: 'optional',
+  资产总额: 'optional',
+  全年平均人数: 'optional',
+  营业外支出发生额: 'optional',
+  营业外收入发生额: 'optional',
+  其他应收代收代付余额: 'optional',
+  劳务人员人数: 'optional',
+  工资薪金总额: 'recommended',
+  向个人支付非工资薪金所得: 'optional',
+}
+
+function requirementText(requirement?: IntakeRequirement) {
+  if (requirement === 'required') return '必填'
+  if (requirement === 'recommended') return '检测必填'
+  if (requirement === 'conditional') return '条件必填'
+  if (requirement === 'computed') return '系统计算'
+  if (requirement === 'optional') return '选填'
+  return ''
+}
+
+function getFieldRequirement(label: string, override?: IntakeRequirement) {
+  return override || intakeRequirementLabels[label]
+}
+
+function isBlankText(value: unknown) {
+  return !String(value || '').trim()
+}
+
+function isMissingPositiveNumber(value: number) {
+  return !Number.isFinite(value) || value <= 0
+}
+
+function validateClientForSave(client: Client): IntakeValidationIssue[] {
+  const issues: IntakeValidationIssue[] = []
+  const add = (field: keyof Client, label: string, missing: boolean, message = `${label}为必填项`) => {
+    if (missing) issues.push({ field, label, message })
+  }
+
+  add('name', '企业名称', isBlankText(client.name))
+  add('region', '地区', isBlankText(client.region))
+  add('industry', '行业', !hasValidIndustry(client.industry))
+  add('taxpayerType', '纳税人类型', isBlankText(client.taxpayerType))
+  add('groupName', '集团项目名称', getProjectScope(client) === '集团项目' && isBlankText(client.groupName), '集团项目需要填写集团项目名称')
+  add('entityRole', '主体角色', getProjectScope(client) === '集团项目' && isBlankText(client.entityRole), '集团项目需要选择主体角色')
+
+  return issues
+}
+
+function saveRequirementLabels(client: Client) {
+  const labels = ['项目口径', '企业名称', '地区', '行业', '纳税人类型']
+  if (getProjectScope(client) === '集团项目') {
+    labels.push('集团项目名称', '主体角色')
+  }
+  return labels
+}
+
+function reportRequirementLabels() {
+  return ['成立时间', '月收入', '月成本费用', '月利润', '收款流水', '员工人数', '社保人数', '工资申报人数', '月开票金额', '连续 12 个月销售额', '工资薪金总额']
+}
+
+function validateClientForReport(client: Client): IntakeValidationIssue[] {
+  const issues: IntakeValidationIssue[] = []
+  const add = (field: keyof Client, label: string, missing: boolean) => {
+    if (missing) issues.push({ field, label, message: `${label}缺失，报告只能作为线索参考` })
+  }
+
+  add('establishedAt', '成立时间', isBlankText(client.establishedAt))
+  add('monthlyRevenue', '月收入', isMissingPositiveNumber(client.monthlyRevenue))
+  add('monthlyCost', '月成本费用', isMissingPositiveNumber(client.monthlyCost))
+  add('monthlyProfit', '月利润', !Number.isFinite(client.monthlyProfit) || client.monthlyProfit === 0)
+  add('collectionFlow', '收款流水', isMissingPositiveNumber(client.collectionFlow))
+  add('employees', '员工人数', isMissingPositiveNumber(client.employees))
+  add('socialSecurityCount', '社保人数', isMissingPositiveNumber(client.socialSecurityCount))
+  add('salaryDeclaredCount', '工资申报人数', isMissingPositiveNumber(client.salaryDeclaredCount))
+  add('monthlyInvoice', '月开票金额', isMissingPositiveNumber(client.monthlyInvoice))
+  add('consecutive12MonthSales', '连续 12 个月销售额', isMissingPositiveNumber(client.consecutive12MonthSales))
+  add('payrollTotal', '工资薪金总额', isMissingPositiveNumber(client.payrollTotal))
+
+  return issues
+}
+
+function validationSummary(issues: IntakeValidationIssue[]) {
+  return issues.map((issue) => issue.label).join('、')
+}
+
+function focusFieldByLabel(label: string) {
+  const selector = `[data-field-label="${label}"]`
+  const target = document.querySelector(selector)
+  if (!target) return
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  target.classList.add('field-highlight')
+  window.setTimeout(() => target.classList.remove('field-highlight'), 1600)
+}
+
 function normalizeClient(client: Partial<Client>): Client {
   return {
     ...emptyClient,
@@ -1337,9 +1488,9 @@ function normalizeClient(client: Partial<Client>): Client {
     id: client.id || crypto.randomUUID(),
     manualDerivedFields: { ...(client.manualDerivedFields || {}) },
     manualDerivedReasons: { ...(client.manualDerivedReasons || {}) },
-    projectScope: (client.projectScope || '单主体') as ProjectScope,
-    entityRole: (client.entityRole || '单体企业') as EntityRole,
-    taxpayerType: (client.taxpayerType || '小规模纳税人') as TaxpayerType,
+    projectScope: (client.projectScope ?? '单主体') as ProjectScope,
+    entityRole: (client.entityRole ?? '单体企业') as EntityRole,
+    taxpayerType: (client.taxpayerType ?? '小规模纳税人') as TaxpayerType,
   }
 }
 
@@ -1766,6 +1917,7 @@ function buildReportContent(client: Client, risks: RiskResult[]) {
   const highCount = risks.filter((r) => r.level === '高').length
   const mediumCount = risks.filter((r) => r.level === '中').length
   const completeness = getDataCompleteness(client, risks)
+  const reportMissingFields = validateClientForReport(client)
   const byTaxType = taxTypeSummary(risks).join('\n')
   const groupedSections = groupedRiskSections(risks)
     .map(({ title, items }) => `${title}
@@ -1794,11 +1946,13 @@ ${groupName ? `所属集团项目：${groupName}\n主体角色：${getEntityRole
 
 二、综合风险结论
 本次系统共命中 ${risks.length} 项风险提示，其中高风险 ${highCount} 项，中风险 ${mediumCount} 项，综合风险等级为【${level}】。
+${reportMissingFields.length ? `本次基础检测资料仍缺少：${validationSummary(reportMissingFields)}。报告结论应作为风险线索参考，补齐资料后建议重新生成。` : '本次基础检测必填资料已补齐，可支持初步风险判断。'}
 本结论基于当前录入数据和系统规则库生成，建议由财税专业人员结合原始凭证、账套、申报表、合同、资金流水进一步复核。
 
 三、资料完整性说明
 资料完整度：${completeness.score}%（${completeness.label}）
 说明：${completeness.note}
+基础检测缺失字段：${reportMissingFields.length ? validationSummary(reportMissingFields) : '无'}
 建议优先补充资料：${completeness.suggestedMaterials.length ? completeness.suggestedMaterials.join('、') : '当前未形成明确补充资料清单。'}
 
 四、分税种风险摘要
@@ -1944,13 +2098,20 @@ function LevelBadge({ level }: { level: RiskLevel }) {
 function Field({
   label,
   children,
+  requirement,
 }: {
   label: string
   children: React.ReactNode
+  requirement?: IntakeRequirement
 }) {
+  const resolvedRequirement = getFieldRequirement(label, requirement)
+  const tag = requirementText(resolvedRequirement)
   return (
-    <label className="field" data-field-label={label}>
-      <span>{label}</span>
+    <label className="field" data-field-label={label} data-requirement={resolvedRequirement || undefined}>
+      <span className="field-label-line">
+        <span>{label}</span>
+        {tag && <em className={`field-requirement ${resolvedRequirement}`}>{tag}</em>}
+      </span>
       {children}
     </label>
   )
@@ -1960,15 +2121,18 @@ function BoolField({
   label,
   checked,
   onChange,
+  requirement = 'optional',
 }: {
   label: string
   checked: boolean
   onChange: (value: boolean) => void
+  requirement?: IntakeRequirement
 }) {
+  const tag = requirementText(requirement)
   return (
     <label className={`check-field ${checked ? 'checked' : ''}`}>
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
-      <span>{label}</span>
+      <span>{label}{tag && <em className={`field-requirement ${requirement}`}>{tag}</em>}</span>
     </label>
   )
 }
@@ -2211,7 +2375,7 @@ function App() {
   const [page, setPage] = useState<Page>('dashboard')
   const [clients, setClients] = useState<Client[]>(demoClients)
   const [selectedClientId, setSelectedClientId] = useState(demoClients[0].id)
-  const [editingClient, setEditingClient] = useState<Client>({ ...emptyClient, id: crypto.randomUUID() })
+  const [editingClient, setEditingClient] = useState<Client>(blankDraftClient())
   const [reports, setReports] = useState<Report[]>([])
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
   const [managedRules, setManagedRules] = useState<ManagedRule[]>([])
@@ -2239,8 +2403,19 @@ function App() {
         setLoggedIn(true)
       } catch {
         if (!active) return
-        setAuthUser(null)
-        setLoggedIn(false)
+        if (import.meta.env.DEV) {
+          setAuthUser({
+            id: 'local-preview-user',
+            username: 'local-preview',
+            role: 'admin',
+            actor: null,
+          })
+          setLoggedIn(true)
+          setDataStatus('fallback')
+        } else {
+          setAuthUser(null)
+          setLoggedIn(false)
+        }
       } finally {
         if (active) {
           setAuthLoading(false)
@@ -2353,6 +2528,7 @@ function App() {
   const currentSkippedRules = useMemo(() => (selectedDetectionClient ? getSkippedRules(selectedDetectionClient, managedRules) : []), [selectedDetectionClient, managedRules])
   const overallLevel = getOverallLevel(currentRisks)
   const currentCompleteness = selectedDetectionClient ? getDataCompleteness(selectedDetectionClient, currentRisks) : null
+  const currentReportIssues = selectedDetectionClient ? validateClientForReport(selectedDetectionClient) : []
 
   const clientRows = useMemo(() => {
     return clients
@@ -2653,12 +2829,18 @@ function App() {
   }
 
   const saveClient = async () => {
-    const normalizedName = editingClient.name.trim() || `未命名企业 ${clients.length + 1}`
+    const saveIssues = validateClientForSave(editingClient)
+    if (saveIssues.length > 0) {
+      window.alert(`请先补齐建档必填项：${saveIssues.map((issue) => issue.message).join('、')}`)
+      focusFieldByLabel(saveIssues[0].label)
+      return
+    }
     const manualOverrideErrors = getManualOverrideErrors(editingClient)
     if (manualOverrideErrors.length > 0) {
       window.alert(`以下手动填写字段需要注明原因：${manualOverrideErrors.map((field) => field.label).join('、')}`)
       return
     }
+    const normalizedName = editingClient.name.trim()
     const normalized: Client = deriveClientMetrics({
       ...normalizeClient(editingClient),
       name: normalizedName,
@@ -2696,6 +2878,11 @@ function App() {
     if (!selectedClient || aiReportStage) return
 
     const reportClient = deriveClientMetrics(selectedClient)
+    const reportIssues = validateClientForReport(reportClient)
+    if (reportIssues.length > 0) {
+      const confirmed = window.confirm(`基础检测资料仍缺少：${validationSummary(reportIssues)}。\n\n可以继续生成报告，但报告会标记为资料不足，仅供线索参考。是否继续？`)
+      if (!confirmed) return
+    }
     const startedAt = Date.now()
     const risks = detectRisks(reportClient, managedRules)
     const baseReport: Report = {
@@ -3000,7 +3187,7 @@ function App() {
           <button
             className={page === 'form' ? 'active' : ''}
             onClick={() => {
-              setEditingClient(deriveClientMetrics({ ...emptyClient, id: crypto.randomUUID() }))
+              setEditingClient(blankDraftClient())
               setPage('form')
             }}
           >
@@ -3042,7 +3229,7 @@ function App() {
               <button
                 className="primary-button"
                 onClick={() => {
-                  setEditingClient(deriveClientMetrics({ ...emptyClient, id: crypto.randomUUID() }))
+                  setEditingClient(blankDraftClient())
                   setPage('form')
                 }}
               >
@@ -3146,7 +3333,7 @@ function App() {
               <button
                 className="primary-button"
                 onClick={() => {
-                  setEditingClient(deriveClientMetrics({ ...emptyClient, id: crypto.randomUUID() }))
+                  setEditingClient(blankDraftClient())
                   setPage('form')
                 }}
               >
@@ -3306,6 +3493,18 @@ function App() {
                     {currentCompleteness.suggestedMaterials.length
                       ? currentCompleteness.suggestedMaterials.map((item) => <span key={item}>{item}</span>)
                       : <span>继续完善申报表、发票、流水和合同等原始资料</span>}
+                  </div>
+                </div>
+                <div className="wide">
+                  <strong>基础检测缺失字段</strong>
+                  <div className="chips action-chips">
+                    {currentReportIssues.length
+                      ? currentReportIssues.map((issue) => (
+                        <button key={`${issue.field}-${issue.label}`} type="button" onClick={() => jumpToIntakeField(issue.label)}>
+                          {issue.label}
+                        </button>
+                      ))
+                      : <span>基础检测必填项已补齐</span>}
                   </div>
                 </div>
               </section>
@@ -3870,7 +4069,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
     const isManual = isManualDerivedField(client, key)
     const reason = String(client.manualDerivedReasons?.[String(key)] || '')
     return (
-      <Field label={config.label}>
+      <Field label={config.label} requirement="computed">
         <div className="derived-field-shell">
           <input
             type="number"
@@ -3905,6 +4104,33 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
     )
   }
   const completeness = getDataCompleteness(client)
+  const saveIssues = validateClientForSave(client)
+  const reportIssues = validateClientForReport(deriveClientMetrics(client))
+  const saveTotal = saveRequirementLabels(client).length
+  const reportTotal = reportRequirementLabels().length
+  const missingSaveLabels = new Set(saveIssues.map((issue) => issue.label))
+  const missingReportLabels = new Set(reportIssues.map((issue) => issue.label))
+  const renderMissingChips = (issues: IntakeValidationIssue[], emptyText: string) => (
+    <div className="chips action-chips">
+      {issues.length
+        ? issues.map((issue) => (
+          <button key={`${issue.field}-${issue.label}`} type="button" onClick={() => focusFieldByLabel(issue.label)}>
+            {issue.label}
+          </button>
+        ))
+        : <span>{emptyText}</span>}
+    </div>
+  )
+  const renderSectionRequirementSummary = (labels: string[]) => {
+    const requiredLabels = labels.filter((label) => intakeRequirementLabels[label] === 'required' || intakeRequirementLabels[label] === 'recommended')
+    if (!requiredLabels.length) return null
+    const missingCount = requiredLabels.filter((label) => missingSaveLabels.has(label) || missingReportLabels.has(label)).length
+    return (
+      <p className={missingCount ? 'section-required-summary warning' : 'section-required-summary'}>
+        必填完成 {requiredLabels.length - missingCount}/{requiredLabels.length}
+      </p>
+    )
+  }
   const vatChecks: Array<[keyof Client, string]> = [
     ['unbilledIncome', '存在大额未开票收入'],
     ['nearVatExemption', '长期接近小规模免税临界点'],
@@ -4138,6 +4364,19 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         </div>
       </section>
 
+      <section className="intake-requirement-panel">
+        <div>
+          <strong>建档必填 <span className="requirement-progress">{saveTotal - saveIssues.length}/{saveTotal}</span></strong>
+          <small>缺失时不能保存并检测。</small>
+          {renderMissingChips(saveIssues, '已补齐')}
+        </div>
+        <div>
+          <strong>基础检测必填 <span className="requirement-progress">{reportTotal - reportIssues.length}/{reportTotal}</span></strong>
+          <small>缺失时仍可生成报告，但会提示资料不足。</small>
+          {renderMissingChips(reportIssues, '已补齐')}
+        </div>
+      </section>
+
       <nav className="intake-section-nav" aria-label="录入子目录">
         {[
           ['intake-project', '项目'],
@@ -4159,6 +4398,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <div>
             <h3>项目结构</h3>
             <p className="section-helper">真实健康检查通常按主体分别建档；选择集团项目后，系统会在工作台和结果页生成集团口径汇总。</p>
+            {renderSectionRequirementSummary(['项目口径'])}
           </div>
           {renderSectionActions('项目结构', 'Step 1', clearProjectSection)}
         </div>
@@ -4180,7 +4420,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
               <option>集团项目</option>
             </select>
           </Field>
-          <Field label="集团项目名称">
+          <Field label="集团项目名称" requirement={getProjectScope(client) === '集团项目' ? 'conditional' : 'optional'}>
             <input
               value={client.groupName || ''}
               list="group-name-options"
@@ -4192,7 +4432,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
               {existingGroupNames.map((item) => <option key={item} value={item} />)}
             </datalist>
           </Field>
-          <Field label="主体角色">
+          <Field label="主体角色" requirement={getProjectScope(client) === '集团项目' ? 'conditional' : 'optional'}>
             <select value={getEntityRole(client)} onChange={(e) => patch('entityRole', e.target.value as EntityRole)} disabled={getProjectScope(client) !== '集团项目'}>
               <option>集团总部</option>
               <option>经营主体</option>
@@ -4209,6 +4449,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <div>
             <h3>基础资料（共用）</h3>
             <p className="section-helper">用于确定审阅主体、地区、行业、纳税人身份和适用检查口径。</p>
+            {renderSectionRequirementSummary(['企业名称', '地区', '行业', '纳税人类型', '成立时间'])}
           </div>
           {renderSectionActions('基础资料', 'Step 2', clearBasicSection)}
         </div>
@@ -4254,6 +4495,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
             <h3>快速体检数据（共用）</h3>
             <p className="section-helper">用于先跑通整体经营规模、收入成本、收款流水和人员匹配关系。</p>
             {renderUnitNote(['金额单位：元', '人数单位：人'])}
+            {renderSectionRequirementSummary(['月收入', '月成本费用', '月利润', '收款流水', '员工人数', '社保人数', '工资申报人数'])}
           </div>
           {renderSectionActions('快检数据', 'Step 3', clearQuickSection)}
         </div>
@@ -4323,6 +4565,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
             <h3>VAT 增值税资料</h3>
             <p className="section-helper">建议来源：增值税申报表、开票明细、平台账单、银行或第三方收款流水。</p>
             {renderUnitNote(['金额单位：元', '税率差/比例：小数'])}
+            {renderSectionRequirementSummary(['月开票金额', '连续 12 个月销售额'])}
           </div>
           {renderSectionActions('VAT 数据', 'VAT', clearVatSection)}
         </div>
@@ -4356,6 +4599,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
             <h3>CIT 企业所得税资料</h3>
             <p className="section-helper">覆盖年度利润、扣除限额、优惠适用和费用真实性等企业所得税检查点。</p>
             {renderUnitNote(['金额单位：元', '人数单位：人'])}
+            {renderSectionRequirementSummary(['工资薪金总额'])}
           </div>
           {renderSectionActions('CIT 数据', 'CIT', clearCitSection)}
         </div>
