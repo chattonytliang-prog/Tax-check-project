@@ -656,9 +656,6 @@ function createDemoClients(): Client[] {
   ]
 }
 
-const demoClients: Client[] = createDemoClients()
-const demoCaseCreditCodes = new Set(demoClients.map((client) => client.creditCode))
-
 const emptyManagedRule: ManagedRule = {
   code: '',
   name: '',
@@ -1748,6 +1745,9 @@ function deriveClientMetrics(client: Client): Client {
 
   return derived
 }
+
+const demoClients: Client[] = createDemoClients()
+const demoCaseCreditCodes = new Set(demoClients.map((client) => client.creditCode))
 
 function applyAutoDerivedMetrics(_previous: Client, next: Client) {
   return deriveClientMetrics(next)
