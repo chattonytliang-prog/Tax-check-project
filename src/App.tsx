@@ -67,6 +67,8 @@ type IntakeRequirement = 'required' | 'recommended' | 'conditional' | 'optional'
 
 type ClientPeriodEntry = PeriodEntry<Client>
 
+const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
+
 const customIndustryOption = '其他手动填写'
 const customIndustryPrefix = '其他：'
 const mainstreamIndustryOptions = [
@@ -2871,11 +2873,56 @@ function App() {
   const selectedClientPeriodWarnings = useMemo(() => (
     selectedClient ? findPeriodConsistencyWarnings(selectedClient.periodEntries) : []
   ), [selectedClient])
+  const selectedClientPeriodYears = useMemo(() => {
+    if (!selectedClient) return []
+    const years = new Set<string>()
+    selectedClient.periodEntries.forEach((entry) => {
+      entry.months.forEach((month) => years.add(month.slice(0, 4)))
+      if (entry.analysisYear) years.add(entry.analysisYear)
+    })
+    if (!years.size) years.add(String(new Date().getFullYear()))
+    return Array.from(years).sort((a, b) => Number(b) - Number(a))
+  }, [selectedClient])
+  const periodEntriesForMonth = (client: Client, year: string, monthIndexValue: number) => {
+    const month = `${year}-${String(monthIndexValue + 1).padStart(2, '0')}`
+    return client.periodEntries.filter((entry) => entry.months.includes(month))
+  }
 
   const togglePeriodEntry = (entryId: string) => {
-    setSelectedPeriodEntryIds((current) => (
-      current.includes(entryId) ? current.filter((id) => id !== entryId) : [...current, entryId]
-    ))
+    if (!selectedClient) return
+    setSelectedPeriodEntryIds((current) => {
+      const next = current.includes(entryId) ? current.filter((id) => id !== entryId) : [...current, entryId]
+      const nextEntries = selectedClient.periodEntries.filter((entry) => next.includes(entry.id))
+      const nextMonths = nextEntries.flatMap((entry) => entry.months)
+      if (nextEntries.length > 1 && !areMonthsContinuous(nextMonths)) {
+        window.alert('当前选择的月份不连续，不能合并分析。请选择连续月份，例如 2025-01 至 2025-03，或分别生成单月报告。')
+        return current
+      }
+      return next
+    })
+  }
+
+  const analyzePeriodEntry = (client: Client, entry: ClientPeriodEntry) => {
+    setSelectedClientId(client.id)
+    setSelectedPeriodEntryIds([entry.id])
+    setPage('result')
+  }
+
+  const analyzeMonth = (client: Client, entries: ClientPeriodEntry[]) => {
+    if (!entries.length) return
+    setSelectedClientId(client.id)
+    setSelectedPeriodEntryIds([entries[0].id])
+    setPage('result')
+  }
+
+  const selectAllPeriodEntriesForAnalysis = () => {
+    if (!selectedClient) return
+    const months = selectedClient.periodEntries.flatMap((entry) => entry.months)
+    if (selectedClient.periodEntries.length > 1 && !areMonthsContinuous(months)) {
+      window.alert('当前企业的已录入月份不连续，不能一键选择全部期间合并分析。请手动选择连续月份，或分别生成单月报告。')
+      return
+    }
+    setSelectedPeriodEntryIds(selectedClient.periodEntries.map((entry) => entry.id))
   }
 
   const hydratePeriodDraft = (entry: ClientPeriodEntry, patchData: Partial<Client> = {}) => {
@@ -3140,7 +3187,7 @@ function App() {
     })
     setSelectedClientId(normalized.id)
     setSelectedPeriodEntryIds([periodEntry.id])
-    setPage('result')
+    setPage('clients')
 
     try {
       await apiSend<{ client: Client }>('/api/clients', 'POST', {
@@ -3473,7 +3520,7 @@ function App() {
             <LayoutDashboard /> 首页
           </button>
           <button className={page === 'clients' ? 'active' : ''} onClick={() => setPage('clients')}>
-            <Building2 /> 企业
+            <Building2 /> 企业档案
           </button>
           <button
             className={page === 'form' ? 'active' : ''}
@@ -3482,10 +3529,10 @@ function App() {
               setPage('form')
             }}
           >
-            <Plus /> 新建体检
+            <Plus /> 数据录入
           </button>
           <button className={page === 'result' ? 'active' : ''} onClick={() => setPage('result')}>
-            <Gauge /> 风险结果
+            <Gauge /> 风险检测
           </button>
           <button className={page === 'reports' || page === 'report' ? 'active' : ''} onClick={() => setPage('reports')}>
             <FileText /> 报告
@@ -3524,7 +3571,7 @@ function App() {
                   setPage('form')
                 }}
               >
-                <Plus /> 新建风险体检
+                <Plus /> 录入期间数据
               </button>
             </header>
             <div className="stat-grid">
@@ -3618,8 +3665,8 @@ function App() {
           <section className="page">
             <header className="page-header">
               <div>
-                <p className="eyebrow">企业管理</p>
-                <h2>企业档案列表</h2>
+                <p className="eyebrow">企业档案</p>
+                <h2>企业档案与期间数据</h2>
               </div>
               <button
                 className="primary-button"
@@ -3635,6 +3682,94 @@ function App() {
               <Search />
               <input placeholder="搜索企业名称、统一社会信用代码或集团项目" value={query} onChange={(event) => setQuery(event.target.value)} />
             </div>
+            {selectedClient && (
+              <section className="panel archive-overview-panel">
+                <div className="panel-title">
+                  <div>
+                    <p className="eyebrow">当前企业</p>
+                    <h3>{selectedClient.name}</h3>
+                    <p className="section-helper">
+                      已归档 {selectedClient.periodEntries.length} 期数据。先保存企业和期间数据，再进入风险检测选择连续月份分析。
+                    </p>
+                  </div>
+                  <div className="header-actions">
+                    <button
+                      type="button"
+                      className="secondary-button compact-button"
+                      onClick={() => {
+                        setEditingClient(deriveClientMetrics(selectedClient))
+                        setPage('form')
+                      }}
+                    >
+                      编辑档案
+                    </button>
+                    <button
+                      type="button"
+                      className="primary-button compact-button"
+                      onClick={() => {
+                        setEditingClient(deriveClientMetrics(selectedClient))
+                        setPage('form')
+                      }}
+                    >
+                      新增期间数据
+                    </button>
+                  </div>
+                </div>
+                <div className="archive-year-list">
+                  {selectedClientPeriodYears.map((year) => (
+                    <article key={year} className="archive-year-card">
+                      <div>
+                        <strong>{year} 年月度数据</strong>
+                        <small>有数据的月份可直接进入分析；空缺月份需要先录入。</small>
+                      </div>
+                      <div className="archive-month-grid">
+                        {monthNames.map((label, index) => {
+                          const entries = periodEntriesForMonth(selectedClient, year, index)
+                          const hasData = entries.length > 0
+                          return (
+                            <button
+                              key={`${year}-${label}`}
+                              type="button"
+                              className={hasData ? 'archive-month-cell has-data' : 'archive-month-cell'}
+                              disabled={!hasData}
+                              onClick={() => analyzeMonth(selectedClient, entries)}
+                            >
+                              <span>{label}</span>
+                              <small>{hasData ? `${entries.length} 期` : '空缺'}</small>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+                {selectedClient.periodEntries.length > 0 && (
+                  <div className="archive-period-list">
+                    <strong>已录入期间</strong>
+                    <div className="period-entry-grid">
+                      {selectedClient.periodEntries.map((entry) => (
+                        <article key={entry.id} className="period-entry-card">
+                          <span>{entry.label}</span>
+                          <strong>{formatMonthRange(entry.months)}</strong>
+                          <small>{entry.months.length} 个月｜保存于 {entry.savedAt}</small>
+                          <div className="period-card-actions">
+                            <button type="button" onClick={() => analyzePeriodEntry(selectedClient, entry)}>分析</button>
+                            <button type="button" onClick={() => editPeriodEntry(entry)}>编辑</button>
+                            <button type="button" onClick={() => copyPeriodEntryToNext(entry)}>复制下一期</button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {selectedClientPeriodWarnings.length > 0 && (
+                  <div className="period-warning-list">
+                    <strong>数据一致性提示</strong>
+                    {selectedClientPeriodWarnings.map((warning) => <p key={warning}>{warning}</p>)}
+                  </div>
+                )}
+              </section>
+            )}
             <div className="table-panel">
               <table>
                 <thead>
@@ -3672,10 +3807,10 @@ function App() {
                           onClick={() => {
                             setSelectedClientId(client.id)
                             setSelectedPeriodEntryIds([])
-                            setPage('result')
+                            setPage('clients')
                           }}
                         >
-                          检测
+                          查看
                         </button>
                         <button
                           onClick={() => {
@@ -3701,15 +3836,15 @@ function App() {
           <section className="page">
             <header className="page-header">
               <div>
-                <p className="eyebrow">资料录入</p>
-                <h2>企业财税画像</h2>
+                <p className="eyebrow">数据录入</p>
+                <h2>企业档案与期间数据</h2>
               </div>
               <div className="header-actions">
                 <button className="secondary-button danger-secondary" onClick={clearEditingClient}>
                   <Trash2 /> 全部清空
                 </button>
                 <button className="primary-button" onClick={saveClient}>
-                  <ShieldCheck /> 保存并检测
+                  <ShieldCheck /> 保存期间数据
                 </button>
               </div>
             </header>
@@ -3780,7 +3915,7 @@ function App() {
                     <button
                       type="button"
                       className="secondary-button compact-button"
-                      onClick={() => setSelectedPeriodEntryIds(selectedClient.periodEntries.map((entry) => entry.id))}
+                      onClick={selectAllPeriodEntriesForAnalysis}
                     >
                       选择全部期间
                     </button>

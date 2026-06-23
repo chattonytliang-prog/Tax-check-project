@@ -993,6 +993,76 @@ th {
   margin: 0;
 }
 
+.archive-overview-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.archive-year-list,
+.archive-period-list {
+  display: grid;
+  gap: 12px;
+}
+
+.archive-period-list > strong {
+  color: var(--ink);
+}
+
+.archive-year-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--surface-2);
+}
+
+.archive-year-card strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.archive-year-card small {
+  color: var(--muted);
+}
+
+.archive-month-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(70px, 1fr));
+  gap: 8px;
+}
+
+.archive-month-cell {
+  display: grid;
+  gap: 4px;
+  min-height: 58px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--muted);
+  text-align: left;
+}
+
+.archive-month-cell span {
+  font-weight: 900;
+}
+
+.archive-month-cell small {
+  font-size: 11px;
+}
+
+.archive-month-cell.has-data {
+  color: var(--ink);
+  border-color: rgba(12, 140, 130, 0.28);
+  background: rgba(86, 240, 238, 0.12);
+}
+
+.archive-month-cell.has-data:hover {
+  border-color: rgba(18, 174, 234, 0.5);
+  background: rgba(18, 174, 234, 0.12);
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -2103,6 +2173,10 @@ textarea:focus {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .archive-month-grid {
+    grid-template-columns: repeat(6, minmax(70px, 1fr));
+  }
+
   .login-aside {
     min-height: auto;
   }
@@ -2135,6 +2209,7 @@ textarea:focus {
   .rules-grid,
   .ai-process-steps,
   .confirm-grid,
+  .archive-month-grid,
   .intake-requirement-panel,
   .sidebar nav {
     grid-template-columns: 1fr;
