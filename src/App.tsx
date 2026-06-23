@@ -47,6 +47,7 @@ import {
   getClientPeriodMonths,
   monthFromIndex,
   monthIndex,
+  monthsBetween,
   summarizePeriodEntries,
   upsertPeriodEntry,
   type AnalysisPeriodType,
@@ -485,14 +486,38 @@ const blankClient: Client = {
 
 const blankDraftClient = () => deriveClientMetrics({ ...blankClient, id: crypto.randomUUID() })
 
-function attachDemoPeriod(client: Client): Client {
-  const snapshot = { ...client, periodEntries: [] }
-  const periodEntry = createPeriodEntry(client, snapshot, '2026/06/23 10:00:00')
-  return { ...client, periodEntries: [periodEntry] }
+const demoPeriodMonths = monthsBetween('2024-01', '2025-12')
+
+function demoSavedAt(index: number) {
+  const hour = String(10 + Math.floor(index / 60)).padStart(2, '0')
+  const minute = String(index % 60).padStart(2, '0')
+  return `2026/06/23 ${hour}:${minute}:00`
+}
+
+function attachDemoPeriods(client: Client): Client {
+  const baseClient = deriveClientMetrics({
+    ...client,
+    analysisPeriodType: '月度',
+    analysisYear: '2025',
+    analysisMonth: '2025-12',
+    periodStartDate: '',
+    periodEndDate: '',
+    periodEntries: [],
+  })
+  const periodEntries = demoPeriodMonths.map((month, index) => {
+    const snapshot = deriveClientMetrics({
+      ...baseClient,
+      analysisYear: month.slice(0, 4),
+      analysisMonth: month,
+      periodEntries: [],
+    })
+    return createPeriodEntry(snapshot, snapshot, demoSavedAt(index))
+  })
+  return { ...baseClient, periodEntries }
 }
 
 function createDemoClient(seed: Partial<Client>): Client {
-  return attachDemoPeriod({
+  return attachDemoPeriods({
     ...emptyClient,
     id: crypto.randomUUID(),
     projectScope: '单主体',
@@ -2743,11 +2768,12 @@ function App() {
   }, [loggedIn, authUser])
 
   const selectedClient = clients.find((client) => client.id === selectedClientId) || clients[0]
+  const selectedPeriodEntryIdSet = useMemo(() => new Set(selectedPeriodEntryIds), [selectedPeriodEntryIds])
   const selectedPeriodEntries = useMemo(() => {
     if (!selectedClient) return []
-    const selected = selectedClient.periodEntries.filter((entry) => selectedPeriodEntryIds.includes(entry.id))
+    const selected = selectedClient.periodEntries.filter((entry) => selectedPeriodEntryIdSet.has(entry.id))
     return selected.sort((a, b) => monthIndex(a.months[0] || '') - monthIndex(b.months[0] || ''))
-  }, [selectedClient, selectedPeriodEntryIds])
+  }, [selectedClient, selectedPeriodEntryIdSet])
   const selectedPeriodMonths = useMemo(() => selectedPeriodEntries.flatMap((entry) => entry.months), [selectedPeriodEntries])
   const selectedPeriodsContinuous = selectedPeriodEntries.length === 0 || areMonthsContinuous(selectedPeriodMonths)
   const selectedPeriodLabel = selectedPeriodEntries.length
@@ -3087,7 +3113,7 @@ function App() {
         ),
       )
       setDataStatus('connected')
-      window.alert('已载入低风险、中风险、高风险 3 个测试案例。')
+      window.alert('已载入低风险、中风险、高风险 3 个测试案例，每个案例包含 2024-01 至 2025-12 共 24 期月度数据。')
     } catch (error) {
       console.warn('Demo cases saved locally only.', error)
       setDataStatus('fallback')
@@ -4091,7 +4117,7 @@ function App() {
                 <>
                   <div className="period-entry-grid">
                     {selectedClient.periodEntries.map((entry) => {
-                      const checked = selectedPeriodEntryIds.includes(entry.id)
+                      const checked = selectedPeriodEntryIdSet.has(entry.id)
                       return (
                         <article
                           key={entry.id}
