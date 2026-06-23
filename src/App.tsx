@@ -1457,7 +1457,6 @@ function requirementText(requirement?: IntakeRequirement) {
   if (requirement === 'recommended') return '检测必填'
   if (requirement === 'conditional') return '条件必填'
   if (requirement === 'computed') return '系统计算'
-  if (requirement === 'optional') return '选填'
   return ''
 }
 
@@ -4860,6 +4859,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <p className="section-helper">
             先录入企业共用画像，再按增值税、企业所得税、个人所得税与综合线索补充关键字段。多主体项目建议按主体分别建档，集团口径另行汇总。当前版本只采集可量化信息和风险标记，不要求访谈、抽凭或上传底稿。
           </p>
+          <p className="auto-fill-note">除标注“必填 / 条件必填 / 检测必填 / 系统计算”的字段外，其余字段均为选填。为提高检查准确度，建议有数据、能确认的字段尽量填写。</p>
           <p className="auto-fill-note">系统会根据基础数据自动计算部分检测口径；如需改用特殊口径，请在对应字段切换“手动填写”并说明原因。</p>
           <div className="intake-overview-actions">
             <label className="secondary-button compact-button file-import-button">
