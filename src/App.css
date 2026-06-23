@@ -362,6 +362,15 @@ button svg,
   margin-top: 12px;
 }
 
+.file-import-button {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.file-import-button input {
+  display: none;
+}
+
 .primary-button {
   background: linear-gradient(135deg, #082a32, #0b6f86 56%, #11bde6);
   color: white;
@@ -816,8 +825,41 @@ th {
   gap: 16px;
 }
 
+.intake-section-nav {
+  position: sticky;
+  top: 10px;
+  z-index: 3;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(12px);
+}
+
+.intake-section-nav button,
+.action-chips button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  min-height: 32px;
+  padding: 0 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.intake-section-nav button:hover,
+.action-chips button:hover {
+  color: var(--ink);
+  border-color: rgba(18, 174, 234, 0.34);
+  background: rgba(18, 174, 234, 0.1);
+}
+
 .form-section {
   padding: 20px;
+  scroll-margin-top: 86px;
 }
 
 .form-section h3 {
@@ -1165,6 +1207,12 @@ textarea:focus {
   color: var(--ink);
 }
 
+.field-highlight {
+  outline: 2px solid rgba(18, 174, 234, 0.72);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
 .skipped-rule-card {
   display: grid;
   gap: 6px;
@@ -1218,6 +1266,29 @@ textarea:focus {
   color: var(--muted);
   font-size: 12px;
   background: var(--surface-2);
+}
+
+.action-chips button {
+  font-size: 12px;
+}
+
+.rule-health-row,
+.rule-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.rule-health-row span,
+.rule-tags span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .report-grid,

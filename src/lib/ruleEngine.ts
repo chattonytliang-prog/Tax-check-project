@@ -242,12 +242,13 @@ export function conditionSummary(condition?: RuleCondition): string {
   if ('all' in condition) return `全部满足：${condition.all.map(conditionSummary).join('；')}`
   if ('any' in condition) return `任一满足：${condition.any.map(conditionSummary).join('；')}`
   if (!condition.field) return '不参与自动检测'
+  const labelOf = (field: string) => conditionFields.find((item) => item.value === field)?.label || field
   const right = condition.compareField
-    ? `${String(condition.compareField)}${condition.multiplier ? ` × ${condition.multiplier}` : ''}`
+    ? `${labelOf(condition.compareField)}${condition.multiplier ? ` × ${condition.multiplier}` : ''}`
     : String(condition.value)
   const left = condition.transform === 'absDiff'
-    ? `|${String(condition.field)} - ${String(condition.compareField || '')}|`
-    : String(condition.field)
+    ? `|${labelOf(condition.field)} - ${condition.compareField ? labelOf(condition.compareField) : ''}|`
+    : labelOf(condition.field)
   return `${left} ${condition.operator} ${right}`
 }
 

@@ -1330,6 +1330,124 @@ function deriveClientMetrics(client: Client): Client {
   }
 }
 
+const importFieldAliases: Record<string, keyof Client> = {
+  企业名称: 'name',
+  统一社会信用代码: 'creditCode',
+  地区: 'region',
+  行业: 'industry',
+  纳税人类型: 'taxpayerType',
+  成立时间: 'establishedAt',
+  月收入: 'monthlyRevenue',
+  月成本费用: 'monthlyCost',
+  月利润: 'monthlyProfit',
+  年销售收入: 'annualRevenue',
+  收款流水: 'collectionFlow',
+  员工人数: 'employees',
+  社保人数: 'socialSecurityCount',
+  工资申报人数: 'salaryDeclaredCount',
+  上季度末人数: 'previousQuarterEmployees',
+  本季度收入: 'quarterRevenue',
+  上季度收入: 'previousQuarterRevenue',
+  本季度成本费用: 'quarterCostExpense',
+  上季度成本费用: 'previousQuarterCostExpense',
+  本年累计收入: 'ytdRevenue',
+  本年累计成本费用: 'ytdCostExpense',
+  本年累计利润: 'ytdProfit',
+  预算收入: 'budgetRevenue',
+  上年同期收入: 'previousYearRevenue',
+  主营业务收入: 'mainBusinessRevenue',
+  主营业务成本: 'mainBusinessCost',
+  人员相关成本费用: 'peopleRelatedExpense',
+  承租面积: 'rentalArea',
+  转租面积: 'subleaseArea',
+  装修费用: 'decorationExpense',
+  月开票金额: 'monthlyInvoice',
+  连续12个月销售额: 'consecutive12MonthSales',
+  平台收入: 'platformRevenue',
+  销项税额: 'outputTax',
+  进项税额: 'inputTax',
+  增值税应纳税额: 'vatTaxPayable',
+  增值税入库税额: 'vatTaxPayable',
+  增值税应税销售额: 'taxableSales',
+  理论增值税税额: 'theoreticalVatTax',
+  预算增值税税额: 'budgetVatTax',
+  上期应税销售额: 'priorTaxableSales',
+  上期增值税税额: 'priorVatTaxPayable',
+  业务招待费: 'entertainmentExpense',
+  广告宣传费: 'adExpense',
+  职工福利费: 'welfareExpense',
+  工会经费: 'unionExpense',
+  职工教育经费: 'educationExpense',
+  应纳税所得额: 'taxableIncome',
+  资产总额: 'assetsTotal',
+  全年平均人数: 'employeeAnnualAvg',
+  营业外支出发生额: 'nonOperatingExpense',
+  营业外收入发生额: 'nonOperatingIncome',
+  其他应收代收代付余额: 'otherReceivableAgencyBalance',
+  工资薪金总额: 'payrollTotal',
+  向个人支付非工资薪金所得: 'nonPayrollPersonalPayment',
+}
+
+function normalizeImportKey(key: string) {
+  return key.replace(/[：:\s（）()_/-]/g, '').trim()
+}
+
+function resolveImportField(key: string): keyof Client | null {
+  const normalized = normalizeImportKey(key)
+  const direct = importFieldAliases[key] || importFieldAliases[normalized]
+  if (direct) return direct
+  const matched = Object.entries(importFieldAliases).find(([label]) => normalizeImportKey(label) === normalized)
+  if (matched) return matched[1]
+  return conditionFields.some((field) => field.value === key) ? key as keyof Client : null
+}
+
+function parseDelimitedRows(text: string) {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.split(/,|\t/).map((cell) => cell.trim()))
+}
+
+function parseClientImportText(text: string) {
+  const trimmed = text.trim()
+  if (!trimmed) return {}
+  if (trimmed.startsWith('{')) return JSON.parse(trimmed) as Partial<Client>
+
+  const rows = parseDelimitedRows(trimmed)
+  const patch: Partial<Client> = {}
+  if (!rows.length) return patch
+
+  const firstRowLooksLikeHeader = rows[0].length > 2
+  if (firstRowLooksLikeHeader && rows[1]) {
+    rows[0].forEach((header, index) => {
+      const field = resolveImportField(header)
+      if (field) patch[field] = rows[1][index] as never
+    })
+  } else {
+    rows.forEach(([key, value]) => {
+      const field = resolveImportField(key)
+      if (field) patch[field] = value as never
+    })
+  }
+
+  return patch
+}
+
+function coerceImportedClientPatch(patch: Partial<Client>) {
+  const coerced: Partial<Client> = {}
+  Object.entries(patch).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return
+    const current = emptyClient[key as keyof Client]
+    coerced[key as keyof Client] = (typeof current === 'number'
+      ? Number(String(value).replace(/,/g, '')) || 0
+      : typeof current === 'boolean'
+        ? ['true', '是', '1', 'yes', 'Y'].includes(String(value).trim())
+        : value) as never
+  })
+  return coerced
+}
+
 function riskIssueId(risk: RiskResult) {
   return `Issue ${risk.code}`
 }
@@ -1355,6 +1473,22 @@ function taxTypeSummary(risks: RiskResult[]) {
   return Array.from(summary.entries())
     .sort(([, a], [, b]) => b.high - a.high || b.medium - a.medium || b.total - a.total)
     .map(([taxType, item]) => `${taxType}：${item.total} 项，其中高风险 ${item.high} 项、中风险 ${item.medium} 项`)
+}
+
+function groupedRiskSections(risks: RiskResult[]) {
+  const groups = [
+    { title: 'VAT 增值税风险', match: (risk: RiskResult) => risk.taxType.includes('增值税') },
+    { title: 'CIT 企业所得税风险', match: (risk: RiskResult) => risk.taxType.includes('企业所得税') },
+    { title: 'IIT 个人所得税与薪酬风险', match: (risk: RiskResult) => risk.taxType.includes('个人所得税') || risk.taxType.includes('社保') },
+    { title: '综合经营与资料缺口风险', match: () => true },
+  ]
+  const used = new Set<string>()
+
+  return groups.map((group) => {
+    const items = risks.filter((risk) => !used.has(risk.code) && group.match(risk))
+    items.forEach((risk) => used.add(risk.code))
+    return { title: group.title, items }
+  })
 }
 
 function getProjectScope(client: Client): ProjectScope {
@@ -1472,13 +1606,47 @@ function getSourceRules(managed: ManagedRule[] = []) {
   return executableRules.length ? executableRules : allBuiltInRules
 }
 
+const duplicateRiskGroups = [
+  ['R015', 'ON-021'],
+  ['R016', 'ON-020'],
+  ['R017', 'ON-005', 'ON-019'],
+]
+
+function consolidateRisks(risks: RiskRule[]) {
+  const removeCodes = new Set<string>()
+  duplicateRiskGroups.forEach(([primary, ...duplicates]) => {
+    if (risks.some((risk) => risk.code === primary)) {
+      duplicates.forEach((code) => removeCodes.add(code))
+    }
+  })
+
+  return risks.filter((risk) => !removeCodes.has(risk.code))
+}
+
+function ruleOrigin(rule: ManagedRule | RiskRule) {
+  if (rule.code.startsWith('ON-')) return 'Excel规则'
+  if (rule.code.startsWith('R')) return '内置规则'
+  return '自定义规则'
+}
+
+function ruleSelfCheck(rulesToCheck: ManagedRule[]) {
+  const total = rulesToCheck.length
+  const executable = rulesToCheck.filter((rule) => rule.enabled && isExecutableCondition(rule.conditionJson)).length
+  const missingCondition = rulesToCheck.filter((rule) => !isExecutableCondition(rule.conditionJson)).length
+  const disabled = rulesToCheck.filter((rule) => !rule.enabled).length
+
+  return { total, executable, missingCondition, disabled }
+}
+
 function detectRisks(client: Client, managed: ManagedRule[] = []): RiskResult[] {
   const sourceRules = getSourceRules(managed)
   const detectionClient = deriveClientMetrics(client)
 
-  return sourceRules
+  const matchedRules = sourceRules
     .filter((rule) => riskRuleExecution(detectionClient, rule).status === 'matched')
     .sort((a, b) => riskRank(b.level) - riskRank(a.level))
+
+  return consolidateRisks(matchedRules)
     .map((rule) => ({ ...rule, triggeredAt: formatDate() }))
 }
 
@@ -1500,6 +1668,13 @@ function buildReportContent(client: Client, risks: RiskResult[]) {
   const mediumCount = risks.filter((r) => r.level === '中').length
   const completeness = getDataCompleteness(client, risks)
   const byTaxType = taxTypeSummary(risks).join('\n')
+  const groupedSections = groupedRiskSections(risks)
+    .map(({ title, items }) => `${title}
+${items.length ? items.map((risk, index) => `${index + 1}. ${riskIssueId(risk)}｜【${risk.level}风险】${risk.name}
+触发原因：${risk.reason(client)}
+整改建议：${risk.suggestion}
+需补资料：${risk.materials.join('、')}`).join('\n') : '本章节暂未命中风险。'}`)
+    .join('\n\n')
   const groupName = getGroupName(client)
   const riskSummary = risks
     .slice(0, 8)
@@ -1530,10 +1705,13 @@ ${groupName ? `所属集团项目：${groupName}\n主体角色：${getEntityRole
 四、分税种风险摘要
 ${byTaxType || '暂未形成分税种风险提示。'}
 
-五、重点风险事项
+五、分税种风险章节
+${groupedSections}
+
+六、重点风险事项
 ${riskSummary || '未发现明显高频风险。建议继续完善资料后复核。'}
 
-六、Issue 明细与整改建议
+七、Issue 明细与整改建议
 ${risks
   .map(
     (risk, index) => `${index + 1}. ${riskIssueId(risk)}：${risk.name}
@@ -1548,19 +1726,19 @@ ${risks
   )
   .join('\n')}
 
-七、整改优先级
+八、整改优先级
 ${risks.length
   ? risks.map((risk, index) => `${index + 1}. ${riskPriority(risk)}｜${riskIssueId(risk)}｜${risk.name}`).join('\n')
   : '当前暂无需列入整改清单的风险事项。'}
 
-八、后续处理建议
+九、后续处理建议
 建议基于本报告推进以下事项：
 1. 补充缺失资料，先完成账税数据一致性复核。
 2. 对高风险事项建立整改清单和责任人。
 3. 按月输出风险跟踪表，形成持续合规管理机制。
 4. 对涉及发票、收入、个人账户和优惠政策的事项优先处理。
 
-九、免责声明
+十、免责声明
 本报告基于企业提供资料及系统规则进行辅助分析，仅供经营和税务风险管理参考。具体税务处理应结合完整原始资料、适用地区口径及最新政策，并由专业人员进一步复核确认。`
 }
 
@@ -1660,7 +1838,7 @@ function Field({
   children: React.ReactNode
 }) {
   return (
-    <label className="field">
+    <label className="field" data-field-label={label}>
       <span>{label}</span>
       {children}
     </label>
@@ -2166,6 +2344,18 @@ function App() {
       .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, 'zh-CN'))
       .slice(0, 10)
   }, [currentSkippedRules])
+  const jumpToIntakeField = (label: string) => {
+    if (selectedClient) {
+      setEditingClient(deriveClientMetrics(selectedClient))
+    }
+    setPage('form')
+    window.setTimeout(() => {
+      const target = document.querySelector(`[data-field-label="${label}"]`)
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      target?.classList.add('field-highlight')
+      window.setTimeout(() => target?.classList.remove('field-highlight'), 1600)
+    }, 80)
+  }
   const currentTaxOption = useMemo<EChartsOption>(() => ({
     color: ['#12aeea', '#0c8c82', '#b76a20', '#b63136', '#56f0ee'],
     tooltip: { trigger: 'item' },
@@ -2219,6 +2409,7 @@ function App() {
   const visibleRules = rulePageSize === 'all'
     ? filteredRules
     : filteredRules.slice((normalizedRulePage - 1) * rulePageSize, normalizedRulePage * rulePageSize)
+  const ruleCheck = useMemo(() => ruleSelfCheck(managedRules), [managedRules])
 
   const canUseAdmin = authUser?.role === 'admin' || authUser?.actor?.role === 'admin'
 
@@ -3015,8 +3206,12 @@ function App() {
                 {currentMissingFieldRows.length > 0 && (
                   <div className="missing-field-summary">
                     <strong>优先补充字段</strong>
-                    <div className="chips">
-                      {currentMissingFieldRows.map((row) => <span key={row.name}>{row.name} × {row.value}</span>)}
+                    <div className="chips action-chips">
+                      {currentMissingFieldRows.map((row) => (
+                        <button key={row.name} type="button" onClick={() => jumpToIntakeField(row.name)}>
+                          {row.name} × {row.value}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -3338,6 +3533,11 @@ function App() {
               </section>
             )}
             <section className="panel rule-filter-panel">
+              <div className="rule-health-row">
+                <span>规则自检：{ruleCheck.executable}/{ruleCheck.total} 可执行</span>
+                <span>停用 {ruleCheck.disabled} 条</span>
+                <span>缺执行条件 {ruleCheck.missingCondition} 条</span>
+              </div>
               <div className="rule-filter-grid">
                 <label className="filter-field wide-filter">
                   <span>筛选规则</span>
@@ -3449,8 +3649,13 @@ function App() {
                   </div>
                   <h3>{rule.name}</h3>
                   <p>{rule.taxType || '未填写税种'} / {rule.enabled ? '启用' : '停用'}</p>
+                  <div className="rule-tags">
+                    <span>{ruleOrigin(rule)}</span>
+                    <span>{isExecutableCondition(rule.conditionJson) ? '可直接执行' : '未配置条件'}</span>
+                    {rule.requiredFields.length > 0 && <span>需补资料</span>}
+                  </div>
                   {conditionSummary(rule.conditionJson) !== '不参与自动检测' && <small>执行条件：{conditionSummary(rule.conditionJson)}</small>}
-                  {rule.requiredFields.length > 0 && <small>执行所需字段：{rule.requiredFields.join('、')}</small>}
+                  {rule.requiredFields.length > 0 && <small>执行所需字段：{rule.requiredFields.map(fieldLabel).join('、')}</small>}
                   {rule.conditionText && <small>{rule.conditionText}</small>}
                   <small>{rule.basis}</small>
                   <p>{rule.suggestion}</p>
@@ -3546,6 +3751,20 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
   const citMaterialGaps = ['企业所得税季度及年度申报表', '汇算清缴申报表及测算底稿', '无票/替票/个人抬头发票明细', '三费扣除限额测算', '关联资金拆借及管理费资料']
   const iitMaterialGaps = ['工资薪金个税申报明细', '临时工/劳务/佣金付款明细', '绩效和年终奖发放明细', '非现金福利及员工餐住宿资料', '社保缴纳清单']
   const existingGroupNames = Array.from(new Set(clients.map(getGroupName).filter(Boolean)))
+  const jumpToSection = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+  const importClientFile = async (file: File | null) => {
+    if (!file) return
+    try {
+      const text = await file.text()
+      const patchData = coerceImportedClientPatch(parseClientImportText(text))
+      onChange(deriveClientMetrics({ ...client, ...patchData }))
+    } catch (error) {
+      console.warn('Failed to import client file.', error)
+      window.alert('文件解析失败。请使用 JSON、CSV 或 TSV，并使用系统字段名或中文字段名。')
+    }
+  }
   const renderChecks = (items: Array<[keyof Client, string]>) => items.map(([key, label]) => (
     <BoolField
       key={String(key)}
@@ -3575,6 +3794,10 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <button className="secondary-button compact-button" type="button" onClick={() => onChange(deriveClientMetrics(client))}>
             <RefreshCcw /> 同步基础数据到规则字段
           </button>
+          <label className="secondary-button compact-button file-import-button">
+            <FileText /> 上传表格填充
+            <input type="file" accept=".json,.csv,.tsv,.txt" onChange={(event) => void importClientFile(event.target.files?.[0] || null)} />
+          </label>
         </div>
         <div className="intake-score">
           <span>{completeness.label}</span>
@@ -3583,7 +3806,23 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         </div>
       </section>
 
-      <section className="form-section">
+      <nav className="intake-section-nav" aria-label="录入子目录">
+        {[
+          ['intake-project', '项目'],
+          ['intake-basic', '基础'],
+          ['intake-quick', '快检'],
+          ['intake-trend', '趋势'],
+          ['intake-cost', '费用'],
+          ['intake-vat', 'VAT'],
+          ['intake-cit', 'CIT'],
+          ['intake-iit', 'IIT'],
+          ['intake-comprehensive', '综合'],
+        ].map(([id, label]) => (
+          <button key={id} type="button" onClick={() => jumpToSection(id)}>{label}</button>
+        ))}
+      </nav>
+
+      <section className="form-section" id="intake-project">
         <div className="section-title-row">
           <div>
             <h3>项目结构</h3>
@@ -3633,7 +3872,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         </div>
       </section>
 
-      <section className="form-section">
+      <section className="form-section" id="intake-basic">
         <div className="section-title-row">
           <div>
             <h3>基础资料（共用）</h3>
@@ -3663,7 +3902,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         </div>
       </section>
 
-      <section className="form-section">
+      <section className="form-section" id="intake-quick">
         <div className="section-title-row">
           <div>
             <h3>快速体检数据（共用）</h3>
@@ -3683,7 +3922,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         </div>
       </section>
 
-      <section className="form-section">
+      <section className="form-section" id="intake-trend">
         <div className="section-title-row">
           <div>
             <h3>趋势与预算数据</h3>
@@ -3712,7 +3951,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         </div>
       </section>
 
-      <section className="form-section">
+      <section className="form-section" id="intake-cost">
         <div className="section-title-row">
           <div>
             <h3>房租装修与人员费用</h3>
@@ -3729,7 +3968,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         </div>
       </section>
 
-      <section className="form-section">
+      <section className="form-section" id="intake-vat">
         <div className="section-title-row">
           <div>
             <h3>VAT 增值税资料</h3>
@@ -3761,7 +4000,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         </div>
       </section>
 
-      <section className="form-section">
+      <section className="form-section" id="intake-cit">
         <div className="section-title-row">
           <div>
             <h3>CIT 企业所得税资料</h3>
@@ -3788,7 +4027,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         </div>
       </section>
 
-      <section className="form-section">
+      <section className="form-section" id="intake-iit">
         <div className="section-title-row">
           <div>
             <h3>IIT 个税与薪酬资料</h3>
@@ -3807,7 +4046,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         </div>
       </section>
 
-      <section className="form-section">
+      <section className="form-section" id="intake-comprehensive">
         <div className="section-title-row">
           <div>
             <h3>综合风险线索</h3>

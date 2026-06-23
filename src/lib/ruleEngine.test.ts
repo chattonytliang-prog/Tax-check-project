@@ -242,6 +242,8 @@ describe('ruleEngine', () => {
     expect(conditionSummary({ field: 'amount', operator: '>', value: 0, compareField: 'revenue' })).toBe('amount > revenue')
     expect(conditionSummary({ field: 'a', operator: '>=', value: 3, compareField: 'b', transform: 'absDiff' })).toBe('|a - b| >= b')
     expect(conditionSummary({ field: 'a', operator: '>=', value: 3, transform: 'absDiff' })).toBe('|a - | >= 3')
+    expect(conditionSummary({ field: 'vatTaxPayable', operator: '<', value: 0, compareField: 'theoreticalVatTax', multiplier: 0.7 }))
+      .toBe('增值税应纳/入库税额 < 理论增值税税额 × 0.7')
     expect(conditionSummary({ all: [{ field: 'a', operator: '=', value: 1 }] })).toContain('全部满足')
     expect(conditionSummary({ any: [{ field: 'a', operator: '=', value: 1 }] })).toContain('任一满足')
   })
