@@ -882,6 +882,93 @@ th {
   background: rgba(18, 174, 234, 0.1);
 }
 
+.period-analysis-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.period-analysis-panel .panel-title {
+  align-items: flex-start;
+}
+
+.period-analysis-panel .panel-title span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  border-radius: 999px;
+  padding: 0 12px;
+  background: rgba(18, 174, 234, 0.1);
+  color: #067b9e;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.period-entry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.period-entry-card {
+  display: grid;
+  gap: 6px;
+  min-height: 96px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  text-align: left;
+}
+
+.period-entry-card span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.period-entry-card strong {
+  font-size: 15px;
+}
+
+.period-entry-card small {
+  color: var(--muted);
+}
+
+.period-entry-card.active {
+  border-color: rgba(18, 174, 234, 0.48);
+  background: rgba(18, 174, 234, 0.08);
+  box-shadow: 0 0 0 2px rgba(18, 174, 234, 0.08);
+}
+
+.period-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.period-warning,
+.period-warning-list {
+  margin: 0;
+  border: 1px solid rgba(183, 106, 32, 0.24);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(183, 106, 32, 0.08);
+  color: #8a4a12;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.period-warning-list {
+  display: grid;
+  gap: 4px;
+}
+
+.period-warning-list p {
+  margin: 0;
+}
+
 .form-section {
   padding: 20px;
   scroll-margin-top: 86px;

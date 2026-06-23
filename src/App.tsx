@@ -52,6 +52,22 @@ type ClientManualDerivedFields = Record<string, boolean>
 type ClientManualDerivedReasons = Record<string, string>
 type IntakeRequirement = 'required' | 'recommended' | 'conditional' | 'optional' | 'computed'
 
+type ClientPeriodEntry = {
+  id: string
+  label: string
+  analysisPeriodType: AnalysisPeriodType
+  analysisYear: string
+  analysisQuarter: AnalysisQuarter
+  analysisMonth: string
+  periodStartDate: string
+  periodEndDate: string
+  dataBasis: DataBasis
+  comparisonPeriod: string
+  months: string[]
+  snapshot: Client
+  savedAt: string
+}
+
 const customIndustryOption = '其他手动填写'
 const customIndustryPrefix = '其他：'
 const mainstreamIndustryOptions = [
@@ -112,6 +128,7 @@ type Client = {
   periodEndDate: string
   dataBasis: DataBasis
   comparisonPeriod: string
+  periodEntries: ClientPeriodEntry[]
   monthlyRevenue: number
   monthlyInvoice: number
   monthlyCost: number
@@ -302,6 +319,7 @@ const emptyClient: Client = {
   periodEndDate: '2024-12-31',
   dataBasis: '申报数据',
   comparisonPeriod: '',
+  periodEntries: [],
   monthlyRevenue: 98000,
   monthlyInvoice: 76000,
   monthlyCost: 52000,
@@ -407,6 +425,7 @@ const blankClient: Client = {
   periodEndDate: '',
   dataBasis: '',
   comparisonPeriod: '',
+  periodEntries: [],
   monthlyRevenue: 0,
   monthlyInvoice: 0,
   monthlyCost: 0,
@@ -1454,6 +1473,59 @@ function isMissingPositiveNumber(value: number) {
   return !Number.isFinite(value) || value <= 0
 }
 
+function monthIndex(month: string) {
+  const [year, monthPart] = month.split('-').map(Number)
+  if (!year || !monthPart) return Number.NaN
+  return year * 12 + monthPart - 1
+}
+
+function monthFromIndex(index: number) {
+  const year = Math.floor(index / 12)
+  const month = (index % 12) + 1
+  return `${year}-${String(month).padStart(2, '0')}`
+}
+
+function monthsBetween(startMonth: string, endMonth: string) {
+  const start = monthIndex(startMonth)
+  const end = monthIndex(endMonth)
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return []
+  return Array.from({ length: end - start + 1 }, (_, index) => monthFromIndex(start + index))
+}
+
+function quarterMonths(year: string, quarter: AnalysisQuarter) {
+  const quarterStart: Record<Exclude<AnalysisQuarter, ''>, number> = { Q1: 1, Q2: 4, Q3: 7, Q4: 10 }
+  if (!year || !quarter) return []
+  const start = quarterStart[quarter]
+  return monthsBetween(`${year}-${String(start).padStart(2, '0')}`, `${year}-${String(start + 2).padStart(2, '0')}`)
+}
+
+function getClientPeriodMonths(client: Client) {
+  if (!client.analysisPeriodType) return []
+  if (client.analysisPeriodType === '年度') return client.analysisYear ? monthsBetween(`${client.analysisYear}-01`, `${client.analysisYear}-12`) : []
+  if (client.analysisPeriodType === '季度') return quarterMonths(client.analysisYear, client.analysisQuarter)
+  if (client.analysisPeriodType === '月度') return client.analysisMonth ? [client.analysisMonth] : []
+  if (client.analysisPeriodType === '年初至今') {
+    const endMonth = client.periodEndDate ? client.periodEndDate.slice(0, 7) : ''
+    return client.analysisYear && endMonth ? monthsBetween(`${client.analysisYear}-01`, endMonth) : []
+  }
+  const startMonth = client.periodStartDate ? client.periodStartDate.slice(0, 7) : ''
+  const endMonth = client.periodEndDate ? client.periodEndDate.slice(0, 7) : ''
+  return startMonth && endMonth ? monthsBetween(startMonth, endMonth) : []
+}
+
+function areMonthsContinuous(months: string[]) {
+  const unique = Array.from(new Set(months)).sort((a, b) => monthIndex(a) - monthIndex(b))
+  if (unique.length <= 1) return true
+  return unique.every((month, index) => index === 0 || monthIndex(month) === monthIndex(unique[index - 1]) + 1)
+}
+
+function formatMonthRange(months: string[]) {
+  const unique = Array.from(new Set(months)).sort((a, b) => monthIndex(a) - monthIndex(b))
+  if (!unique.length) return '未覆盖月份'
+  if (unique.length === 1) return unique[0]
+  return `${unique[0]} 至 ${unique[unique.length - 1]}`
+}
+
 function periodRequirementLabels(client: Client) {
   const labels = ['分析口径', '所属年度', '数据口径']
   if (client.analysisPeriodType === '季度') labels.push('所属季度')
@@ -1473,6 +1545,135 @@ function formatAnalysisPeriod(client: Client) {
     return `${client.analysisYear || '未填写年度'}年初至今（${client.periodStartDate || '未填写开始'} 至 ${client.periodEndDate || '未填写结束'}）`
   }
   return `${client.periodStartDate || '未填写开始'} 至 ${client.periodEndDate || '未填写结束'}`
+}
+
+function buildPeriodEntry(client: Client): ClientPeriodEntry {
+  const months = getClientPeriodMonths(client)
+  const snapshot: Client = {
+    ...client,
+    periodEntries: [],
+    manualDerivedFields: { ...(client.manualDerivedFields || {}) },
+    manualDerivedReasons: { ...(client.manualDerivedReasons || {}) },
+  }
+  return {
+    id: `${client.dataBasis || '未填口径'}-${months.join('_') || client.analysisPeriodType || '未填期间'}`,
+    label: `${formatAnalysisPeriod(client)}｜${client.dataBasis || '未填写口径'}`,
+    analysisPeriodType: client.analysisPeriodType,
+    analysisYear: client.analysisYear,
+    analysisQuarter: client.analysisQuarter,
+    analysisMonth: client.analysisMonth,
+    periodStartDate: client.periodStartDate,
+    periodEndDate: client.periodEndDate,
+    dataBasis: client.dataBasis,
+    comparisonPeriod: client.comparisonPeriod,
+    months,
+    snapshot,
+    savedAt: formatDate(),
+  }
+}
+
+function normalizePeriodEntry(entry: Partial<ClientPeriodEntry>): ClientPeriodEntry | null {
+  if (!entry.snapshot) return null
+  const snapshot = deriveClientMetrics(normalizeClient({ ...entry.snapshot, periodEntries: [] }))
+  const months = entry.months?.length ? [...entry.months] : getClientPeriodMonths(snapshot)
+  return {
+    id: entry.id || `${entry.dataBasis || snapshot.dataBasis || '未填口径'}-${months.join('_') || snapshot.analysisPeriodType || crypto.randomUUID()}`,
+    label: entry.label || `${formatAnalysisPeriod(snapshot)}｜${snapshot.dataBasis || '未填写口径'}`,
+    analysisPeriodType: (entry.analysisPeriodType ?? snapshot.analysisPeriodType) as AnalysisPeriodType,
+    analysisYear: String(entry.analysisYear ?? snapshot.analysisYear ?? ''),
+    analysisQuarter: (entry.analysisQuarter ?? snapshot.analysisQuarter ?? '') as AnalysisQuarter,
+    analysisMonth: String(entry.analysisMonth ?? snapshot.analysisMonth ?? ''),
+    periodStartDate: String(entry.periodStartDate ?? snapshot.periodStartDate ?? ''),
+    periodEndDate: String(entry.periodEndDate ?? snapshot.periodEndDate ?? ''),
+    dataBasis: (entry.dataBasis ?? snapshot.dataBasis ?? '') as DataBasis,
+    comparisonPeriod: String(entry.comparisonPeriod ?? snapshot.comparisonPeriod ?? ''),
+    months,
+    snapshot,
+    savedAt: entry.savedAt || formatDate(),
+  }
+}
+
+function upsertPeriodEntry(entries: ClientPeriodEntry[], entry: ClientPeriodEntry) {
+  const exists = entries.some((item) => item.id === entry.id)
+  return exists ? entries.map((item) => (item.id === entry.id ? entry : item)) : [entry, ...entries]
+}
+
+function periodRevenueTotal(entry: ClientPeriodEntry) {
+  if (entry.analysisPeriodType === '年度') return Number(entry.snapshot.annualRevenue || 0)
+  return Number(entry.snapshot.monthlyRevenue || 0) * Math.max(entry.months.length, 1)
+}
+
+function periodCostTotal(entry: ClientPeriodEntry) {
+  return Number(entry.snapshot.monthlyCost || 0) * Math.max(entry.months.length, 1)
+}
+
+function periodProfitTotal(entry: ClientPeriodEntry) {
+  return Number(entry.snapshot.monthlyProfit || 0) * Math.max(entry.months.length, 1)
+}
+
+function periodInvoiceTotal(entry: ClientPeriodEntry) {
+  return Number(entry.snapshot.monthlyInvoice || 0) * Math.max(entry.months.length, 1)
+}
+
+function buildClientFromPeriodEntries(client: Client, entries: ClientPeriodEntry[]) {
+  if (!entries.length) return deriveClientMetrics(client)
+  const months = Array.from(new Set(entries.flatMap((entry) => entry.months))).sort((a, b) => monthIndex(a) - monthIndex(b))
+  const first = entries[0]
+  const monthCount = Math.max(months.length, 1)
+  const sumRevenue = entries.reduce((sum, entry) => sum + periodRevenueTotal(entry), 0)
+  const sumCost = entries.reduce((sum, entry) => sum + periodCostTotal(entry), 0)
+  const sumProfit = entries.reduce((sum, entry) => sum + periodProfitTotal(entry), 0)
+  const sumInvoice = entries.reduce((sum, entry) => sum + periodInvoiceTotal(entry), 0)
+  const merged = deriveClientMetrics({
+    ...client,
+    ...first.snapshot,
+    id: client.id,
+    name: client.name,
+    creditCode: client.creditCode,
+    region: client.region,
+    industry: client.industry,
+    taxpayerType: client.taxpayerType,
+    establishedAt: client.establishedAt,
+    projectScope: client.projectScope,
+    groupName: client.groupName,
+    entityRole: client.entityRole,
+    analysisPeriodType: monthCount === 1 ? '月度' : monthCount === 12 && months[0].endsWith('-01') ? '年度' : '自定义期间',
+    analysisYear: months[0]?.slice(0, 4) || first.analysisYear,
+    analysisMonth: monthCount === 1 ? months[0] : '',
+    analysisQuarter: '',
+    periodStartDate: `${months[0]}-01`,
+    periodEndDate: `${months[months.length - 1]}-31`,
+    dataBasis: entries.every((entry) => entry.dataBasis === first.dataBasis) ? first.dataBasis : '混合口径',
+    comparisonPeriod: entries.length > 1 ? `${entries.length} 期合并分析` : first.comparisonPeriod,
+    monthlyRevenue: Math.round(sumRevenue / monthCount),
+    monthlyCost: Math.round(sumCost / monthCount),
+    monthlyProfit: Math.round(sumProfit / monthCount),
+    monthlyInvoice: Math.round(sumInvoice / monthCount),
+    annualRevenue: sumRevenue,
+    consecutive12MonthSales: monthCount >= 12 ? sumRevenue : client.consecutive12MonthSales,
+    collectionFlow: entries.reduce((sum, entry) => sum + Number(entry.snapshot.collectionFlow || 0), 0),
+    periodEntries: client.periodEntries,
+  })
+  return merged
+}
+
+function findPeriodConsistencyWarnings(entries: ClientPeriodEntry[]) {
+  const warnings: string[] = []
+  const aggregateEntries = entries.filter((entry) => entry.months.length > 1)
+  const monthlyEntries = entries.filter((entry) => entry.analysisPeriodType === '月度')
+  aggregateEntries.forEach((aggregate) => {
+    const coveredMonths = new Set(aggregate.months)
+    const containedMonths = monthlyEntries.filter((entry) => entry.dataBasis === aggregate.dataBasis && entry.months.some((month) => coveredMonths.has(month)))
+    if (!containedMonths.length) return
+    const monthRevenue = containedMonths.reduce((sum, entry) => sum + periodRevenueTotal(entry), 0)
+    const aggregateRevenue = periodRevenueTotal(aggregate)
+    const diff = aggregateRevenue - monthRevenue
+    const threshold = Math.max(10000, Math.abs(aggregateRevenue) * 0.05)
+    if (Math.abs(diff) > threshold) {
+      warnings.push(`${aggregate.label} 与已保存月度明细不一致：月度收入合计 ${monthRevenue.toLocaleString()} 元，期间收入 ${aggregateRevenue.toLocaleString()} 元，差异 ${diff.toLocaleString()} 元。`)
+    }
+  })
+  return warnings
 }
 
 function validateClientForSave(client: Client): IntakeValidationIssue[] {
@@ -1563,6 +1764,9 @@ function normalizeClient(client: Partial<Client>): Client {
     periodEndDate: String(client.periodEndDate ?? ''),
     dataBasis: (client.dataBasis ?? '') as DataBasis,
     comparisonPeriod: String(client.comparisonPeriod ?? ''),
+    periodEntries: (client.periodEntries || [])
+      .map((entry) => normalizePeriodEntry(entry))
+      .filter((entry): entry is ClientPeriodEntry => Boolean(entry)),
   }
 }
 
@@ -2491,6 +2695,7 @@ function App() {
   const [restrictedRuleCount, setRestrictedRuleCount] = useState(0)
   const [ruleDraft, setRuleDraft] = useState<ManagedRule>(emptyManagedRule)
   const [editingRuleCode, setEditingRuleCode] = useState('')
+  const [selectedPeriodEntryIds, setSelectedPeriodEntryIds] = useState<string[]>([])
   const [query, setQuery] = useState('')
   const [ruleQuery, setRuleQuery] = useState('')
   const [ruleStatusFilter, setRuleStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
@@ -2559,6 +2764,7 @@ function App() {
         setReports(reportsResponse.reports)
         if (normalizedClients[0]) {
           setSelectedClientId(normalizedClients[0].id)
+          setSelectedPeriodEntryIds([])
         }
         setDataStatus('connected')
       } catch (error) {
@@ -2632,7 +2838,21 @@ function App() {
   }, [loggedIn, authUser])
 
   const selectedClient = clients.find((client) => client.id === selectedClientId) || clients[0]
-  const selectedDetectionClient = useMemo(() => (selectedClient ? deriveClientMetrics(selectedClient) : null), [selectedClient])
+  const selectedPeriodEntries = useMemo(() => {
+    if (!selectedClient) return []
+    const selected = selectedClient.periodEntries.filter((entry) => selectedPeriodEntryIds.includes(entry.id))
+    return selected.sort((a, b) => monthIndex(a.months[0] || '') - monthIndex(b.months[0] || ''))
+  }, [selectedClient, selectedPeriodEntryIds])
+  const selectedPeriodMonths = useMemo(() => selectedPeriodEntries.flatMap((entry) => entry.months), [selectedPeriodEntries])
+  const selectedPeriodsContinuous = selectedPeriodEntries.length === 0 || areMonthsContinuous(selectedPeriodMonths)
+  const selectedPeriodLabel = selectedPeriodEntries.length
+    ? `${formatMonthRange(selectedPeriodMonths)}｜${selectedPeriodEntries.length} 期`
+    : '当前录入数据'
+  const selectedDetectionClient = useMemo(() => {
+    if (!selectedClient) return null
+    if (!selectedPeriodEntries.length || !selectedPeriodsContinuous) return deriveClientMetrics(selectedClient)
+    return buildClientFromPeriodEntries(selectedClient, selectedPeriodEntries)
+  }, [selectedClient, selectedPeriodEntries, selectedPeriodsContinuous])
   const currentRisks = useMemo(() => (selectedDetectionClient ? detectRisks(selectedDetectionClient, managedRules) : []), [selectedDetectionClient, managedRules])
   const currentSkippedRules = useMemo(() => (selectedDetectionClient ? getSkippedRules(selectedDetectionClient, managedRules) : []), [selectedDetectionClient, managedRules])
   const overallLevel = getOverallLevel(currentRisks)
@@ -2806,6 +3026,15 @@ function App() {
     ? filteredRules
     : filteredRules.slice((normalizedRulePage - 1) * rulePageSize, normalizedRulePage * rulePageSize)
   const ruleCheck = useMemo(() => ruleSelfCheck(managedRules), [managedRules])
+  const selectedClientPeriodWarnings = useMemo(() => (
+    selectedClient ? findPeriodConsistencyWarnings(selectedClient.periodEntries) : []
+  ), [selectedClient])
+
+  const togglePeriodEntry = (entryId: string) => {
+    setSelectedPeriodEntryIds((current) => (
+      current.includes(entryId) ? current.filter((id) => id !== entryId) : [...current, entryId]
+    ))
+  }
 
   const canUseAdmin = authUser?.role === 'admin' || authUser?.actor?.role === 'admin'
 
@@ -2950,19 +3179,36 @@ function App() {
       return
     }
     const normalizedName = editingClient.name.trim()
-    const normalized: Client = deriveClientMetrics({
+    const normalizedBase: Client = deriveClientMetrics({
       ...normalizeClient(editingClient),
       name: normalizedName,
       projectScope: getProjectScope(editingClient),
       groupName: getProjectScope(editingClient) === '集团项目' ? editingClient.groupName.trim() : '',
       entityRole: getProjectScope(editingClient) === '集团项目' ? getEntityRole(editingClient) : '单体企业',
     })
+    const periodEntry = buildPeriodEntry(normalizedBase)
+    if (!periodEntry.months.length) {
+      window.alert('请先补齐数据期间，系统需要明确本次录入覆盖哪些月份。')
+      focusFieldByLabel('分析口径')
+      return
+    }
+    const periodEntries = upsertPeriodEntry(normalizedBase.periodEntries, periodEntry)
+    const consistencyWarnings = findPeriodConsistencyWarnings(periodEntries)
+    if (consistencyWarnings.length > 0) {
+      const confirmed = window.confirm(`发现期间数据差异：\n\n${consistencyWarnings.join('\n')}\n\n可以继续保存，但报告会按所选期间分析。是否继续保存？`)
+      if (!confirmed) return
+    }
+    const normalized: Client = {
+      ...normalizedBase,
+      periodEntries,
+    }
 
     setClients((current) => {
       const exists = current.some((client) => client.id === normalized.id)
       return exists ? current.map((client) => (client.id === normalized.id ? normalized : client)) : [normalized, ...current]
     })
     setSelectedClientId(normalized.id)
+    setSelectedPeriodEntryIds([periodEntry.id])
     setPage('result')
 
     try {
@@ -2985,8 +3231,12 @@ function App() {
 
   const createReport = async () => {
     if (!selectedClient || aiReportStage) return
+    if (selectedPeriodEntries.length > 0 && !selectedPeriodsContinuous) {
+      window.alert('选择的月份不连续，不能合并生成一份报告。请改选连续月份，例如 1-3 月、4-6 月或全年。')
+      return
+    }
 
-    const reportClient = deriveClientMetrics(selectedClient)
+    const reportClient = deriveClientMetrics({ ...(selectedDetectionClient || selectedClient), periodEntries: [] })
     const reportIssues = validateClientForReport(reportClient)
     if (reportIssues.length > 0) {
       const confirmed = window.confirm(`基础检测资料仍缺少：${validationSummary(reportIssues)}。\n\n可以继续生成报告，但报告会标记为资料不足，仅供线索参考。是否继续？`)
@@ -3055,7 +3305,7 @@ function App() {
       setAiReportStage(null)
     }
 
-    setReports((current) => [report, ...current.filter((item) => item.clientId !== selectedClient.id)])
+    setReports((current) => [report, ...current])
 
     try {
       await apiSend<{ report: Report }>('/api/reports', 'POST', report)
@@ -3076,6 +3326,7 @@ function App() {
     setReports((current) => current.filter((report) => report.clientId !== client.id))
     if (selectedClientId === client.id) {
       setSelectedClientId(remainingClients[0]?.id || '')
+      setSelectedPeriodEntryIds([])
     }
 
     try {
@@ -3462,6 +3713,7 @@ function App() {
                     <th>行业</th>
                     <th>纳税人类型</th>
                     <th>地区</th>
+                    <th>期间数据</th>
                     <th>风险等级</th>
                     <th>报告</th>
                     <th>操作</th>
@@ -3481,12 +3733,14 @@ function App() {
                       <td>{client.industry}</td>
                       <td>{client.taxpayerType}</td>
                       <td>{client.region}</td>
+                      <td>{client.periodEntries.length ? `${client.periodEntries.length} 期` : '未归档'}</td>
                       <td><LevelBadge level={level} /></td>
                       <td>{report ? '已生成' : '未生成'}</td>
                       <td className="row-actions">
                         <button
                           onClick={() => {
                             setSelectedClientId(client.id)
+                            setSelectedPeriodEntryIds([])
                             setPage('result')
                           }}
                         >
@@ -3540,7 +3794,13 @@ function App() {
                 <h2>{selectedClient.name}</h2>
               </div>
               <div className="header-actions">
-                <button className="secondary-button" onClick={() => setPage('form')}>
+                <button
+                  className="secondary-button"
+                  onClick={() => {
+                    setEditingClient(deriveClientMetrics(selectedClient))
+                    setPage('form')
+                  }}
+                >
                   <RefreshCcw /> 编辑资料
                 </button>
                 <button className="primary-button" onClick={createReport} disabled={Boolean(aiReportStage)}>
@@ -3548,6 +3808,60 @@ function App() {
                 </button>
               </div>
             </header>
+            <section className="panel period-analysis-panel">
+              <div className="panel-title">
+                <div>
+                  <p className="eyebrow">期间数据</p>
+                  <h3>选择连续月份生成分析</h3>
+                  <p className="section-helper">最小单位为月份。可以选择单月、连续多月、季度或全年；不连续月份不能合并成一份报告。</p>
+                </div>
+                <span>{selectedPeriodLabel}</span>
+              </div>
+              {selectedClient.periodEntries.length > 0 ? (
+                <>
+                  <div className="period-entry-grid">
+                    {selectedClient.periodEntries.map((entry) => {
+                      const checked = selectedPeriodEntryIds.includes(entry.id)
+                      return (
+                        <button
+                          key={entry.id}
+                          type="button"
+                          className={checked ? 'period-entry-card active' : 'period-entry-card'}
+                          onClick={() => togglePeriodEntry(entry.id)}
+                        >
+                          <span>{entry.label}</span>
+                          <strong>{formatMonthRange(entry.months)}</strong>
+                          <small>{entry.months.length} 个月｜保存于 {entry.savedAt}</small>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="period-actions-row">
+                    <button type="button" className="secondary-button compact-button" onClick={() => setSelectedPeriodEntryIds([])}>
+                      使用当前数据
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button compact-button"
+                      onClick={() => setSelectedPeriodEntryIds(selectedClient.periodEntries.map((entry) => entry.id))}
+                    >
+                      选择全部期间
+                    </button>
+                  </div>
+                  {selectedPeriodEntries.length > 0 && !selectedPeriodsContinuous && (
+                    <p className="period-warning">当前选择的月份不连续，不能合并分析。请改选连续月份，例如 1-3 月、4-6 月或全年。</p>
+                  )}
+                  {selectedClientPeriodWarnings.length > 0 && (
+                    <div className="period-warning-list">
+                      <strong>数据一致性提示</strong>
+                      {selectedClientPeriodWarnings.map((warning) => <p key={warning}>{warning}</p>)}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="section-helper">当前企业还没有保存期间快照。保存一次资料后，系统会自动归档本期数据。</p>
+              )}
+            </section>
             <div className="result-summary">
               <StatCard label="综合等级" value={`${overallLevel}风险`} icon={<Gauge />} tone={overallLevel === '高' ? 'red' : overallLevel === '中' ? 'orange' : 'green'} />
               <StatCard label="风险事项" value={currentRisks.length} icon={<ClipboardList />} tone="orange" />
@@ -3711,6 +4025,7 @@ function App() {
                     <button
                       onClick={() => {
                         setSelectedClientId(report.clientId)
+                        setSelectedPeriodEntryIds([])
                         setPage('report')
                       }}
                     >
