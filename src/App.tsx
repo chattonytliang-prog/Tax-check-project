@@ -1484,12 +1484,7 @@ function parseDelimitedRows(text: string) {
     .map((line) => line.split(/,|\t/).map((cell) => cell.trim()))
 }
 
-function parseClientImportText(text: string) {
-  const trimmed = text.trim()
-  if (!trimmed) return {}
-  if (trimmed.startsWith('{')) return JSON.parse(trimmed) as Partial<Client>
-
-  const rows = parseDelimitedRows(trimmed)
+function parseClientImportRows(rows: string[][]) {
   const patch: Partial<Client> = {}
   if (!rows.length) return patch
 
@@ -1507,6 +1502,35 @@ function parseClientImportText(text: string) {
   }
 
   return patch
+}
+
+function parseClientImportText(text: string) {
+  const trimmed = text.trim()
+  if (!trimmed) return {}
+  if (trimmed.startsWith('{')) return JSON.parse(trimmed) as Partial<Client>
+
+  return parseClientImportRows(parseDelimitedRows(trimmed))
+}
+
+async function parseClientImportWorkbook(buffer: ArrayBuffer) {
+  const XLSX = await import('xlsx')
+  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
+  const sheetName = workbook.SheetNames.find((name) => {
+    const sheet = workbook.Sheets[name]
+    return sheet && XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false }).length > 0
+  })
+  if (!sheetName) return {}
+
+  const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean | Date | null>>(workbook.Sheets[sheetName], {
+    header: 1,
+    blankrows: false,
+    defval: '',
+    raw: false,
+  })
+    .map((row) => row.map((cell) => String(cell ?? '').trim()))
+    .filter((row) => row.some(Boolean))
+
+  return parseClientImportRows(rows)
 }
 
 function coerceImportedClientPatch(patch: Partial<Client>) {
@@ -3926,12 +3950,15 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
   const importClientFile = async (file: File | null) => {
     if (!file) return
     try {
-      const text = await file.text()
-      const patchData = coerceImportedClientPatch(parseClientImportText(text))
+      const isExcelFile = /\.(xlsx|xls)$/i.test(file.name)
+      const parsedPatch = isExcelFile
+        ? await parseClientImportWorkbook(await file.arrayBuffer())
+        : parseClientImportText(await file.text())
+      const patchData = coerceImportedClientPatch(parsedPatch)
       onChange(deriveClientMetrics({ ...client, ...patchData }))
     } catch (error) {
       console.warn('Failed to import client file.', error)
-      window.alert('文件解析失败。请使用 JSON、CSV 或 TSV，并使用系统字段名或中文字段名。')
+      window.alert('文件解析失败。请使用 JSON、CSV、TSV、XLS 或 XLSX，并使用系统字段名或中文字段名。')
     }
   }
   const renderChecks = (items: Array<[keyof Client, string]>) => items.map(([key, label]) => (
@@ -4101,7 +4128,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <p className="auto-fill-note">系统会根据基础数据自动计算部分检测口径；如需改用特殊口径，请在对应字段切换“手动填写”并说明原因。</p>
           <label className="secondary-button compact-button file-import-button">
             <FileText /> 上传表格填充
-            <input type="file" accept=".json,.csv,.tsv,.txt" onChange={(event) => void importClientFile(event.target.files?.[0] || null)} />
+            <input type="file" accept=".json,.csv,.tsv,.txt,.xlsx,.xls" onChange={(event) => void importClientFile(event.target.files?.[0] || null)} />
           </label>
         </div>
         <div className="intake-score">
