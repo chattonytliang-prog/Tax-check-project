@@ -9,7 +9,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary'],
-      include: ['src/lib/ruleEngine.ts'],
+      include: ['src/lib/*.ts'],
       exclude: coverageConfigDefaults.exclude,
       thresholds: {
         lines: 95,

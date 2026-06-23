@@ -1304,25 +1304,19 @@ th {
   border-color: rgba(12, 140, 130, 0.2);
 }
 
-.field-missing-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 18px;
-  padding: 0 7px;
-  border-radius: 999px;
-  font-style: normal;
-  font-size: 11px;
-  line-height: 1;
+.field-missing-hint {
+  margin-top: -2px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
 }
 
-.field-missing-badge.required {
-  color: white;
-  background: var(--red);
+.field-missing-hint.required {
+  color: var(--red);
 }
 
-.field-missing-badge.recommended {
-  color: white;
-  background: var(--orange);
+.field-missing-hint.recommended {
+  color: var(--orange);
 }
 
 .field input,
