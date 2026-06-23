@@ -2153,7 +2153,7 @@ ${groupName ? `所属集团项目：${groupName}\n主体角色：${getEntityRole
 二、综合风险结论
 本次系统共命中 ${risks.length} 项风险提示，其中高风险 ${highCount} 项，中风险 ${mediumCount} 项，综合风险等级为【${level}】。
 ${reportMissingFields.length ? `本次基础检测资料仍缺少：${validationSummary(reportMissingFields)}。报告结论应作为风险线索参考，补齐资料后建议重新生成。` : '本次基础检测必填资料已补齐，可支持初步风险判断。'}
-本结论基于当前录入数据和系统规则库生成，建议由财税专业人员结合原始凭证、账套、申报表、合同、资金流水进一步复核。
+本结论基于已选档案期间数据和系统规则库生成，建议由财税专业人员结合原始凭证、账套、申报表、合同、资金流水进一步复核。
 本报告仅适用于上述数据期间和数据口径；期间或口径变化后，建议重新生成报告。
 
 三、资料完整性说明
@@ -2664,10 +2664,11 @@ function App() {
         if (!active) return
 
         const normalizedClients = clientsResponse.clients.map((client) => deriveClientMetrics(normalizeClient(client)))
-        setClients(normalizedClients)
+        const visibleClients = normalizedClients.length ? normalizedClients : createDemoClients()
+        setClients(visibleClients)
         setReports(reportsResponse.reports)
-        if (normalizedClients[0]) {
-          setSelectedClientId(normalizedClients[0].id)
+        if (visibleClients[0]) {
+          setSelectedClientId(visibleClients[0].id)
           setSelectedPeriodEntryIds([])
         }
         setDataStatus('connected')
@@ -2751,10 +2752,10 @@ function App() {
   const selectedPeriodsContinuous = selectedPeriodEntries.length === 0 || areMonthsContinuous(selectedPeriodMonths)
   const selectedPeriodLabel = selectedPeriodEntries.length
     ? `${formatMonthRange(selectedPeriodMonths)}｜${selectedPeriodEntries.length} 期`
-    : '当前录入数据'
+    : '请选择已有档案期间'
   const selectedDetectionClient = useMemo(() => {
     if (!selectedClient) return null
-    if (!selectedPeriodEntries.length || !selectedPeriodsContinuous) return deriveClientMetrics(selectedClient)
+    if (!selectedPeriodEntries.length || !selectedPeriodsContinuous) return null
     return deriveClientMetrics({
       ...selectedClient,
       ...summarizePeriodEntries(selectedClient, selectedPeriodEntries),
@@ -3316,6 +3317,14 @@ function App() {
 
   const createReport = async (confirmed = false) => {
     if (!selectedClient || aiReportStage) return
+    if (!selectedClient.periodEntries.length) {
+      window.alert('请先在数据录入页保存一条期间数据，再基于已归档数据生成报告。')
+      return
+    }
+    if (!selectedPeriodEntries.length) {
+      window.alert('请先选择要生成报告的已有期间数据，可以选择单月、季度、连续多月或全年。')
+      return
+    }
     if (selectedPeriodEntries.length > 0 && !selectedPeriodsContinuous) {
       window.alert('选择的月份不连续，不能合并生成一份报告。请改选连续月份，例如 1-3 月、4-6 月或全年。')
       return
@@ -3436,6 +3445,17 @@ function App() {
       console.warn('Report deleted locally only.', error)
       setDataStatus('fallback')
     }
+  }
+
+  const openClientForRiskSelection = (client: Client) => {
+    setSelectedClientId(client.id)
+    setSelectedPeriodEntryIds([])
+    setPage('result')
+  }
+
+  const openArchiveForRiskSelection = () => {
+    setSelectedPeriodEntryIds([])
+    setPage('clients')
   }
 
   const handleAuthSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -3638,7 +3658,7 @@ function App() {
           >
             <Plus /> 数据录入
           </button>
-          <button className={page === 'result' ? 'active' : ''} onClick={() => setPage('result')}>
+          <button className={page === 'result' ? 'active' : ''} onClick={openArchiveForRiskSelection}>
             <Gauge /> 风险检测
           </button>
           <button className={page === 'reports' || page === 'report' ? 'active' : ''} onClick={() => setPage('reports')}>
@@ -3924,6 +3944,9 @@ function App() {
                         >
                           查看
                         </button>
+                        <button onClick={() => openClientForRiskSelection(client)}>
+                          检测
+                        </button>
                         <button
                           onClick={() => {
                             setEditingClient(deriveClientMetrics(client))
@@ -4022,7 +4045,7 @@ function App() {
                   </div>
                   <div className="period-actions-row">
                     <button type="button" className="secondary-button compact-button" onClick={() => setSelectedPeriodEntryIds([])}>
-                      使用当前数据
+                      清空期间选择
                     </button>
                     <button
                       type="button"
@@ -4043,9 +4066,11 @@ function App() {
                   )}
                 </>
               ) : (
-                <p className="section-helper">当前企业还没有保存期间快照。保存一次资料后，系统会自动归档本期数据。</p>
+                <p className="section-helper">当前企业还没有保存期间快照。请先到数据录入页保存期间数据，再选择已有档案生成检测和报告。</p>
               )}
             </section>
+            {selectedDetectionClient ? (
+              <>
             <div className="result-summary">
               <StatCard label="综合等级" value={`${overallLevel}风险`} icon={<Gauge />} tone={overallLevel === '高' ? 'red' : overallLevel === '中' ? 'orange' : 'green'} />
               <StatCard label="风险事项" value={currentRisks.length} icon={<ClipboardList />} tone="orange" />
@@ -4173,6 +4198,14 @@ function App() {
                 </div>
               )}
             </div>
+              </>
+            ) : (
+              <div className="empty-state wide">
+                <ClipboardList />
+                <h3>请选择已有档案期间</h3>
+                <p>风险检测和报告生成必须基于已保存的期间数据。请选择单月、季度、连续多月或全年后再生成结果。</p>
+              </div>
+            )}
           </section>
         )}
 
@@ -4190,12 +4223,12 @@ function App() {
                 <article>
                   <span>分析范围</span>
                   <strong>{selectedPeriodLabel}</strong>
-                  <small>{selectedPeriodEntries.length ? `使用 ${selectedPeriodEntries.length} 期期间数据` : '使用企业当前录入数据'}</small>
+                  <small>{selectedPeriodEntries.length ? `使用 ${selectedPeriodEntries.length} 期期间数据` : '未选择归档期间'}</small>
                 </article>
                 <article>
                   <span>月份连续性</span>
                   <strong>{selectedPeriodsContinuous ? '连续' : '不连续'}</strong>
-                  <small>{selectedPeriodEntries.length ? formatMonthRange(selectedPeriodMonths) : '未选择归档期间'}</small>
+                  <small>{selectedPeriodEntries.length ? formatMonthRange(selectedPeriodMonths) : '请先选择已有档案数据'}</small>
                 </article>
                 <article>
                   <span>数据口径</span>
@@ -4250,6 +4283,67 @@ function App() {
                 <h2>历史体检报告</h2>
               </div>
             </header>
+            <section className="panel archive-overview-panel">
+              <div className="panel-title">
+                <div>
+                  <p className="eyebrow">生成报告</p>
+                  <h3>选择已有档案数据</h3>
+                  <p className="section-helper">报告必须基于已保存的企业档案和连续期间数据生成。先选择企业，再确认单月、季度、连续多月或全年范围。</p>
+                </div>
+                <button
+                  type="button"
+                  className="primary-button compact-button"
+                  onClick={() => {
+                    setEditingClient(blankDraftClient())
+                    setPage('form')
+                  }}
+                >
+                  <Plus /> 录入新数据
+                </button>
+              </div>
+              <div className="table-panel compact-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>企业名称</th>
+                      <th>期间数据</th>
+                      <th>当前风险</th>
+                      <th>报告状态</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clientRows.map(({ client, level, report }) => (
+                      <tr key={`report-source-${client.id}`}>
+                        <td>
+                          <strong>{client.name}</strong>
+                          <small>{client.creditCode}</small>
+                        </td>
+                        <td>{client.periodEntries.length ? `${client.periodEntries.length} 期` : '未归档'}</td>
+                        <td><LevelBadge level={level} /></td>
+                        <td>{report ? '已生成' : '未生成'}</td>
+                        <td className="row-actions">
+                          <button onClick={() => openClientForRiskSelection(client)}>
+                            选择期间
+                          </button>
+                          {report && (
+                            <button
+                              onClick={() => {
+                                setSelectedClientId(client.id)
+                                setSelectedPeriodEntryIds([])
+                                setPage('report')
+                              }}
+                            >
+                              查看报告
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
             <div className="report-grid">
               {reports.map((report) => (
                 <article className="report-card" key={report.id}>
