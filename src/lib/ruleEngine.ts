@@ -18,6 +18,16 @@ export type ExecutableRule = {
   code: string
   enabled: boolean
   conditionJson: RuleCondition
+  requiredFields?: string[]
+}
+
+export type RuleExecutionStatus = 'matched' | 'not_matched' | 'skipped_missing_data' | 'disabled' | 'not_executable'
+
+export type RuleExecutionResult = {
+  code: string
+  status: RuleExecutionStatus
+  missingFields: string[]
+  matched: boolean
 }
 
 export const emptyRuleCondition: SimpleRuleCondition = { field: '', operator: '=', value: '' }
@@ -148,6 +158,24 @@ export function evaluateCondition(client: ClientSnapshot, condition?: RuleCondit
   }
 }
 
+export function conditionRequiredFields(condition?: RuleCondition): string[] {
+  if (!condition) return []
+  if ('all' in condition) return Array.from(new Set(condition.all.flatMap(conditionRequiredFields)))
+  if ('any' in condition) return Array.from(new Set(condition.any.flatMap(conditionRequiredFields)))
+  if (!condition.field) return []
+
+  return Array.from(new Set([condition.field, condition.compareField].filter(Boolean) as string[]))
+}
+
+export function isClientValuePresent(value: ClientValue) {
+  return value !== undefined && value !== null && value !== ''
+}
+
+export function missingRequiredFields(client: ClientSnapshot, condition?: RuleCondition, extraRequiredFields: string[] = []) {
+  const fields = Array.from(new Set([...conditionRequiredFields(condition), ...extraRequiredFields]))
+  return fields.filter((field) => !isClientValuePresent(client[field]))
+}
+
 export function conditionSummary(condition?: RuleCondition): string {
   if (!condition) return '未设置执行条件'
   if ('all' in condition) return `全部满足：${condition.all.map(conditionSummary).join('；')}`
@@ -168,7 +196,40 @@ export function isExecutableCondition(condition?: RuleCondition) {
 
 export function detectExecutableRuleCodes(client: ClientSnapshot, rules: ExecutableRule[]) {
   return rules
-    .filter((rule) => rule.enabled && isExecutableCondition(rule.conditionJson))
-    .filter((rule) => evaluateCondition(client, rule.conditionJson))
+    .map((rule) => evaluateRuleExecution(client, rule))
+    .filter((result) => result.status === 'matched')
+    .map((result) => result.code)
+}
+
+export function evaluateRuleExecution(client: ClientSnapshot, rule: ExecutableRule): RuleExecutionResult {
+  if (!rule.enabled) {
+    return { code: rule.code, status: 'disabled', missingFields: [], matched: false }
+  }
+
+  if (!isExecutableCondition(rule.conditionJson)) {
+    return { code: rule.code, status: 'not_executable', missingFields: [], matched: false }
+  }
+
+  const missingFields = missingRequiredFields(client, rule.conditionJson, rule.requiredFields)
+  if (missingFields.length) {
+    return { code: rule.code, status: 'skipped_missing_data', missingFields, matched: false }
+  }
+
+  const matched = evaluateCondition(client, rule.conditionJson)
+  return {
+    code: rule.code,
+    status: matched ? 'matched' : 'not_matched',
+    missingFields: [],
+    matched,
+  }
+}
+
+export function evaluateRuleExecutions(client: ClientSnapshot, rules: ExecutableRule[]) {
+  return rules.map((rule) => evaluateRuleExecution(client, rule))
+}
+
+export function skippedMissingDataRules(client: ClientSnapshot, rules: ExecutableRule[]) {
+  return evaluateRuleExecutions(client, rules)
+    .filter((result) => result.status === 'skipped_missing_data')
     .map((rule) => rule.code)
 }

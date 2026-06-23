@@ -29,9 +29,11 @@ import {
   conditionSummary,
   emptyRuleCondition,
   evaluateCondition,
+  evaluateRuleExecution,
   isExecutableCondition,
   isSimpleCondition,
   type RuleCondition,
+  type RuleExecutionResult,
   type RiskLevel,
   type SimpleRuleCondition,
 } from './lib/ruleEngine'
@@ -39,10 +41,15 @@ import './App.css'
 
 type Page = 'dashboard' | 'clients' | 'form' | 'result' | 'report' | 'reports' | 'rules' | 'admin'
 type TaxpayerType = '小规模纳税人' | '一般纳税人' | '个体工商户'
+type ProjectScope = '单主体' | '集团项目'
+type EntityRole = '单体企业' | '集团总部' | '经营主体' | '关联主体' | '个体户/个人独资'
 
 type Client = {
   id: string
   name: string
+  projectScope: ProjectScope
+  groupName: string
+  entityRole: EntityRole
   creditCode: string
   region: string
   industry: string
@@ -109,10 +116,17 @@ type RiskRule = {
   reason: (client: Client) => string
   suggestion: string
   materials: string[]
+  conditionJson?: RuleCondition
+  requiredFields?: string[]
 }
 
 type RiskResult = RiskRule & {
   triggeredAt: string
+}
+
+type SkippedRule = {
+  rule: RiskRule
+  execution: RuleExecutionResult
 }
 
 type AiReview = {
@@ -131,6 +145,7 @@ type ManagedRule = {
   enabled: boolean
   conditionText: string
   conditionJson: RuleCondition
+  requiredFields: string[]
   materials: string[]
   createdAt?: string
   updatedAt?: string
@@ -173,6 +188,9 @@ type AdminUser = {
 const emptyClient: Client = {
   id: '',
   name: '',
+  projectScope: '单主体',
+  groupName: '',
+  entityRole: '单体企业',
   creditCode: '',
   region: '上海',
   industry: '商贸',
@@ -233,6 +251,9 @@ const demoClients: Client[] = [
     ...emptyClient,
     id: crypto.randomUUID(),
     name: '上海辰光商贸有限公司',
+    projectScope: '集团项目',
+    groupName: '辰光商贸集团',
+    entityRole: '经营主体',
     creditCode: '91310000MVP000001',
     region: '上海',
     industry: '商贸',
@@ -252,6 +273,9 @@ const demoClients: Client[] = [
     ...emptyClient,
     id: crypto.randomUUID(),
     name: '杭州星河直播工作室',
+    projectScope: '单主体',
+    groupName: '',
+    entityRole: '个体户/个人独资',
     creditCode: '92330000MVP000002',
     region: '浙江',
     industry: '直播自媒体',
@@ -271,6 +295,9 @@ const demoClients: Client[] = [
     ...emptyClient,
     id: crypto.randomUUID(),
     name: '苏州精密制造有限公司',
+    projectScope: '单主体',
+    groupName: '',
+    entityRole: '单体企业',
     creditCode: '91320000MVP000003',
     region: '江苏',
     industry: '制造',
@@ -304,6 +331,7 @@ const emptyManagedRule: ManagedRule = {
   enabled: true,
   conditionText: '',
   conditionJson: emptyRuleCondition,
+  requiredFields: [],
   materials: [],
 }
 
@@ -759,6 +787,40 @@ function taxTypeSummary(risks: RiskResult[]) {
     .map(([taxType, item]) => `${taxType}：${item.total} 项，其中高风险 ${item.high} 项、中风险 ${item.medium} 项`)
 }
 
+function getProjectScope(client: Client): ProjectScope {
+  return client.projectScope || '单主体'
+}
+
+function getEntityRole(client: Client): EntityRole {
+  return (client.entityRole || (getProjectScope(client) === '集团项目' ? '经营主体' : '单体企业')) as EntityRole
+}
+
+function getGroupName(client: Client) {
+  const groupName = String(client.groupName || '').trim()
+  return getProjectScope(client) === '集团项目' && groupName
+    ? groupName
+    : ''
+}
+
+function buildGroupSummaries(clients: Client[], managedRules: ManagedRule[] = []) {
+  const groups = new Map<string, { name: string; clients: Client[]; risks: RiskResult[]; highClients: number; mediumClients: number }>()
+
+  clients.forEach((client) => {
+    const groupName = getGroupName(client)
+    if (!groupName) return
+    const risks = detectRisks(client, managedRules)
+    const level = getOverallLevel(risks)
+    const current = groups.get(groupName) || { name: groupName, clients: [], risks: [], highClients: 0, mediumClients: 0 }
+    current.clients.push(client)
+    current.risks.push(...risks)
+    if (level === '高') current.highClients += 1
+    if (level === '中') current.mediumClients += 1
+    groups.set(groupName, current)
+  })
+
+  return Array.from(groups.values()).sort((a, b) => b.highClients - a.highClients || b.risks.length - a.risks.length)
+}
+
 function managedRuleToRisk(rule: ManagedRule): RiskRule {
   return {
     code: rule.code,
@@ -773,19 +835,49 @@ function managedRuleToRisk(rule: ManagedRule): RiskRule {
     },
     suggestion: rule.suggestion,
     materials: rule.materials,
+    conditionJson: rule.conditionJson,
+    requiredFields: rule.requiredFields,
   }
 }
 
-function detectRisks(client: Client, managed: ManagedRule[] = []): RiskResult[] {
+function riskRuleCondition(rule: RiskRule) {
+  return rule.conditionJson || builtInRuleConditions[rule.code] || emptyRuleCondition
+}
+
+function riskRuleExecution(client: Client, rule: RiskRule) {
+  return evaluateRuleExecution(client, {
+    code: rule.code,
+    enabled: true,
+    conditionJson: riskRuleCondition(rule),
+    requiredFields: rule.requiredFields,
+  })
+}
+
+function getSourceRules(managed: ManagedRule[] = []) {
   const executableRules = managed
     .filter((rule) => rule.enabled && isExecutableCondition(rule.conditionJson))
     .map(managedRuleToRisk)
-  const sourceRules = executableRules.length ? executableRules : rules
+
+  return executableRules.length ? executableRules : rules
+}
+
+function detectRisks(client: Client, managed: ManagedRule[] = []): RiskResult[] {
+  const sourceRules = getSourceRules(managed)
 
   return sourceRules
-    .filter((rule) => rule.trigger(client))
+    .filter((rule) => riskRuleExecution(client, rule).status === 'matched')
     .sort((a, b) => riskRank(b.level) - riskRank(a.level))
     .map((rule) => ({ ...rule, triggeredAt: formatDate() }))
+}
+
+function getSkippedRules(client: Client, managed: ManagedRule[] = []): SkippedRule[] {
+  return getSourceRules(managed)
+    .map((rule) => ({ rule, execution: riskRuleExecution(client, rule) }))
+    .filter((item) => item.execution.status === 'skipped_missing_data')
+}
+
+function fieldLabel(field: string) {
+  return conditionFields.find((item) => item.value === field)?.label || field
 }
 
 function buildReportContent(client: Client, risks: RiskResult[]) {
@@ -794,6 +886,7 @@ function buildReportContent(client: Client, risks: RiskResult[]) {
   const mediumCount = risks.filter((r) => r.level === '中').length
   const completeness = getDataCompleteness(client, risks)
   const byTaxType = taxTypeSummary(risks).join('\n')
+  const groupName = getGroupName(client)
   const riskSummary = risks
     .slice(0, 8)
     .map((risk, index) => `${index + 1}. ${riskIssueId(risk)}｜【${risk.level}风险】${risk.name}：${risk.reason(client)}`)
@@ -807,6 +900,8 @@ function buildReportContent(client: Client, risks: RiskResult[]) {
 所属地区：${client.region}
 所属行业：${client.industry}
 纳税人类型：${client.taxpayerType}
+项目口径：${getProjectScope(client)}
+${groupName ? `所属集团项目：${groupName}\n主体角色：${getEntityRole(client)}` : `主体角色：${getEntityRole(client)}`}
 最近检测时间：${formatDate()}
 
 二、综合风险结论
@@ -1188,7 +1283,7 @@ function RiskOrbit({
   return (
     <section className="panel three-panel">
       <div>
-        <p className="eyebrow">Three.js 风险态势</p>
+        <p className="eyebrow">风险态势</p>
         <h3>{total ? `${total} 个风险事项` : '暂无明显风险事项'}</h3>
         <p>红色代表高风险，橙色代表中风险，青色代表持续关注项。</p>
       </div>
@@ -1344,12 +1439,13 @@ function App() {
 
   const selectedClient = clients.find((client) => client.id === selectedClientId) || clients[0]
   const currentRisks = useMemo(() => (selectedClient ? detectRisks(selectedClient, managedRules) : []), [selectedClient, managedRules])
+  const currentSkippedRules = useMemo(() => (selectedClient ? getSkippedRules(selectedClient, managedRules) : []), [selectedClient, managedRules])
   const overallLevel = getOverallLevel(currentRisks)
   const currentCompleteness = selectedClient ? getDataCompleteness(selectedClient, currentRisks) : null
 
   const clientRows = useMemo(() => {
     return clients
-      .filter((client) => client.name.includes(query) || client.creditCode.includes(query))
+      .filter((client) => client.name.includes(query) || client.creditCode.includes(query) || getGroupName(client).includes(query))
       .map((client) => {
         const risks = detectRisks(client, managedRules)
         return {
@@ -1361,12 +1457,21 @@ function App() {
       })
   }, [clients, query, reports, managedRules])
 
+  const groupSummaries = useMemo(() => buildGroupSummaries(clients, managedRules), [clients, managedRules])
+  const selectedGroupSummary = useMemo(() => {
+    if (!selectedClient) return null
+    const groupName = getGroupName(selectedClient)
+    if (!groupName) return null
+    return groupSummaries.find((group) => group.name === groupName) || null
+  }, [selectedClient, groupSummaries])
+
   const stats = useMemo(() => {
     const clientStats = clients.map((client) => detectRisks(client, managedRules))
     return {
       high: clientStats.filter((risks) => getOverallLevel(risks) === '高').length,
       medium: clientStats.filter((risks) => getOverallLevel(risks) === '中').length,
       detections: clientStats.reduce((sum, risks) => sum + risks.length, 0),
+      groups: buildGroupSummaries(clients, managedRules).length,
     }
   }, [clients, managedRules])
   const dashboardLevelRows = useMemo<ChartDatum[]>(() => {
@@ -1538,6 +1643,7 @@ function App() {
             enabled: true,
             conditionText: rule.caseRef,
             conditionJson: builtInRuleConditions[rule.code] || { field: '', operator: '=', value: '' },
+            requiredFields: rule.requiredFields || [],
             materials: rule.materials,
           }),
         ),
@@ -1549,10 +1655,40 @@ function App() {
     }
   }
 
+  const importCandidateRules = async () => {
+    if (!window.confirm('确定导入脱敏候选规则吗？候选规则会默认停用，不会直接影响风险检测。')) return
+
+    try {
+      const response = await fetch('/rule-candidates/tax-warning-candidates.json')
+      if (!response.ok) {
+        throw new Error(`Candidate rules request failed: ${response.status}`)
+      }
+      const candidateRules = await response.json() as ManagedRule[]
+      await Promise.all(
+        candidateRules.map((rule) =>
+          apiSend<{ rule: ManagedRule }>('/api/rules', 'POST', {
+            ...rule,
+            enabled: false,
+            conditionJson: emptyRuleCondition,
+          }),
+        ),
+      )
+      await refreshRules()
+    } catch (error) {
+      console.warn('Failed to import candidate rules.', error)
+      window.alert('导入脱敏候选规则失败。')
+    }
+  }
+
   const saveClient = async () => {
-    const normalized = editingClient.name.trim()
-      ? editingClient
-      : { ...editingClient, name: `未命名企业 ${clients.length + 1}` }
+    const normalizedName = editingClient.name.trim() || `未命名企业 ${clients.length + 1}`
+    const normalized: Client = {
+      ...editingClient,
+      name: normalizedName,
+      projectScope: getProjectScope(editingClient),
+      groupName: getProjectScope(editingClient) === '集团项目' ? editingClient.groupName.trim() : '',
+      entityRole: getProjectScope(editingClient) === '集团项目' ? getEntityRole(editingClient) : '单体企业',
+    }
 
     setClients((current) => {
       const exists = current.some((client) => client.id === normalized.id)
@@ -1931,9 +2067,9 @@ function App() {
             </header>
             <div className="stat-grid">
               <StatCard label="企业档案" value={clients.length} icon={<Building2 />} />
+              <StatCard label="集团项目" value={stats.groups} icon={<ClipboardList />} tone="green" />
               <StatCard label="命中风险" value={stats.detections} icon={<AlertTriangle />} tone="orange" />
               <StatCard label="高风险企业" value={stats.high} icon={<Gauge />} tone="red" />
-              <StatCard label="已生成报告" value={reports.length} icon={<FileText />} tone="green" />
             </div>
             <div className="analytics-grid">
               <EChartPanel
@@ -1985,11 +2121,34 @@ function App() {
                 <p>从企业财税画像出发，先用规则引擎完成确定性检测，再由 AI 辅助复核数据疑点并生成可流转报告。</p>
                 <ul>
                   <li>录入企业基础、经营、发票和人员数据</li>
+                  <li>集团项目按主体分别建档，汇总查看多主体风险</li>
                   <li>自动识别增值税、所得税、发票和资金风险</li>
                   <li>生成风险体检报告并支持 Word 导出</li>
                 </ul>
               </section>
             </div>
+            {groupSummaries.length > 0 && (
+              <section className="panel group-panel">
+                <div className="panel-title">
+                  <h3>集团项目汇总</h3>
+                  <button className="text-button" onClick={() => setPage('clients')}>管理主体</button>
+                </div>
+                <div className="group-summary-grid">
+                  {groupSummaries.map((group) => (
+                    <article key={group.name} className="group-summary-card">
+                      <div>
+                        <strong>{group.name}</strong>
+                        <small>{group.clients.length} 个主体 / 命中 {group.risks.length} 项风险</small>
+                      </div>
+                      <div className="group-metrics">
+                        <span>高风险主体 {group.highClients}</span>
+                        <span>中风险主体 {group.mediumClients}</span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
           </section>
         )}
 
@@ -2012,13 +2171,14 @@ function App() {
             </header>
             <div className="toolbar">
               <Search />
-              <input placeholder="搜索企业名称或统一社会信用代码" value={query} onChange={(event) => setQuery(event.target.value)} />
+              <input placeholder="搜索企业名称、统一社会信用代码或集团项目" value={query} onChange={(event) => setQuery(event.target.value)} />
             </div>
             <div className="table-panel">
               <table>
                 <thead>
                   <tr>
                     <th>企业名称</th>
+                    <th>项目口径</th>
                     <th>行业</th>
                     <th>纳税人类型</th>
                     <th>地区</th>
@@ -2033,6 +2193,10 @@ function App() {
                       <td>
                         <strong>{client.name}</strong>
                         <small>{client.creditCode}</small>
+                      </td>
+                      <td>
+                        <strong>{getProjectScope(client)}</strong>
+                        <small>{getGroupName(client) || getEntityRole(client)}</small>
                       </td>
                       <td>{client.industry}</td>
                       <td>{client.taxpayerType}</td>
@@ -2079,7 +2243,7 @@ function App() {
                 <ShieldCheck /> 保存并检测
               </button>
             </header>
-            <ClientForm client={editingClient} onChange={setEditingClient} />
+            <ClientForm client={editingClient} clients={clients} onChange={setEditingClient} />
           </section>
         )}
 
@@ -2105,6 +2269,22 @@ function App() {
               <StatCard label="高风险" value={currentRisks.filter((risk) => risk.level === '高').length} icon={<AlertTriangle />} tone="red" />
               <StatCard label="中风险" value={currentRisks.filter((risk) => risk.level === '中').length} icon={<BarChart3 />} />
             </div>
+            {selectedGroupSummary && (
+              <section className="panel selected-group-panel">
+                <div>
+                  <p className="eyebrow">集团项目</p>
+                  <h3>{selectedGroupSummary.name}</h3>
+                  <p className="section-helper">
+                    当前主体角色：{getEntityRole(selectedClient)}。集团口径共 {selectedGroupSummary.clients.length} 个主体，合计命中 {selectedGroupSummary.risks.length} 项风险。
+                  </p>
+                </div>
+                <div className="group-metrics">
+                  <span>高风险主体 {selectedGroupSummary.highClients}</span>
+                  <span>中风险主体 {selectedGroupSummary.mediumClients}</span>
+                  <span>当前主体 {selectedClient.name}</span>
+                </div>
+              </section>
+            )}
             <div className="analytics-grid result-analytics">
               <EChartPanel
                 title="当前企业税种分布"
@@ -2138,6 +2318,25 @@ function App() {
                       ? currentCompleteness.suggestedMaterials.map((item) => <span key={item}>{item}</span>)
                       : <span>继续完善申报表、发票、流水和合同等原始资料</span>}
                   </div>
+                </div>
+              </section>
+            )}
+            {currentSkippedRules.length > 0 && (
+              <section className="panel skipped-rules-panel">
+                <div className="panel-title">
+                  <div>
+                    <p className="eyebrow">资料不足未执行规则</p>
+                    <h3>补齐资料后自动纳入检测</h3>
+                  </div>
+                  <span>{currentSkippedRules.length} 条</span>
+                </div>
+                <div className="skipped-rule-list">
+                  {currentSkippedRules.slice(0, 8).map(({ rule, execution }) => (
+                    <article key={rule.code} className="skipped-rule-card">
+                      <strong>{rule.code}｜{rule.name}</strong>
+                      <small>缺少字段：{execution.missingFields.map(fieldLabel).join('、')}</small>
+                    </article>
+                  ))}
                 </div>
               </section>
             )}
@@ -2299,9 +2498,14 @@ function App() {
                   <RefreshCcw /> 刷新
                 </button>
                 {canUseAdmin && (
-                  <button className="primary-button" onClick={importBuiltInRules}>
-                    <Plus /> 导入内置规则
-                  </button>
+                  <>
+                    <button className="secondary-button" onClick={importCandidateRules}>
+                      <ClipboardList /> 导入脱敏候选规则
+                    </button>
+                    <button className="primary-button" onClick={importBuiltInRules}>
+                      <Plus /> 导入内置规则
+                    </button>
+                  </>
                 )}
               </div>
             </header>
@@ -2419,6 +2623,20 @@ function App() {
                       }
                     />
                   </Field>
+                  <Field label="执行所需字段，每行一项">
+                    <textarea
+                      value={ruleDraft.requiredFields.join('\n')}
+                      onChange={(event) =>
+                        setRuleDraft({
+                          ...ruleDraft,
+                          requiredFields: event.target.value
+                            .split('\n')
+                            .map((item) => item.trim())
+                            .filter(Boolean),
+                        })
+                      }
+                    />
+                  </Field>
                 </div>
                 <div className="header-actions">
                   <button className="primary-button" onClick={saveManagedRule}>
@@ -2438,6 +2656,7 @@ function App() {
                   <h3>{rule.name}</h3>
                   <p>{rule.taxType || '未填写税种'} / {rule.enabled ? '启用' : '停用'}</p>
                   {conditionSummary(rule.conditionJson) !== '不参与自动检测' && <small>执行条件：{conditionSummary(rule.conditionJson)}</small>}
+                  {rule.requiredFields.length > 0 && <small>执行所需字段：{rule.requiredFields.join('、')}</small>}
                   {rule.conditionText && <small>{rule.conditionText}</small>}
                   <small>{rule.basis}</small>
                   <p>{rule.suggestion}</p>
@@ -2479,7 +2698,7 @@ function App() {
   )
 }
 
-function ClientForm({ client, onChange }: { client: Client; onChange: (client: Client) => void }) {
+function ClientForm({ client, clients, onChange }: { client: Client; clients: Client[]; onChange: (client: Client) => void }) {
   const patch = <K extends keyof Client>(key: K, value: Client[K]) => {
     onChange({ ...client, [key]: value })
   }
@@ -2525,6 +2744,7 @@ function ClientForm({ client, onChange }: { client: Client; onChange: (client: C
   const vatMaterialGaps = ['月度增值税申报表及附表', '开票明细与发票样本', '进项抵扣及进项转出明细', '会员卡/预收款明细', '视同销售场景说明']
   const citMaterialGaps = ['企业所得税季度及年度申报表', '汇算清缴申报表及测算底稿', '无票/替票/个人抬头发票明细', '三费扣除限额测算', '关联资金拆借及管理费资料']
   const iitMaterialGaps = ['工资薪金个税申报明细', '临时工/劳务/佣金付款明细', '绩效和年终奖发放明细', '非现金福利及员工餐住宿资料', '社保缴纳清单']
+  const existingGroupNames = Array.from(new Set(clients.map(getGroupName).filter(Boolean)))
   const renderChecks = (items: Array<[keyof Client, string]>) => items.map(([key, label]) => (
     <BoolField
       key={String(key)}
@@ -2562,10 +2782,60 @@ function ClientForm({ client, onChange }: { client: Client; onChange: (client: C
       <section className="form-section">
         <div className="section-title-row">
           <div>
+            <h3>项目结构</h3>
+            <p className="section-helper">真实健康检查通常按主体分别建档；选择集团项目后，系统会在工作台和结果页生成集团口径汇总。</p>
+          </div>
+          <span>Step 1</span>
+        </div>
+        <div className="form-grid">
+          <Field label="项目口径">
+            <select
+              value={getProjectScope(client)}
+              onChange={(e) => {
+                const projectScope = e.target.value as ProjectScope
+                onChange({
+                  ...client,
+                  projectScope,
+                  groupName: projectScope === '集团项目' ? String(client.groupName || '') : '',
+                  entityRole: projectScope === '集团项目' ? (client.entityRole === '单体企业' ? '经营主体' : getEntityRole(client)) : '单体企业',
+                })
+              }}
+            >
+              <option>单主体</option>
+              <option>集团项目</option>
+            </select>
+          </Field>
+          <Field label="集团项目名称">
+            <input
+              value={client.groupName || ''}
+              list="group-name-options"
+              placeholder={getProjectScope(client) === '集团项目' ? '例如：某餐饮集团' : '单主体无需填写'}
+              disabled={getProjectScope(client) !== '集团项目'}
+              onChange={(e) => patch('groupName', e.target.value)}
+            />
+            <datalist id="group-name-options">
+              {existingGroupNames.map((item) => <option key={item} value={item} />)}
+            </datalist>
+          </Field>
+          <Field label="主体角色">
+            <select value={getEntityRole(client)} onChange={(e) => patch('entityRole', e.target.value as EntityRole)} disabled={getProjectScope(client) !== '集团项目'}>
+              <option>集团总部</option>
+              <option>经营主体</option>
+              <option>关联主体</option>
+              <option>个体户/个人独资</option>
+              <option>单体企业</option>
+            </select>
+          </Field>
+        </div>
+      </section>
+
+      <section className="form-section">
+        <div className="section-title-row">
+          <div>
             <h3>基础资料（共用）</h3>
             <p className="section-helper">用于确定审阅主体、地区、行业、纳税人身份和适用检查口径。</p>
           </div>
-          <span>Step 1</span>
+          <span>Step 2</span>
         </div>
         <div className="form-grid">
           <Field label="企业名称"><input value={client.name} onChange={(e) => patch('name', e.target.value)} /></Field>
@@ -2593,7 +2863,7 @@ function ClientForm({ client, onChange }: { client: Client; onChange: (client: C
             <h3>快速体检数据（共用）</h3>
             <p className="section-helper">用于先跑通整体经营规模、收入成本、收款流水和人员匹配关系。</p>
           </div>
-          <span>Step 2</span>
+          <span>Step 3</span>
         </div>
         <div className="form-grid">
           <Field label="月收入"><input type="number" value={client.monthlyRevenue} onChange={num('monthlyRevenue')} /></Field>

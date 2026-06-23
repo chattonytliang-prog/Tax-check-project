@@ -30,6 +30,12 @@ function normalizeRule(input, code) {
         .split('\n')
         .map((item) => item.trim())
         .filter(Boolean)
+  const requiredFields = Array.isArray(input.requiredFields)
+    ? input.requiredFields.map((item) => String(item).trim()).filter(Boolean)
+    : String(input.requiredFields || '')
+        .split('\n')
+        .map((item) => item.trim())
+        .filter(Boolean)
 
   return {
     code: String(code || '').trim().toUpperCase(),
@@ -41,6 +47,7 @@ function normalizeRule(input, code) {
     enabled: input.enabled === false ? 0 : 1,
     conditionText: String(input.conditionText || '').trim(),
     conditionJson: normalizeCondition(input.conditionJson),
+    requiredFields,
     materials,
   }
 }
@@ -70,7 +77,7 @@ export async function onRequestPut({ request, env, params }) {
         rule.basis,
         rule.suggestion,
         rule.enabled,
-        JSON.stringify({ conditionText: rule.conditionText, conditionJson: rule.conditionJson, materials: rule.materials }),
+        JSON.stringify({ conditionText: rule.conditionText, conditionJson: rule.conditionJson, requiredFields: rule.requiredFields, materials: rule.materials }),
         now,
         rule.code,
       )

@@ -656,6 +656,73 @@ td small,
   line-height: 1.6;
 }
 
+.group-panel {
+  margin-top: 16px;
+}
+
+.group-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.group-summary-card,
+.selected-group-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.group-summary-card {
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.group-summary-card strong,
+.selected-group-panel h3 {
+  display: block;
+  margin: 0;
+}
+
+.group-summary-card small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.group-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.group-metrics span {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 10px;
+  background: rgba(18, 174, 234, 0.1);
+  color: #067b9e;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.selected-group-panel {
+  margin-bottom: 16px;
+  padding: 18px;
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+}
+
+.selected-group-panel .eyebrow {
+  margin-top: 0;
+}
+
 .dark-panel {
   background:
     radial-gradient(circle at 18% 10%, rgba(86, 240, 238, 0.24), transparent 24%),
@@ -856,7 +923,7 @@ th {
 
 .rule-editor-textareas {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   margin-top: 14px;
 }
@@ -962,6 +1029,50 @@ textarea:focus {
 
 .section-label {
   display: block;
+}
+
+.skipped-rules-panel {
+  margin-bottom: 16px;
+}
+
+.skipped-rules-panel .panel-title {
+  align-items: flex-start;
+}
+
+.skipped-rules-panel .panel-title .eyebrow {
+  margin-top: 0;
+}
+
+.skipped-rules-panel .panel-title span {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 10px;
+  background: rgba(183, 106, 32, 0.12);
+  color: var(--orange);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.skipped-rule-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.skipped-rule-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px dashed rgba(183, 106, 32, 0.26);
+  border-radius: 8px;
+  background: rgba(183, 106, 32, 0.06);
+}
+
+.skipped-rule-card small {
+  color: var(--muted);
+  line-height: 1.6;
 }
 
 .risk-card {
@@ -1299,8 +1410,14 @@ textarea:focus {
   .readiness-panel,
   .intake-overview,
   .analytics-grid,
+  .group-summary-grid,
   .report-editor {
     grid-template-columns: 1fr;
+  }
+
+  .selected-group-panel {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .sidebar {
@@ -1320,6 +1437,8 @@ textarea:focus {
   .result-summary,
   .form-grid,
   .check-grid,
+  .skipped-rule-list,
+  .rule-editor-textareas,
   .risk-list,
   .report-grid,
   .rules-grid {

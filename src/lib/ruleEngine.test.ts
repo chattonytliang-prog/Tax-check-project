@@ -2,14 +2,20 @@ import { describe, expect, it } from 'vitest'
 import {
   builtInRuleConditions,
   conditionFields,
+  conditionRequiredFields,
   conditionSummary,
   detectExecutableRuleCodes,
   emptyRuleCondition,
   evaluateCondition,
+  evaluateRuleExecution,
+  evaluateRuleExecutions,
   isExecutableCondition,
   isSimpleCondition,
+  missingRequiredFields,
   parseComparableValue,
+  skippedMissingDataRules,
   type ClientSnapshot,
+  type ExecutableRule,
   type RuleCondition,
 } from './ruleEngine'
 
@@ -249,6 +255,70 @@ describe('ruleEngine', () => {
       { code: 'OFF', enabled: false, conditionJson: { field: 'flag', operator: '=', value: true } },
       { code: 'EMPTY', enabled: true, conditionJson: emptyRuleCondition },
     ])).toEqual(['ON'])
+  })
+
+  it('extracts required fields and reports missing execution data', () => {
+    const condition: RuleCondition = {
+      all: [
+        { field: 'currentRevenue', operator: '>', value: 0, compareField: 'previousRevenue', multiplier: 1.3 },
+        {
+          any: [
+            { field: 'hasBusiness', operator: '=', value: true },
+            { field: 'manualOverride', operator: '=', value: true },
+          ],
+        },
+      ],
+    }
+
+    expect(conditionRequiredFields(condition)).toEqual(['currentRevenue', 'previousRevenue', 'hasBusiness', 'manualOverride'])
+    expect(missingRequiredFields(
+      { currentRevenue: 130, hasBusiness: true },
+      condition,
+      ['budgetRevenue'],
+    )).toEqual(['previousRevenue', 'manualOverride', 'budgetRevenue'])
+    expect(missingRequiredFields(
+      { currentRevenue: 0, previousRevenue: 0, hasBusiness: false, manualOverride: false, budgetRevenue: 0 },
+      condition,
+      ['budgetRevenue'],
+    )).toEqual([])
+  })
+
+  it('separates rule enablement from per-client execution readiness', () => {
+    const revenueRule: ExecutableRule = {
+      code: 'REV_GROWTH',
+      enabled: true,
+      conditionJson: { field: 'currentRevenue', operator: '>', value: 0, compareField: 'previousRevenue', multiplier: 1.3 },
+    }
+
+    expect(evaluateRuleExecution({ currentRevenue: 150 }, revenueRule)).toEqual({
+      code: 'REV_GROWTH',
+      status: 'skipped_missing_data',
+      missingFields: ['previousRevenue'],
+      matched: false,
+    })
+    expect(skippedMissingDataRules({ currentRevenue: 150 }, [revenueRule])).toEqual(['REV_GROWTH'])
+    expect(detectExecutableRuleCodes({ currentRevenue: 150 }, [revenueRule])).toEqual([])
+
+    expect(evaluateRuleExecution({ currentRevenue: 150, previousRevenue: 100 }, revenueRule).status).toBe('matched')
+    expect(detectExecutableRuleCodes({ currentRevenue: 150, previousRevenue: 100 }, [revenueRule])).toEqual(['REV_GROWTH'])
+    expect(evaluateRuleExecution({ currentRevenue: 110, previousRevenue: 100 }, revenueRule).status).toBe('not_matched')
+    expect(evaluateRuleExecution({ currentRevenue: 150, previousRevenue: 100 }, { ...revenueRule, enabled: false }).status).toBe('disabled')
+    expect(evaluateRuleExecution({ currentRevenue: 150, previousRevenue: 100 }, { ...revenueRule, conditionJson: emptyRuleCondition }).status).toBe('not_executable')
+  })
+
+  it('supports explicit required fields beyond the condition JSON', () => {
+    const rule: ExecutableRule = {
+      code: 'BUDGET_DIFF',
+      enabled: true,
+      conditionJson: { field: 'actualTax', operator: '>', value: 100 },
+      requiredFields: ['budgetTax'],
+    }
+
+    expect(evaluateRuleExecution({ actualTax: 120 }, rule).status).toBe('skipped_missing_data')
+    expect(evaluateRuleExecutions({ actualTax: 120, budgetTax: 0 }, [rule])[0]).toMatchObject({
+      status: 'matched',
+      missingFields: [],
+    })
   })
 
   it('detects every built-in rule individually from frontend-entered data', () => {

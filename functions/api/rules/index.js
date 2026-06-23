@@ -13,6 +13,7 @@ function parseRule(row) {
     enabled: row.enabled === 1,
     conditionText: payload.conditionText || '',
     conditionJson: payload.conditionJson || { field: '', operator: '=', value: '' },
+    requiredFields: Array.isArray(payload.requiredFields) ? payload.requiredFields : [],
     materials: Array.isArray(payload.materials) ? payload.materials : [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -49,6 +50,12 @@ function normalizeRule(input) {
         .split('\n')
         .map((item) => item.trim())
         .filter(Boolean)
+  const requiredFields = Array.isArray(input.requiredFields)
+    ? input.requiredFields.map((item) => String(item).trim()).filter(Boolean)
+    : String(input.requiredFields || '')
+        .split('\n')
+        .map((item) => item.trim())
+        .filter(Boolean)
 
   return {
     code,
@@ -60,6 +67,7 @@ function normalizeRule(input) {
     enabled: input.enabled === false ? 0 : 1,
     conditionText: String(input.conditionText || '').trim(),
     conditionJson: normalizeCondition(input.conditionJson),
+    requiredFields,
     materials,
   }
 }
@@ -121,7 +129,7 @@ export async function onRequestPost({ request, env }) {
         rule.basis,
         rule.suggestion,
         rule.enabled,
-        JSON.stringify({ conditionText: rule.conditionText, conditionJson: rule.conditionJson, materials: rule.materials }),
+        JSON.stringify({ conditionText: rule.conditionText, conditionJson: rule.conditionJson, requiredFields: rule.requiredFields, materials: rule.materials }),
         now,
         now,
       )
