@@ -699,6 +699,63 @@ function getOverallLevel(results: RiskResult[]): RiskLevel {
   return '低'
 }
 
+function getDataCompleteness(client: Client, risks: RiskResult[] = []) {
+  const checks = [
+    Boolean(client.name),
+    Boolean(client.creditCode),
+    Boolean(client.region),
+    Boolean(client.industry),
+    Boolean(client.taxpayerType),
+    Boolean(client.establishedAt),
+    client.monthlyRevenue > 0,
+    client.annualRevenue > 0,
+    client.monthlyInvoice > 0,
+    client.collectionFlow > 0,
+    client.monthlyCost > 0,
+    client.employees > 0,
+    client.socialSecurityCount > 0,
+    client.salaryDeclaredCount > 0,
+    client.payrollTotal > 0,
+  ]
+  const score = Math.round((checks.filter(Boolean).length / checks.length) * 100)
+  const label = score >= 85 ? '资料较完整' : score >= 55 ? '资料部分缺失' : '资料不足'
+  const note = score >= 85
+    ? '当前录入信息可支持初步风险判断，建议结合原始凭证、申报表和合同继续复核。'
+    : score >= 55
+      ? '当前录入信息可支持初筛，但部分关键资料尚不完整，报告结论应作为风险提示使用。'
+      : '当前信息不足以支持充分判断，本次结果仅适合作为线索提示，需补充资料后重新复核。'
+  const suggestedMaterials = Array.from(new Set(risks.flatMap((risk) => risk.materials))).slice(0, 12)
+
+  return { score, label, note, suggestedMaterials }
+}
+
+function riskIssueId(risk: RiskResult) {
+  return `Issue ${risk.code}`
+}
+
+function riskPriority(risk: RiskResult) {
+  if (risk.level === '高') return '优先整改'
+  if (risk.level === '中') return '尽快复核'
+  return '持续关注'
+}
+
+function taxTypeSummary(risks: RiskResult[]) {
+  const summary = new Map<string, { total: number; high: number; medium: number }>()
+  risks.forEach((risk) => {
+    risk.taxType.split('、').map((item) => item.trim()).filter(Boolean).forEach((taxType) => {
+      const current = summary.get(taxType) || { total: 0, high: 0, medium: 0 }
+      current.total += 1
+      if (risk.level === '高') current.high += 1
+      if (risk.level === '中') current.medium += 1
+      summary.set(taxType, current)
+    })
+  })
+
+  return Array.from(summary.entries())
+    .sort(([, a], [, b]) => b.high - a.high || b.medium - a.medium || b.total - a.total)
+    .map(([taxType, item]) => `${taxType}：${item.total} 项，其中高风险 ${item.high} 项、中风险 ${item.medium} 项`)
+}
+
 function managedRuleToRisk(rule: ManagedRule): RiskRule {
   return {
     code: rule.code,
@@ -732,9 +789,11 @@ function buildReportContent(client: Client, risks: RiskResult[]) {
   const level = getOverallLevel(risks)
   const highCount = risks.filter((r) => r.level === '高').length
   const mediumCount = risks.filter((r) => r.level === '中').length
+  const completeness = getDataCompleteness(client, risks)
+  const byTaxType = taxTypeSummary(risks).join('\n')
   const riskSummary = risks
     .slice(0, 8)
-    .map((risk, index) => `${index + 1}. 【${risk.level}风险】${risk.name}：${risk.reason(client)}`)
+    .map((risk, index) => `${index + 1}. ${riskIssueId(risk)}｜【${risk.level}风险】${risk.name}：${risk.reason(client)}`)
     .join('\n')
 
   return `《企业税务风险体检报告》
@@ -751,31 +810,45 @@ function buildReportContent(client: Client, risks: RiskResult[]) {
 本次系统共命中 ${risks.length} 项风险提示，其中高风险 ${highCount} 项，中风险 ${mediumCount} 项，综合风险等级为【${level}】。
 本结论基于当前录入数据和系统规则库生成，建议由财税专业人员结合原始凭证、账套、申报表、合同、资金流水进一步复核。
 
-三、主要风险摘要
+三、资料完整性说明
+资料完整度：${completeness.score}%（${completeness.label}）
+说明：${completeness.note}
+建议优先补充资料：${completeness.suggestedMaterials.length ? completeness.suggestedMaterials.join('、') : '当前未形成明确补充资料清单。'}
+
+四、分税种风险摘要
+${byTaxType || '暂未形成分税种风险提示。'}
+
+五、重点风险事项
 ${riskSummary || '未发现明显高频风险。建议继续完善资料后复核。'}
 
-四、风险明细与整改建议
+六、Issue 明细与整改建议
 ${risks
   .map(
-    (risk, index) => `${index + 1}. ${risk.name}
+    (risk, index) => `${index + 1}. ${riskIssueId(risk)}：${risk.name}
 风险等级：${risk.level}
+整改优先级：${riskPriority(risk)}
 涉及税种：${risk.taxType}
 触发原因：${risk.reason(client)}
 政策/案例依据：${risk.basis}
 建议动作：${risk.suggestion}
-需补充资料：${risk.materials.join('、')}
+建议补充资料：${risk.materials.join('、')}
 `,
   )
   .join('\n')}
 
-五、后续处理建议
+七、整改优先级
+${risks.length
+  ? risks.map((risk, index) => `${index + 1}. ${riskPriority(risk)}｜${riskIssueId(risk)}｜${risk.name}`).join('\n')
+  : '当前暂无需列入整改清单的风险事项。'}
+
+八、后续处理建议
 建议基于本报告推进以下事项：
 1. 补充缺失资料，先完成账税数据一致性复核。
 2. 对高风险事项建立整改清单和责任人。
 3. 按月输出风险跟踪表，形成持续合规管理机制。
 4. 对涉及发票、收入、个人账户和优惠政策的事项优先处理。
 
-六、免责声明
+九、免责声明
 本报告基于企业提供资料及系统规则进行辅助分析，仅供经营和税务风险管理参考。具体税务处理应结合完整原始资料、适用地区口径及最新政策，并由专业人员进一步复核确认。`
 }
 
@@ -1042,6 +1115,7 @@ function App() {
   const selectedClient = clients.find((client) => client.id === selectedClientId) || clients[0]
   const currentRisks = useMemo(() => (selectedClient ? detectRisks(selectedClient, managedRules) : []), [selectedClient, managedRules])
   const overallLevel = getOverallLevel(currentRisks)
+  const currentCompleteness = selectedClient ? getDataCompleteness(selectedClient, currentRisks) : null
 
   const clientRows = useMemo(() => {
     return clients
@@ -1208,12 +1282,18 @@ function App() {
     setPage('report')
 
     let report = baseReport
+    const risksForAi = risks.map((risk) => ({
+      ...risk,
+      issueId: riskIssueId(risk),
+      priority: riskPriority(risk),
+      reason: risk.reason(selectedClient),
+    }))
     try {
       setAiReportStage('reviewing')
       const reviewStartedAt = Date.now()
       const reviewResponse = await apiSend<{ review: AiReview; model: string; usage?: unknown }>('/api/ai/review', 'POST', {
         client: selectedClient,
-        risks,
+        risks: risksForAi,
       })
       const reviewElapsed = Date.now() - reviewStartedAt
       if (reviewElapsed < 2000) {
@@ -1223,7 +1303,7 @@ function App() {
       setAiReportStage('generating')
       const reportResponse = await apiSend<{ content: string; model: string; usage?: unknown }>('/api/ai/report', 'POST', {
         client: selectedClient,
-        risks,
+        risks: risksForAi,
         content: baseReport.content,
         aiReview: reviewResponse.review,
       })
@@ -1694,21 +1774,41 @@ function App() {
             </header>
             <div className="result-summary">
               <StatCard label="综合等级" value={`${overallLevel}风险`} icon={<Gauge />} tone={overallLevel === '高' ? 'red' : overallLevel === '中' ? 'orange' : 'green'} />
-              <StatCard label="命中规则" value={currentRisks.length} icon={<ClipboardList />} tone="orange" />
+              <StatCard label="风险事项" value={currentRisks.length} icon={<ClipboardList />} tone="orange" />
               <StatCard label="高风险" value={currentRisks.filter((risk) => risk.level === '高').length} icon={<AlertTriangle />} tone="red" />
               <StatCard label="中风险" value={currentRisks.filter((risk) => risk.level === '中').length} icon={<BarChart3 />} />
             </div>
+            {currentCompleteness && (
+              <section className="panel readiness-panel">
+                <div>
+                  <p className="eyebrow">资料完整性说明</p>
+                  <h3>{currentCompleteness.label}（{currentCompleteness.score}%）</h3>
+                  <p>{currentCompleteness.note}</p>
+                </div>
+                <div>
+                  <strong>建议优先补充资料</strong>
+                  <div className="chips">
+                    {currentCompleteness.suggestedMaterials.length
+                      ? currentCompleteness.suggestedMaterials.map((item) => <span key={item}>{item}</span>)
+                      : <span>继续完善申报表、发票、流水和合同等原始资料</span>}
+                  </div>
+                </div>
+              </section>
+            )}
             <div className="risk-list">
               {currentRisks.map((risk) => (
                 <article className="risk-card" key={risk.code}>
                   <div className="risk-card-head">
-                    <span className="rule-code">{risk.code}</span>
+                    <span className="rule-code">{riskIssueId(risk)}</span>
                     <LevelBadge level={risk.level} />
                   </div>
                   <h3>{risk.name}</h3>
+                  <p><strong>涉及税种：</strong>{risk.taxType}</p>
+                  <p><strong>整改优先级：</strong>{riskPriority(risk)}</p>
                   <p><strong>触发原因：</strong>{risk.reason(selectedClient)}</p>
                   <p><strong>整改建议：</strong>{risk.suggestion}</p>
                   <p><strong>依据：</strong>{risk.basis}</p>
+                  <strong className="section-label">建议补充资料</strong>
                   <div className="chips">{risk.materials.map((item) => <span key={item}>{item}</span>)}</div>
                 </article>
               ))}
@@ -2271,7 +2371,7 @@ function ReportPage({
           <div className="report-editor">
             <aside>
               <h3>报告目录</h3>
-              {['企业基本情况', '综合风险结论', '主要风险摘要', '风险明细', '后续处理建议', '免责声明'].map((item) => (
+              {['企业基本情况', '综合风险结论', '资料完整性说明', '分税种风险摘要', 'Issue 明细', '整改优先级', '免责声明'].map((item) => (
                 <span key={item}>{item}</span>
               ))}
             </aside>

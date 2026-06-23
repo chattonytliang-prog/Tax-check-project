@@ -6,10 +6,13 @@ const DEFAULT_MODEL = 'deepseek-v4-flash'
 
 function compactRisk(risk) {
   return {
+    issueId: risk.issueId || risk.code,
     code: risk.code,
     name: risk.name,
     level: risk.level,
     taxType: risk.taxType,
+    reason: risk.reason || '',
+    priority: risk.priority || '',
     basis: risk.basis,
     suggestion: risk.suggestion,
     materials: risk.materials,
@@ -82,7 +85,7 @@ ${JSON.stringify(establishmentFacts, null, 2)}
 企业输入数据：
 ${JSON.stringify(client, null, 2)}
 
-规则引擎已命中风险：
+规则引擎已命中风险事项（Issue）：
 ${JSON.stringify(risks.map(compactRisk), null, 2)}`
 }
 

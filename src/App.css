@@ -714,6 +714,39 @@ textarea:focus {
   gap: 16px;
 }
 
+.readiness-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 18px;
+  margin-bottom: 16px;
+}
+
+.readiness-panel h3,
+.readiness-panel p {
+  margin: 0;
+}
+
+.readiness-panel .eyebrow {
+  margin-bottom: 6px;
+}
+
+.readiness-panel p {
+  color: #35474f;
+  line-height: 1.7;
+  margin-top: 8px;
+}
+
+.readiness-panel strong,
+.section-label {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.section-label {
+  display: block;
+}
+
 .risk-card {
   padding: 18px;
   display: grid;
@@ -1046,6 +1079,7 @@ textarea:focus {
   .login-shell,
   .two-column,
   .ai-review-grid,
+  .readiness-panel,
   .report-editor {
     grid-template-columns: 1fr;
   }
