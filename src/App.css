@@ -891,6 +891,13 @@ th {
   color: #d7f6f6;
 }
 
+.auto-fill-note {
+  margin: 10px 0 0;
+  color: #bcefed;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
 .intake-score {
   display: grid;
   gap: 6px;

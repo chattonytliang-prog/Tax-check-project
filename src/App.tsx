@@ -1330,6 +1330,37 @@ function deriveClientMetrics(client: Client): Client {
   }
 }
 
+const autoDerivedClientFields: Array<keyof Client> = [
+  'ytdRevenue',
+  'ytdCostExpense',
+  'ytdProfit',
+  'quarterRevenue',
+  'quarterCostExpense',
+  'mainBusinessRevenue',
+  'mainBusinessCost',
+  'ebitProfit',
+  'goodsSalesRevenue',
+  'goodsCost',
+  'taxableSales',
+]
+
+function applyAutoDerivedMetrics(previous: Client, next: Client) {
+  const previousDerived = deriveClientMetrics(previous)
+  const nextDerived = deriveClientMetrics(next)
+  const merged = { ...next }
+
+  autoDerivedClientFields.forEach((field) => {
+    const previousValue = Number(previous[field] || 0)
+    const previousAutoValue = Number(previousDerived[field] || 0)
+    const shouldUpdate = previousValue === 0 || previousValue === previousAutoValue
+    if (shouldUpdate) {
+      merged[field] = nextDerived[field] as never
+    }
+  })
+
+  return merged
+}
+
 const importFieldAliases: Record<string, keyof Client> = {
   企业名称: 'name',
   统一社会信用代码: 'creditCode',
@@ -3718,7 +3749,7 @@ function App() {
 
 function ClientForm({ client, clients, onChange }: { client: Client; clients: Client[]; onChange: (client: Client) => void }) {
   const patch = <K extends keyof Client>(key: K, value: Client[K]) => {
-    onChange({ ...client, [key]: value })
+    onChange(applyAutoDerivedMetrics(client, { ...client, [key]: value }))
   }
   const num = (key: keyof Client) => (event: React.ChangeEvent<HTMLInputElement>) => {
     patch(key, Number(event.target.value || 0) as never)
@@ -3803,9 +3834,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <p className="section-helper">
             先录入企业共用画像，再按增值税、企业所得税、个人所得税与综合线索补充关键字段。多主体项目建议按主体分别建档，集团口径另行汇总。当前版本只采集可量化信息和风险标记，不要求访谈、抽凭或上传底稿。
           </p>
-          <button className="secondary-button compact-button" type="button" onClick={() => onChange(deriveClientMetrics(client))}>
-            <RefreshCcw /> 同步基础数据到规则字段
-          </button>
+          <p className="auto-fill-note">填写基础数据时，系统会自动补全可推算的检测口径；已手动填写的高级字段不会被覆盖。</p>
           <label className="secondary-button compact-button file-import-button">
             <FileText /> 上传表格填充
             <input type="file" accept=".json,.csv,.tsv,.txt" onChange={(event) => void importClientFile(event.target.files?.[0] || null)} />
