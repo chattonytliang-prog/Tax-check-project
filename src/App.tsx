@@ -485,80 +485,154 @@ const blankClient: Client = {
 
 const blankDraftClient = () => deriveClientMetrics({ ...blankClient, id: crypto.randomUUID() })
 
-const demoClients: Client[] = [
-  {
+function attachDemoPeriod(client: Client): Client {
+  const snapshot = { ...client, periodEntries: [] }
+  const periodEntry = createPeriodEntry(client, snapshot, '2026/06/23 10:00:00')
+  return { ...client, periodEntries: [periodEntry] }
+}
+
+function createDemoClient(seed: Partial<Client>): Client {
+  return attachDemoPeriod({
     ...emptyClient,
     id: crypto.randomUUID(),
-    name: '上海辰光商贸有限公司',
-    projectScope: '集团项目',
-    groupName: '辰光商贸集团',
-    entityRole: '经营主体',
-    creditCode: '91310000MVP000001',
-    region: '上海',
-    industry: '商贸',
-    monthlyRevenue: 168000,
-    monthlyInvoice: 83000,
-    annualRevenue: 5160000,
-    consecutive12MonthSales: 5160000,
-    collectionFlow: 172000,
-    privateAccountCollection: true,
-    unbilledIncome: true,
-    serviceFeeInvoices: true,
-    supplierNoInput: true,
-    purchaseSalesMismatch: true,
-    smallProfitEnjoyed: false,
-  },
-  {
-    ...emptyClient,
-    id: crypto.randomUUID(),
-    name: '杭州星河直播工作室',
     projectScope: '单主体',
-    groupName: '',
-    entityRole: '个体户/个人独资',
-    creditCode: '92330000MVP000002',
-    region: '浙江',
-    industry: '直播自媒体',
-    taxpayerType: '个体工商户',
-    monthlyRevenue: 260000,
-    monthlyInvoice: 48000,
-    annualRevenue: 3120000,
-    consecutive12MonthSales: 3120000,
-    platformRevenue: 280000,
-    collectionFlow: 290000,
-    privateAccountCollection: true,
-    noIitWithholding: true,
-    salarySplit: true,
-    individualVendorRelated: true,
-  },
-  {
-    ...emptyClient,
-    id: crypto.randomUUID(),
-    name: '苏州精密制造有限公司',
-    projectScope: '单主体',
-    groupName: '',
     entityRole: '单体企业',
-    creditCode: '91320000MVP000003',
-    region: '江苏',
-    industry: '制造',
     taxpayerType: '一般纳税人',
-    monthlyRevenue: 820000,
-    monthlyInvoice: 800000,
-    annualRevenue: 9840000,
-    consecutive12MonthSales: 9840000,
-    employees: 42,
-    socialSecurityCount: 28,
-    salaryDeclaredCount: 42,
-    payrollTotal: 2800000,
-    welfareExpense: 460000,
-    unionExpense: 68000,
-    educationExpense: 88000,
-    entertainmentExpense: 120000,
-    adExpense: 1800000,
-    rdDeductionEnjoyed: true,
-    rdDocsInsufficient: true,
-    inventoryAbnormal: true,
-  },
-]
+    analysisPeriodType: '月度',
+    analysisYear: '2025',
+    analysisMonth: '2025-01',
+    dataBasis: '申报数据',
+    periodEntries: [],
+    ...seed,
+  })
+}
+
+function createDemoClients(): Client[] {
+  return [
+    createDemoClient({
+      name: '低风险测试案例-上海稳健科技有限公司',
+      creditCode: 'TESTLOW202501',
+      region: '上海',
+      industry: '软件和信息技术服务',
+      monthlyRevenue: 200000,
+      monthlyInvoice: 200000,
+      monthlyCost: 120000,
+      monthlyProfit: 50000,
+      annualRevenue: 2400000,
+      consecutive12MonthSales: 2400000,
+      collectionFlow: 200000,
+      employees: 20,
+      socialSecurityCount: 20,
+      salaryDeclaredCount: 20,
+      payrollTotal: 1200000,
+      taxableIncome: 600000,
+      assetsTotal: 12000000,
+      employeeAnnualAvg: 20,
+      previousQuarterEmployees: 20,
+      budgetEbitProfit: 600000,
+      previousYearEbitProfit: 600000,
+      budgetRevenue: 2400000,
+      previousYearRevenue: 2400000,
+      theoreticalVatTax: 120000,
+      budgetVatTax: 120000,
+      priorTaxableSales: 2300000,
+      priorVatTaxPayable: 115000,
+      outputTax: 260000,
+      inputTax: 140000,
+      vatTaxPayable: 120000,
+      rentalArea: 180,
+    }),
+    createDemoClient({
+      name: '中风险测试案例-杭州临界商贸有限公司',
+      creditCode: 'TESTMID2025Q1',
+      region: '浙江',
+      industry: '商贸服务',
+      taxpayerType: '小规模纳税人',
+      analysisPeriodType: '季度',
+      analysisYear: '2025',
+      analysisQuarter: 'Q1',
+      dataBasis: '管理报表',
+      monthlyRevenue: 95000,
+      monthlyInvoice: 92000,
+      monthlyCost: 62000,
+      monthlyProfit: 18000,
+      annualRevenue: 1140000,
+      consecutive12MonthSales: 1140000,
+      collectionFlow: 100000,
+      nearVatExemption: true,
+      prepaidLongTerm: true,
+      largeExpenseNoInvoice: true,
+      employees: 8,
+      socialSecurityCount: 8,
+      salaryDeclaredCount: 8,
+      payrollTotal: 480000,
+      taxableIncome: 216000,
+      assetsTotal: 4800000,
+      employeeAnnualAvg: 8,
+      previousQuarterEmployees: 8,
+      budgetEbitProfit: 216000,
+      previousYearEbitProfit: 216000,
+      budgetRevenue: 1140000,
+      previousYearRevenue: 1140000,
+      theoreticalVatTax: 34200,
+      budgetVatTax: 34200,
+      priorTaxableSales: 1080000,
+      priorVatTaxPayable: 32400,
+      outputTax: 34200,
+      inputTax: 0,
+      vatTaxPayable: 34200,
+      rentalArea: 90,
+    }),
+    createDemoClient({
+      name: '高风险测试案例-苏州异常贸易有限公司',
+      creditCode: 'TESTHIGH2025Y',
+      region: '江苏',
+      industry: '大宗贸易',
+      analysisPeriodType: '年度',
+      analysisYear: '2025',
+      periodStartDate: '2025-01-01',
+      periodEndDate: '2025-12-31',
+      dataBasis: '混合口径',
+      monthlyRevenue: 420000,
+      monthlyInvoice: 180000,
+      monthlyCost: 390000,
+      monthlyProfit: 8000,
+      annualRevenue: 5040000,
+      consecutive12MonthSales: 5040000,
+      collectionFlow: 560000,
+      employees: 18,
+      socialSecurityCount: 9,
+      salaryDeclaredCount: 18,
+      payrollTotal: 1260000,
+      taxableIncome: 96000,
+      assetsTotal: 18000000,
+      employeeAnnualAvg: 18,
+      previousQuarterEmployees: 18,
+      privateAccountCollection: true,
+      unbilledIncome: true,
+      serviceFeeInvoices: true,
+      supplierNoInput: true,
+      purchaseSalesMismatch: true,
+      fundsReturn: true,
+      abnormalInvoice: true,
+      budgetEbitProfit: 96000,
+      previousYearEbitProfit: 96000,
+      budgetRevenue: 5040000,
+      previousYearRevenue: 5040000,
+      theoreticalVatTax: 260000,
+      budgetVatTax: 260000,
+      priorTaxableSales: 4800000,
+      priorVatTaxPayable: 240000,
+      outputTax: 655200,
+      inputTax: 395200,
+      vatTaxPayable: 260000,
+      rentalArea: 160,
+    }),
+  ]
+}
+
+const demoClients: Client[] = createDemoClients()
+const demoCaseCreditCodes = new Set(demoClients.map((client) => client.creditCode))
 
 const emptyManagedRule: ManagedRule = {
   code: '',
@@ -2987,6 +3061,39 @@ function App() {
     }
   }
 
+  const loadRiskDemoCases = async () => {
+    const existingByCreditCode = new Map(clients.map((client) => [client.creditCode, client]))
+    const demoCases = createDemoClients().map((client) => {
+      const existingClient = existingByCreditCode.get(client.creditCode)
+      return deriveClientMetrics(existingClient ? { ...client, id: existingClient.id } : client)
+    })
+
+    setClients((current) => [
+      ...demoCases,
+      ...current.filter((client) => !demoCaseCreditCodes.has(client.creditCode)),
+    ])
+    setSelectedClientId(demoCases[0].id)
+    setSelectedPeriodEntryIds(demoCases[0].periodEntries[0] ? [demoCases[0].periodEntries[0].id] : [])
+    setPage('clients')
+
+    try {
+      await Promise.all(
+        demoCases.map((client) =>
+          apiSend<{ client: Client }>('/api/clients', 'POST', {
+            ...client,
+            riskLevel: getOverallLevel(detectRisks(client, managedRules)),
+          }),
+        ),
+      )
+      setDataStatus('connected')
+      window.alert('已载入低风险、中风险、高风险 3 个测试案例。')
+    } catch (error) {
+      console.warn('Demo cases saved locally only.', error)
+      setDataStatus('fallback')
+      window.alert('已在本地载入测试案例；当前环境未连接后端，刷新后可能不会保留。')
+    }
+  }
+
   const editPeriodEntry = (entry: ClientPeriodEntry) => {
     setEditingClient(hydratePeriodDraft(entry))
     setPage('form')
@@ -3668,15 +3775,20 @@ function App() {
                 <p className="eyebrow">企业档案</p>
                 <h2>企业档案与期间数据</h2>
               </div>
-              <button
-                className="primary-button"
-                onClick={() => {
-                  setEditingClient(blankDraftClient())
-                  setPage('form')
-                }}
-              >
-                <Plus /> 新建企业
-              </button>
+              <div className="header-actions">
+                <button type="button" className="secondary-button" onClick={loadRiskDemoCases}>
+                  <ClipboardList /> 载入测试案例
+                </button>
+                <button
+                  className="primary-button"
+                  onClick={() => {
+                    setEditingClient(blankDraftClient())
+                    setPage('form')
+                  }}
+                >
+                  <Plus /> 新建企业
+                </button>
+              </div>
             </header>
             <div className="toolbar">
               <Search />
