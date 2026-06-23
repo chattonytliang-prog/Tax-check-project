@@ -48,6 +48,47 @@ type RulePageSize = 10 | 20 | 50 | 'all'
 type ClientManualDerivedFields = Record<string, boolean>
 type ClientManualDerivedReasons = Record<string, string>
 
+const customIndustryOption = '其他手动填写'
+const customIndustryPrefix = '其他：'
+const mainstreamIndustryOptions = [
+  '农林牧渔',
+  '制造业',
+  '建筑业',
+  '批发和零售',
+  '住宿和餐饮',
+  '交通运输、仓储和邮政',
+  '信息传输、软件和信息技术服务',
+  '金融业',
+  '房地产业',
+  '租赁和商务服务',
+  '科学研究和技术服务',
+  '水利、环境和公共设施管理',
+  '居民服务、修理和其他服务',
+  '教育',
+  '卫生和社会工作',
+  '文化、体育和娱乐',
+  '电子商务',
+  '互联网/直播自媒体',
+  '物流',
+  '进出口贸易',
+]
+
+function isCustomIndustry(industry: string) {
+  return industry.startsWith(customIndustryPrefix)
+}
+
+function getIndustrySelectValue(industry: string) {
+  return isCustomIndustry(industry) ? customIndustryOption : industry
+}
+
+function getCustomIndustryValue(industry: string) {
+  return isCustomIndustry(industry) ? industry.slice(customIndustryPrefix.length) : ''
+}
+
+function hasValidIndustry(industry: string) {
+  return isCustomIndustry(industry) ? Boolean(getCustomIndustryValue(industry).trim()) : Boolean(industry)
+}
+
 type Client = {
   id: string
   name: string
@@ -1264,7 +1305,7 @@ function getDataCompleteness(client: Client, risks: RiskResult[] = []) {
     Boolean(client.name),
     Boolean(client.creditCode),
     Boolean(client.region),
-    Boolean(client.industry),
+    hasValidIndustry(client.industry),
     Boolean(client.taxpayerType),
     Boolean(client.establishedAt),
     client.monthlyRevenue > 0,
@@ -4013,10 +4054,24 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <Field label="统一社会信用代码"><input value={client.creditCode} onChange={(e) => patch('creditCode', e.target.value)} /></Field>
           <Field label="地区"><input value={client.region} onChange={(e) => patch('region', e.target.value)} /></Field>
           <Field label="行业">
-            <select value={client.industry} onChange={(e) => patch('industry', e.target.value)}>
+            <select
+              value={getIndustrySelectValue(client.industry)}
+              onChange={(e) => {
+                const nextIndustry = e.target.value
+                patch('industry', (nextIndustry === customIndustryOption ? customIndustryPrefix : nextIndustry) as never)
+              }}
+            >
               <option value="">未选择</option>
-              {['餐饮', '商贸', '电商', '服务', '建筑', '劳务', '直播自媒体', '制造', '零售', '个体户'].map((item) => <option key={item}>{item}</option>)}
+              {mainstreamIndustryOptions.map((item) => <option key={item}>{item}</option>)}
+              <option>{customIndustryOption}</option>
             </select>
+            {isCustomIndustry(client.industry) && (
+              <input
+                value={getCustomIndustryValue(client.industry)}
+                placeholder="请输入行业名称"
+                onChange={(e) => patch('industry', `${customIndustryPrefix}${e.target.value}`)}
+              />
+            )}
           </Field>
           <Field label="纳税人类型">
             <select value={client.taxpayerType} onChange={(e) => patch('taxpayerType', e.target.value as TaxpayerType)}>
