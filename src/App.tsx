@@ -4154,6 +4154,19 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
     </div>
   )
   const firstMissingIssue = saveIssues[0] || reportIssues[0]
+  const copyMissingSummary = async () => {
+    const lines = [
+      saveIssues.length ? `建档必填缺失：${validationSummary(saveIssues)}` : '建档必填缺失：无',
+      reportIssues.length ? `基础检测必填缺失：${validationSummary(reportIssues)}` : '基础检测必填缺失：无',
+    ]
+    const content = lines.join('\n')
+    try {
+      await navigator.clipboard.writeText(content)
+      window.alert('缺失清单已复制。')
+    } catch {
+      window.alert(content)
+    }
+  }
   const renderSectionRequirementSummary = (labels: string[]) => {
     const requiredLabels = labels.filter((label) => intakeRequirementLabels[label] === 'required' || intakeRequirementLabels[label] === 'recommended')
     if (!requiredLabels.length) return null
@@ -4413,14 +4426,23 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
       <section className="intake-requirement-panel">
         <div>
           <strong>建档必填 <span className="requirement-progress">{saveTotal - saveIssues.length}/{saveTotal}</span></strong>
+          <div className="requirement-bar" aria-hidden="true"><span style={{ width: `${Math.round(((saveTotal - saveIssues.length) / saveTotal) * 100)}%` }} /></div>
           <small>缺失时不能保存并检测。</small>
           {renderMissingChips(saveIssues, '已补齐')}
         </div>
         <div>
           <strong>基础检测必填 <span className="requirement-progress">{reportTotal - reportIssues.length}/{reportTotal}</span></strong>
+          <div className="requirement-bar" aria-hidden="true"><span style={{ width: `${Math.round(((reportTotal - reportIssues.length) / reportTotal) * 100)}%` }} /></div>
           <small>缺失时仍可生成报告，但会提示资料不足。</small>
           {renderMissingChips(reportIssues, '已补齐')}
         </div>
+        {(saveIssues.length > 0 || reportIssues.length > 0) && (
+          <div className="requirement-copy-row">
+            <button type="button" className="secondary-button compact-button" onClick={copyMissingSummary}>
+              <ClipboardList /> 复制缺失清单
+            </button>
+          </div>
+        )}
       </section>
 
       <nav className="intake-section-nav" aria-label="录入子目录">

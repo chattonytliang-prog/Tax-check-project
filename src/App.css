@@ -1305,6 +1305,31 @@ textarea:focus {
   font-weight: 900;
 }
 
+.requirement-bar {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(99, 119, 129, 0.12);
+}
+
+.requirement-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--teal), var(--blue));
+  transition: width 0.2s ease;
+}
+
+.requirement-copy-row {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .intake-requirement-panel small {
   color: var(--muted);
   line-height: 1.6;
