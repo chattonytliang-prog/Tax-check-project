@@ -1108,6 +1108,49 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(18, 174, 234, 0.14);
 }
 
+.field input:disabled {
+  background: rgba(241, 247, 249, 0.92);
+  color: #4a6470;
+  cursor: not-allowed;
+}
+
+.derived-field-shell {
+  display: grid;
+  gap: 8px;
+}
+
+.derived-field-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.manual-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.manual-toggle input {
+  width: 16px;
+  min-height: 16px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.manual-reason-input {
+  min-height: 66px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
 .check-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
