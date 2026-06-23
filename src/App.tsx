@@ -1282,6 +1282,54 @@ function getDataCompleteness(client: Client, risks: RiskResult[] = []) {
   return { score, label, note, suggestedMaterials }
 }
 
+function normalizeClient(client: Partial<Client>): Client {
+  return {
+    ...emptyClient,
+    ...client,
+    id: client.id || crypto.randomUUID(),
+    projectScope: (client.projectScope || '单主体') as ProjectScope,
+    entityRole: (client.entityRole || '单体企业') as EntityRole,
+    taxpayerType: (client.taxpayerType || '小规模纳税人') as TaxpayerType,
+  }
+}
+
+function fallbackNumber(current: number, fallback: number) {
+  return current || fallback || 0
+}
+
+function deriveClientMetrics(client: Client): Client {
+  const normalized = normalizeClient(client)
+  const monthlyRevenue = Number(normalized.monthlyRevenue || 0)
+  const monthlyCost = Number(normalized.monthlyCost || 0)
+  const monthlyProfit = Number(normalized.monthlyProfit || 0)
+  const annualRevenue = Number(normalized.annualRevenue || 0)
+  const annualCost = monthlyCost * 12
+  const annualProfit = monthlyProfit * 12
+  const ytdRevenue = fallbackNumber(normalized.ytdRevenue, annualRevenue || monthlyRevenue * 12)
+  const ytdCostExpense = fallbackNumber(normalized.ytdCostExpense, annualCost)
+  const ytdProfit = fallbackNumber(normalized.ytdProfit, annualProfit || normalized.taxableIncome)
+  const quarterRevenue = fallbackNumber(normalized.quarterRevenue, monthlyRevenue * 3)
+  const quarterCostExpense = fallbackNumber(normalized.quarterCostExpense, monthlyCost * 3)
+  const mainBusinessRevenue = fallbackNumber(normalized.mainBusinessRevenue, ytdRevenue)
+  const mainBusinessCost = fallbackNumber(normalized.mainBusinessCost, ytdCostExpense)
+  const taxableSales = fallbackNumber(normalized.taxableSales, normalized.consecutive12MonthSales || annualRevenue)
+
+  return {
+    ...normalized,
+    ytdRevenue,
+    ytdCostExpense,
+    ytdProfit,
+    quarterRevenue,
+    quarterCostExpense,
+    mainBusinessRevenue,
+    mainBusinessCost,
+    ebitProfit: fallbackNumber(normalized.ebitProfit, ytdProfit),
+    goodsSalesRevenue: fallbackNumber(normalized.goodsSalesRevenue, mainBusinessRevenue),
+    goodsCost: fallbackNumber(normalized.goodsCost, mainBusinessCost),
+    taxableSales,
+  }
+}
+
 function riskIssueId(risk: RiskResult) {
   return `Issue ${risk.code}`
 }
@@ -1426,16 +1474,19 @@ function getSourceRules(managed: ManagedRule[] = []) {
 
 function detectRisks(client: Client, managed: ManagedRule[] = []): RiskResult[] {
   const sourceRules = getSourceRules(managed)
+  const detectionClient = deriveClientMetrics(client)
 
   return sourceRules
-    .filter((rule) => riskRuleExecution(client, rule).status === 'matched')
+    .filter((rule) => riskRuleExecution(detectionClient, rule).status === 'matched')
     .sort((a, b) => riskRank(b.level) - riskRank(a.level))
     .map((rule) => ({ ...rule, triggeredAt: formatDate() }))
 }
 
 function getSkippedRules(client: Client, managed: ManagedRule[] = []): SkippedRule[] {
+  const detectionClient = deriveClientMetrics(client)
+
   return getSourceRules(managed)
-    .map((rule) => ({ rule, execution: riskRuleExecution(client, rule) }))
+    .map((rule) => ({ rule, execution: riskRuleExecution(detectionClient, rule) }))
     .filter((item) => item.execution.status === 'skipped_missing_data')
 }
 
@@ -1930,10 +1981,11 @@ function App() {
 
         if (!active) return
 
-        setClients(clientsResponse.clients)
+        const normalizedClients = clientsResponse.clients.map((client) => deriveClientMetrics(normalizeClient(client)))
+        setClients(normalizedClients)
         setReports(reportsResponse.reports)
-        if (clientsResponse.clients[0]) {
-          setSelectedClientId(clientsResponse.clients[0].id)
+        if (normalizedClients[0]) {
+          setSelectedClientId(normalizedClients[0].id)
         }
         setDataStatus('connected')
       } catch (error) {
@@ -2007,10 +2059,11 @@ function App() {
   }, [loggedIn, authUser])
 
   const selectedClient = clients.find((client) => client.id === selectedClientId) || clients[0]
-  const currentRisks = useMemo(() => (selectedClient ? detectRisks(selectedClient, managedRules) : []), [selectedClient, managedRules])
-  const currentSkippedRules = useMemo(() => (selectedClient ? getSkippedRules(selectedClient, managedRules) : []), [selectedClient, managedRules])
+  const selectedDetectionClient = useMemo(() => (selectedClient ? deriveClientMetrics(selectedClient) : null), [selectedClient])
+  const currentRisks = useMemo(() => (selectedDetectionClient ? detectRisks(selectedDetectionClient, managedRules) : []), [selectedDetectionClient, managedRules])
+  const currentSkippedRules = useMemo(() => (selectedDetectionClient ? getSkippedRules(selectedDetectionClient, managedRules) : []), [selectedDetectionClient, managedRules])
   const overallLevel = getOverallLevel(currentRisks)
-  const currentCompleteness = selectedClient ? getDataCompleteness(selectedClient, currentRisks) : null
+  const currentCompleteness = selectedDetectionClient ? getDataCompleteness(selectedDetectionClient, currentRisks) : null
 
   const clientRows = useMemo(() => {
     return clients
@@ -2101,6 +2154,18 @@ function App() {
     const rows = Array.from(totals, ([name, value]) => ({ name, value }))
     return rows.length ? rows : [{ name: '暂无整改事项', value: 0 }]
   }, [currentRisks])
+  const currentMissingFieldRows = useMemo<ChartDatum[]>(() => {
+    const totals = new Map<string, number>()
+    currentSkippedRules.forEach(({ execution }) => {
+      execution.missingFields.forEach((field) => {
+        const label = fieldLabel(field)
+        totals.set(label, (totals.get(label) || 0) + 1)
+      })
+    })
+    return Array.from(totals, ([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, 'zh-CN'))
+      .slice(0, 10)
+  }, [currentSkippedRules])
   const currentTaxOption = useMemo<EChartsOption>(() => ({
     color: ['#12aeea', '#0c8c82', '#b76a20', '#b63136', '#56f0ee'],
     tooltip: { trigger: 'item' },
@@ -2287,13 +2352,13 @@ function App() {
 
   const saveClient = async () => {
     const normalizedName = editingClient.name.trim() || `未命名企业 ${clients.length + 1}`
-    const normalized: Client = {
-      ...editingClient,
+    const normalized: Client = deriveClientMetrics({
+      ...normalizeClient(editingClient),
       name: normalizedName,
       projectScope: getProjectScope(editingClient),
       groupName: getProjectScope(editingClient) === '集团项目' ? editingClient.groupName.trim() : '',
       entityRole: getProjectScope(editingClient) === '集团项目' ? getEntityRole(editingClient) : '单体企业',
-    }
+    })
 
     setClients((current) => {
       const exists = current.some((client) => client.id === normalized.id)
@@ -2323,16 +2388,17 @@ function App() {
   const createReport = async () => {
     if (!selectedClient || aiReportStage) return
 
+    const reportClient = deriveClientMetrics(selectedClient)
     const startedAt = Date.now()
-    const risks = detectRisks(selectedClient, managedRules)
+    const risks = detectRisks(reportClient, managedRules)
     const baseReport: Report = {
       id: crypto.randomUUID(),
-      clientId: selectedClient.id,
-      clientName: selectedClient.name,
+      clientId: reportClient.id,
+      clientName: reportClient.name,
       riskLevel: getOverallLevel(risks),
       createdAt: formatDate(),
       risks,
-      content: buildReportContent(selectedClient, risks),
+      content: buildReportContent(reportClient, risks),
     }
     setPage('report')
 
@@ -2341,13 +2407,13 @@ function App() {
       ...risk,
       issueId: riskIssueId(risk),
       priority: riskPriority(risk),
-      reason: risk.reason(selectedClient),
+      reason: risk.reason(reportClient),
     }))
     try {
       setAiReportStage('reviewing')
       const reviewStartedAt = Date.now()
       const reviewResponse = await apiSend<{ review: AiReview; model: string; usage?: unknown }>('/api/ai/review', 'POST', {
-        client: selectedClient,
+        client: reportClient,
         risks: risksForAi,
       })
       const reviewElapsed = Date.now() - reviewStartedAt
@@ -2357,7 +2423,7 @@ function App() {
 
       setAiReportStage('generating')
       const reportResponse = await apiSend<{ content: string; model: string; usage?: unknown }>('/api/ai/report', 'POST', {
-        client: selectedClient,
+        client: reportClient,
         risks: risksForAi,
         content: baseReport.content,
         aiReview: reviewResponse.review,
@@ -2627,7 +2693,7 @@ function App() {
           <button
             className={page === 'form' ? 'active' : ''}
             onClick={() => {
-              setEditingClient({ ...emptyClient, id: crypto.randomUUID() })
+              setEditingClient(deriveClientMetrics({ ...emptyClient, id: crypto.randomUUID() }))
               setPage('form')
             }}
           >
@@ -2669,7 +2735,7 @@ function App() {
               <button
                 className="primary-button"
                 onClick={() => {
-                  setEditingClient({ ...emptyClient, id: crypto.randomUUID() })
+                  setEditingClient(deriveClientMetrics({ ...emptyClient, id: crypto.randomUUID() }))
                   setPage('form')
                 }}
               >
@@ -2773,7 +2839,7 @@ function App() {
               <button
                 className="primary-button"
                 onClick={() => {
-                  setEditingClient({ ...emptyClient, id: crypto.randomUUID() })
+                  setEditingClient(deriveClientMetrics({ ...emptyClient, id: crypto.randomUUID() }))
                   setPage('form')
                 }}
               >
@@ -2825,7 +2891,7 @@ function App() {
                         </button>
                         <button
                           onClick={() => {
-                            setEditingClient(client)
+                            setEditingClient(deriveClientMetrics(client))
                             setPage('form')
                           }}
                         >
@@ -2946,6 +3012,14 @@ function App() {
                   </div>
                   <span>{currentSkippedRules.length} 条</span>
                 </div>
+                {currentMissingFieldRows.length > 0 && (
+                  <div className="missing-field-summary">
+                    <strong>优先补充字段</strong>
+                    <div className="chips">
+                      {currentMissingFieldRows.map((row) => <span key={row.name}>{row.name} × {row.value}</span>)}
+                    </div>
+                  </div>
+                )}
                 <div className="skipped-rule-list">
                   {currentSkippedRules.slice(0, 8).map(({ rule, execution }) => (
                     <article key={rule.code} className="skipped-rule-card">
@@ -2954,6 +3028,7 @@ function App() {
                     </article>
                   ))}
                 </div>
+                {currentSkippedRules.length > 8 && <p className="section-helper">还有 {currentSkippedRules.length - 8} 条规则因资料不足暂未展开。</p>}
               </section>
             )}
             <div className="risk-list">
@@ -2966,7 +3041,7 @@ function App() {
                   <h3>{risk.name}</h3>
                   <p><strong>涉及税种：</strong>{risk.taxType}</p>
                   <p><strong>整改优先级：</strong>{riskPriority(risk)}</p>
-                  <p><strong>触发原因：</strong>{risk.reason(selectedClient)}</p>
+                  <p><strong>触发原因：</strong>{risk.reason(selectedDetectionClient || selectedClient)}</p>
                   <p><strong>整改建议：</strong>{risk.suggestion}</p>
                   <p><strong>依据：</strong>{risk.basis}</p>
                   <strong className="section-label">建议补充资料</strong>
@@ -3497,6 +3572,9 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <p className="section-helper">
             先录入企业共用画像，再按增值税、企业所得税、个人所得税与综合线索补充关键字段。多主体项目建议按主体分别建档，集团口径另行汇总。当前版本只采集可量化信息和风险标记，不要求访谈、抽凭或上传底稿。
           </p>
+          <button className="secondary-button compact-button" type="button" onClick={() => onChange(deriveClientMetrics(client))}>
+            <RefreshCcw /> 同步基础数据到规则字段
+          </button>
         </div>
         <div className="intake-score">
           <span>{completeness.label}</span>
