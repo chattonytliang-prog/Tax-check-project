@@ -4,21 +4,34 @@
     "name": "主体无人员或人员变动异常",
     "taxType": "通用财务/经营",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：输出季度末人数均为0的主体（主体成立时间>6个月）；\n同步展示：\n①近3个月的营业收入；\n②近3个月的成本费用；\n③主体是否为ICP持证主体；\n④人员变动幅度=本季度末人员数量/上季度末人员数量-1\n⑤营业收入变动幅度=本季度营业收入/上季度营业收入-1；\n⑥成本费用变动幅度=本季度成本费用/上季度成本费用-1\n预警阈值：①满足本季度末人数为0的，提示主体无人员的预警；\n②本季度末人数较上季度末人数下降50%以上，提示预警；\n（如该主体为ICP持证主体，会在预警中做相关提示）\n取值期间/频率：期末时点数 / 月度推送\n候选类型：自动检测候选",
+    "basis": "脱敏税务风险预警指标：期末人数为 0，或本期人数较上期下降 50% 以上。",
+    "suggestion": "复核人员花名册、社保、工资申报和主体经营实质；如为持证或持续经营主体，应补充人员安排说明。",
+    "enabled": true,
+    "conditionText": "自动检测候选：人员人数、上季度末人数。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "any": [
+        {
+          "field": "employees",
+          "operator": "<=",
+          "value": 0
+        },
+        {
+          "field": "employees",
+          "operator": "<",
+          "value": 0,
+          "compareField": "previousQuarterEmployees",
+          "multiplier": 0.5
+        }
+      ]
     },
-    "requiredFields": [],
+    "requiredFields": [
+      "previousQuarterEmployees"
+    ],
     "materials": [
-      "营业收入",
-      "收入",
-      "成本费用",
-      "人员人数"
+      "员工花名册",
+      "社保清单",
+      "工资申报明细",
+      "主体经营说明"
     ]
   },
   {
@@ -26,22 +39,30 @@
     "name": "主体无人员但有人员相关成本费用支出",
     "taxType": "通用财务/经营",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：输出本季度平均人数均为0的主体（主体成立时间>6个月）人员相关成本费用金额；\n输出本季度的房租收入，并与房租、装修成本联动计算，对于有房租收入，如无人且人员相关成本费用仅为房租成本（房租收入可覆盖房租成本）、装修成本的，不提示预警；\n预警阈值：满足本季度平均人数为0的，但发生与人相关的房租、装修、办公费、培训、差旅、会议、招待等费用的，需要预警无人但存在人员相关费用；\n对于有房租收入的，如存在房租成本、装修成本的，不提示预警；\n取值期间/频率：近3个月 / 月度推送\n候选类型：自动检测候选",
+    "basis": "脱敏税务风险预警指标：本季度平均人数为 0，但发生与人员相关的房租、装修、办公、培训、差旅、会议、招待等费用。",
+    "suggestion": "复核费用性质、服务对象、租赁和装修用途，排除空壳主体挂费用或费用分摊不合理。",
+    "enabled": true,
+    "conditionText": "自动检测候选：人员人数、人员相关成本费用。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "all": [
+        {
+          "field": "employees",
+          "operator": "<=",
+          "value": 0
+        },
+        {
+          "field": "peopleRelatedExpense",
+          "operator": ">",
+          "value": 0
+        }
+      ]
     },
     "requiredFields": [],
     "materials": [
-      "收入",
-      "成本费用",
-      "人员人数",
-      "租赁面积/租赁费用",
-      "装修费用/资产"
+      "费用明细",
+      "租赁合同",
+      "装修合同",
+      "办公差旅培训凭证"
     ]
   },
   {
@@ -49,20 +70,30 @@
     "name": "主体有费用，无收入",
     "taxType": "通用财务/经营",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：不考虑主体成立时间，每年10月固定扫描全集团主体，展示以下数据：\n①YTD主体本年累计收入；\n②YTD主体本年累计成本费用；\n预警阈值：满足主体本年累计收入为0，本年累计成本费用>0，需要预警主体存在有费用无收入的情况，需要BP评估主体是否需要搭TP以及利润结构是否合理\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：检查清单",
+    "basis": "脱敏税务风险预警指标：本年累计收入为 0，本年累计成本费用大于 0。",
+    "suggestion": "复核主体是否仍有经营职能、费用归属是否准确，必要时补充转让定价或成本分摊说明。",
+    "enabled": true,
+    "conditionText": "检查清单：YTD 收入、YTD 成本费用。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "all": [
+        {
+          "field": "ytdRevenue",
+          "operator": "<=",
+          "value": 0
+        },
+        {
+          "field": "ytdCostExpense",
+          "operator": ">",
+          "value": 0
+        }
+      ]
     },
     "requiredFields": [],
     "materials": [
-      "收入",
-      "成本费用",
-      "利润总额"
+      "利润表",
+      "费用明细",
+      "主体职能说明",
+      "关联交易资料"
     ]
   },
   {
@@ -70,20 +101,41 @@
     "name": "人均租房面积",
     "taxType": "通用财务/经营",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：人均租房面积=主体承租房租面积（需剔除转租部分）/主体当月末人数；\n*主体本月末人数为0，但有租房面积，人均租房面积测算直接输出预警：“主体无人员但有租房，关注租房成本费用合理性的风险”；\n预警阈值：1）推送主体无人员但有租房面积的情况；\n2）推送人均租房面积不在8~20平合理范围内的情况；\n取值期间/频率：期末时点数 / 月度推送\n候选类型：自动检测候选",
+    "basis": "脱敏税务风险预警指标：无人员但有租房面积，或人均租房面积不在合理范围。",
+    "suggestion": "复核承租面积、转租面积和实际办公人员，说明超额面积用途或调整费用归属。",
+    "enabled": true,
+    "conditionText": "自动检测候选：租赁面积、人员人数。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "any": [
+        {
+          "all": [
+            {
+              "field": "employees",
+              "operator": "<=",
+              "value": 0
+            },
+            {
+              "field": "rentalArea",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "field": "rentalArea",
+          "operator": ">",
+          "value": 0,
+          "compareField": "employees",
+          "multiplier": 20
+        }
+      ]
     },
     "requiredFields": [],
     "materials": [
-      "成本费用",
-      "人员人数",
-      "租赁面积/租赁费用"
+      "租赁合同",
+      "办公场地清单",
+      "转租协议",
+      "员工花名册"
     ]
   },
   {
@@ -91,19 +143,24 @@
     "name": "福利费分析",
     "taxType": "企业所得税",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：对接福利费数据获取：\n人均福利费；\n实际工资薪金总额 - 年累计\n实际发生的福利费 - 年累计\n实际福利费限额 - 年累计\n实际剩余额度-年累计\n预警阈值：①无人有福利；\n②本年福利费超标；\n③本年福利费发生额为负；\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：自动检测候选",
+    "basis": "企业所得税税前扣除限额：职工福利费不超过工资薪金总额 14%。",
+    "suggestion": "汇算清缴时测算福利费扣除限额，对超限部分纳税调增。",
+    "enabled": true,
+    "conditionText": "自动检测候选：工资薪金、福利费。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "field": "welfareExpense",
+      "operator": ">",
+      "value": 0,
+      "compareField": "payrollTotal",
+      "multiplier": 0.14
     },
-    "requiredFields": [],
+    "requiredFields": [
+      "payrollTotal"
+    ],
     "materials": [
-      "工资薪金",
-      "福利费"
+      "工资薪金明细",
+      "福利费明细",
+      "汇算清缴底稿"
     ]
   },
   {
@@ -111,18 +168,23 @@
     "name": "人均福利性质餐费超出合理范围",
     "taxType": "通用财务/经营",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：人均每月餐费=(YTD餐费/YTD月份数)/YTD平均人数\n预警阈值：每月人均餐费>3000元，提示预警\n取值期间/频率：YTD（本年累计） / 月度推送\n候选类型：自动检测候选",
+    "basis": "脱敏税务风险预警指标：福利性质餐费按人数测算明显偏高。",
+    "suggestion": "复核餐费性质、报销对象和发票真实性，区分业务招待费、福利费和个人消费。",
+    "enabled": true,
+    "conditionText": "检查清单：福利性质餐费、人员人数。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "field": "monthlyMealBenefitExpense",
+      "operator": ">",
+      "value": 0,
+      "compareField": "employees",
+      "multiplier": 800
     },
     "requiredFields": [],
     "materials": [
-      "人员人数"
+      "餐费明细",
+      "报销单",
+      "员工名单",
+      "发票样本"
     ]
   },
   {
@@ -130,20 +192,23 @@
     "name": "不合理装修费用",
     "taxType": "通用财务/经营",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：①主体是否有自有或租赁房产（根据账面自有或租赁房产的资产余额及本年费用发生额判断）；\n②主体是否有装修相关支出或确认装修相关资产；\n预警阈值：主体无自有或租赁房产但存在装修相关的资产或费用的，需要预警\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：需人工确认",
+    "basis": "脱敏税务风险预警指标：装修费用与租赁面积、使用场景不匹配。",
+    "suggestion": "复核装修合同、工程验收和资本化/费用化处理，说明单位面积装修成本偏高原因。",
+    "enabled": true,
+    "conditionText": "检查清单：装修费用、租赁面积。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "field": "decorationExpense",
+      "operator": ">",
+      "value": 0,
+      "compareField": "rentalArea",
+      "multiplier": 3000
     },
     "requiredFields": [],
     "materials": [
-      "成本费用",
-      "租赁面积/租赁费用",
-      "装修费用/资产"
+      "装修合同",
+      "工程验收单",
+      "付款流水",
+      "租赁合同"
     ]
   },
   {
@@ -151,21 +216,36 @@
     "name": "主体EBIT利润率年度波动",
     "taxType": "通用财务/经营",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：本年度EBIT利润率=（本年度营业收入-营业成本-税金及附加-销售费用-管理费用-研发费用+信用减值损失+资产减值损失）/本年度营业收入；\n上年全年EBIT利润率=（上年全年营业收入-营业成本-税金及附加-销售费用-管理费用-研发费用+信用减值损失+资产减值损失）/上年全年营业收入；\n本年EBIT利润率与上年全年的变动=本年度EBIT利润率-上年全年EBIT利润率；\n预警阈值：需要对主体划分是否为业主，如定位为业主的，即使该指标异常也不提示预警，仅展示数据；\n1、上年全年EBIT利润率为正，本年EBIT利润率为负的提示预警（查看是否有TP定位变化或未结算TP的情况）；\n2、上年全年EBIT利润率为负，本年EBIT利润率为正的提示预警（查看是否有TP定位变化或存在上年未结算TP的情况，TP的定位变化是否有合理解释）；\n3、本年EBIT利润率与上年全年的变动的绝对值>1%（此处为减法）的提示预警（查看是否有TP定位变化或未结算TP的情况）；\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：自动检测候选",
+    "basis": "脱敏税务风险预警指标：EBIT 利润较上年明显波动。",
+    "suggestion": "复核收入、成本、费用和关联交易变化，解释利润率异常波动原因。",
+    "enabled": true,
+    "conditionText": "自动检测候选：EBIT 利润、上年 EBIT 利润。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "any": [
+        {
+          "field": "ebitProfit",
+          "operator": ">",
+          "value": 0,
+          "compareField": "previousYearEbitProfit",
+          "multiplier": 1.3
+        },
+        {
+          "field": "ebitProfit",
+          "operator": "<",
+          "value": 0,
+          "compareField": "previousYearEbitProfit",
+          "multiplier": 0.7
+        }
+      ]
     },
-    "requiredFields": [],
+    "requiredFields": [
+      "previousYearEbitProfit"
+    ],
     "materials": [
-      "营业收入",
-      "收入",
-      "成本费用",
-      "利润总额"
+      "利润表",
+      "管理报表",
+      "关联交易明细",
+      "成本费用明细"
     ]
   },
   {
@@ -173,20 +253,32 @@
     "name": "主体利润率情况",
     "taxType": "通用财务/经营",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：本年度EBIT利润率；\n本年度利润总额利润率；\n本年利润总额利润率与EBIT利润率差异=本年度利润总额利润率-本年度EBIT利润率；\n预警阈值：①本年度EBIT利润率为正，利润总额利润率为负，需要查看是否因为利息支出等导致主体亏损，是否符合预期以及是否可以对大额营业外支出或财务费用进行优化；\n②EBIT利润率-本年利润总额利润率>3%，需查看是否符合预期，以及是否可以对大额营业外支出或财务费用进行优化；\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：自动检测候选",
+    "basis": "脱敏税务风险预警指标：主体亏损或利润率明显偏低。",
+    "suggestion": "复核主体职能、利润结构、亏损原因和关联交易定价是否合理。",
+    "enabled": true,
+    "conditionText": "检查清单：YTD 收入、YTD 利润。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "any": [
+        {
+          "field": "ytdProfit",
+          "operator": "<",
+          "value": 0
+        },
+        {
+          "field": "ytdProfit",
+          "operator": "<",
+          "value": 0,
+          "compareField": "ytdRevenue",
+          "multiplier": 0.03
+        }
+      ]
     },
     "requiredFields": [],
     "materials": [
-      "成本费用",
-      "利润总额",
-      "亏损弥补数据"
+      "利润表",
+      "管理报表",
+      "亏损说明",
+      "关联交易资料"
     ]
   },
   {
@@ -194,21 +286,35 @@
     "name": "主体EBIT预实差异",
     "taxType": "通用财务/经营",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：①本年度实际的EBIT金额；\n②本年度实际的EBIT利润率=（本年度营业收入-营业成本-税金及附加-销售费用-管理费用-研发费用+信用减值损失+资产减值损失）/本年度营业收入；\n③本年度预算的EBIT金额（通过中间表维护，数据源自预算数据）；\n④截至本月预算的EBIT金额=本年度预算的EBIT金额/12*月份；\n⑤本年度预算的EBIT利润率（通过中间表维护，数据源自预算数据）；\n主体EBIT预实差异=截至本月预算的EBIT金额-本年度实际的EBIT金额；\n主体EBIT预实差异率=主体EBIT预实差异/本年度实际的EBIT金额；\n预警阈值：主体EBIT预实差异率的绝对值>20%，提示预警\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：自动检测候选",
+    "basis": "脱敏税务风险预警指标：EBIT 实际值与预算值差异超过合理范围。",
+    "suggestion": "复核预算口径、实际收入成本费用和异常调整事项。",
+    "enabled": true,
+    "conditionText": "自动检测候选：EBIT 利润、预算 EBIT 利润。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "any": [
+        {
+          "field": "ebitProfit",
+          "operator": ">",
+          "value": 0,
+          "compareField": "budgetEbitProfit",
+          "multiplier": 1.2
+        },
+        {
+          "field": "ebitProfit",
+          "operator": "<",
+          "value": 0,
+          "compareField": "budgetEbitProfit",
+          "multiplier": 0.8
+        }
+      ]
     },
-    "requiredFields": [],
+    "requiredFields": [
+      "budgetEbitProfit"
+    ],
     "materials": [
-      "营业收入",
-      "收入",
-      "成本费用",
-      "利润总额"
+      "预算表",
+      "利润表",
+      "预算差异分析"
     ]
   },
   {
@@ -216,19 +322,36 @@
     "name": "主体营业收入预实差异",
     "taxType": "通用财务/经营",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：①本年度实际的营业收入金额；\n②本年度预算的营业收入（通过中间表维护，数据源自预算数据）；\n③截至本月预算的营收金额=本年度预算的营收金额/12*月份；\n主体营收预实差异=截至本月预算的营收金额-本年度实际的营收金额；\n主体营收预实差异率=主体营收预实差异/本年度实际的营收金额；\n预警阈值：主体营收预实差异率的绝对值>20%，提示预警\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：自动检测候选",
+    "basis": "脱敏税务风险预警指标：营业收入实际值与预算值差异超过合理范围。",
+    "suggestion": "核对收入确认、预算口径、未开票收入和关联交易安排。",
+    "enabled": true,
+    "conditionText": "自动检测候选：收入、预算收入。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "any": [
+        {
+          "field": "ytdRevenue",
+          "operator": ">",
+          "value": 0,
+          "compareField": "budgetRevenue",
+          "multiplier": 1.2
+        },
+        {
+          "field": "ytdRevenue",
+          "operator": "<",
+          "value": 0,
+          "compareField": "budgetRevenue",
+          "multiplier": 0.8
+        }
+      ]
     },
-    "requiredFields": [],
+    "requiredFields": [
+      "budgetRevenue"
+    ],
     "materials": [
-      "营业收入",
-      "收入"
+      "预算表",
+      "收入明细",
+      "开票明细",
+      "合同台账"
     ]
   },
   {
@@ -236,20 +359,22 @@
     "name": "主营业务利润率",
     "taxType": "通用财务/经营",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：主营业务利润率=1-本年“主营业务成本*”/本年“主营业务收入*”；\n预警阈值：①主体有主营业务收入但没有主营业务成本；\n②主体有主营业务成本但没有主营业务收入；\n③主营业务利润率<0；\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：自动检测候选",
+    "basis": "脱敏税务风险预警指标：主营业务利润率偏低。",
+    "suggestion": "复核主营成本归集、收入确认和关联交易定价，说明低毛利或低利润原因。",
+    "enabled": true,
+    "conditionText": "检查清单：主营业务收入、主营业务成本、本年利润。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "field": "ytdProfit",
+      "operator": "<",
+      "value": 0,
+      "compareField": "mainBusinessRevenue",
+      "multiplier": 0.05
     },
     "requiredFields": [],
     "materials": [
-      "收入",
-      "成本费用",
-      "利润总额"
+      "主营收入明细",
+      "主营成本明细",
+      "利润表"
     ]
   },
   {
@@ -257,19 +382,22 @@
     "name": "商品毛利率（商品销售相关）",
     "taxType": "通用财务/经营",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：商品毛利率=1-本年“主营业务成本-商品销售*”/本年“主营业务收入-商品销售*”；\n接入业务解释资料获取各主体的毛利率合理值；\n预警阈值：①主体的商品毛利率超出该主体配置的合理范围，则提示预警；\n*可以将业务解释资料中的解释也带入；\n②主体的商品销售毛利率<0 或 有商品销售收入无商品销售成本 或 有商品销售成本无商品销售收入，且业务解释资料无相关解释的；\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：自动检测候选",
+    "basis": "脱敏税务风险预警指标：商品销售毛利率偏低或成本收入倒挂。",
+    "suggestion": "复核进销价格、库存结转、促销折扣和关联交易定价。",
+    "enabled": true,
+    "conditionText": "自动检测候选：商品销售收入、商品销售成本。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "field": "goodsSalesRevenue",
+      "operator": "<",
+      "value": 0,
+      "compareField": "goodsCost",
+      "multiplier": 1.05
     },
     "requiredFields": [],
     "materials": [
-      "收入",
-      "成本费用"
+      "商品销售明细",
+      "采购成本明细",
+      "库存台账"
     ]
   },
   {
@@ -277,22 +405,22 @@
     "name": "主体开具增值税专用发票红字发票",
     "taxType": "增值税",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：排查主体是否存在本年内开具增值税专用发票红字发票的情况，展示①本年红字开票金额（销项综合分析数据中数值类型为负数的，筛选类型为关联方的）；②本年TP开票总额；\n*REF:本年开具红字发票占比=本年TP开具红字发票/本年TP开票总额；\n预警阈值：TP红字发票占TP开票金额超10%；\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：关注提示",
+    "basis": "脱敏税务风险预警指标：红字专票金额占销项税额或销售额比例偏高。",
+    "suggestion": "复核红字发票原因、退货折让依据和跨期收入调整。",
+    "enabled": true,
+    "conditionText": "自动检测候选：红字发票金额、销项税额。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "field": "redVatSpecialInvoiceAmount",
+      "operator": ">",
+      "value": 0,
+      "compareField": "outputTax",
+      "multiplier": 0.2
     },
     "requiredFields": [],
     "materials": [
-      "增值税税额",
-      "销项税额",
-      "发票数据",
-      "红字发票金额",
-      "关联交易数据"
+      "红字发票清单",
+      "销售合同",
+      "退货折让资料"
     ]
   },
   {
@@ -300,19 +428,36 @@
     "name": "增值税实际税负率与理论值偏离",
     "taxType": "增值税",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：通过测算主体本年的增值税实际税负率与理论税负率的偏离程度，提示预警；\n①本年增值税实际税负率=本年累计增值税应纳税额/本年累计增值税应税销售额；\n②本年增值税理论税负率（M1），未来通过对接相关数据获取；\n③增值税理论与实际税负率差异=本年增值税理论税负率（M1）-本年增值税实际税负率；\n同时，展示上一年度的增值税理论税负率便于参考（避免本年期间较短产生的税负率偏离）；\n预警阈值：增值税理论与实际税负率差异绝对值>1%的提示预警，查看原因；\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：自动检测候选",
+    "basis": "脱敏税务风险预警指标：实际增值税税额与理论税额差异较大。",
+    "suggestion": "复核销项、进项、进项转出、税率适用和优惠政策是否准确。",
+    "enabled": true,
+    "conditionText": "自动检测候选：增值税税额、理论税额。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "any": [
+        {
+          "field": "vatTaxPayable",
+          "operator": ">",
+          "value": 0,
+          "compareField": "theoreticalVatTax",
+          "multiplier": 1.3
+        },
+        {
+          "field": "vatTaxPayable",
+          "operator": "<",
+          "value": 0,
+          "compareField": "theoreticalVatTax",
+          "multiplier": 0.7
+        }
+      ]
     },
-    "requiredFields": [],
+    "requiredFields": [
+      "theoreticalVatTax"
+    ],
     "materials": [
-      "增值税税额",
-      "应税销售额"
+      "增值税申报表",
+      "销项明细",
+      "进项明细",
+      "理论税负测算表"
     ]
   },
   {
@@ -320,38 +465,95 @@
     "name": "增值税入库税金的预实差异",
     "taxType": "增值税",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：①本年度实际的增值税入库税金（只取自行申报部分，不含代扣代缴及退税）\n②本年度预算的增值税入库税金（通过中间表维护，数据源自预算数据）；\n③截至本月预算的增值税入库税金=本年度预算的增值税入库税金/12*月份；\n主体增值税入库税金预实差异=本年度实际的增值税入库税金-截至本月预算的增值税入库税金；\n主体增值税入库税金预实差异率=主体增值税入库税金预实差异/截至本月预算的增值税入库税金；\n预警阈值：①主体增值税入库税金预实差异率的绝对值>20%，提示预警； \n②预算预估无需缴纳增值税，但实际入库税金的，提示预警；\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：自动检测候选",
+    "basis": "脱敏税务风险预警指标：增值税入库税金实际值与预算值偏离。",
+    "suggestion": "复核预算口径、收入变化、进项抵扣和税金入库情况。",
+    "enabled": true,
+    "conditionText": "自动检测候选：增值税税额、预算增值税。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "any": [
+        {
+          "field": "vatTaxPayable",
+          "operator": ">",
+          "value": 0,
+          "compareField": "budgetVatTax",
+          "multiplier": 1.2
+        },
+        {
+          "field": "vatTaxPayable",
+          "operator": "<",
+          "value": 0,
+          "compareField": "budgetVatTax",
+          "multiplier": 0.8
+        }
+      ]
     },
-    "requiredFields": [],
+    "requiredFields": [
+      "budgetVatTax"
+    ],
     "materials": [
-      "增值税税额"
+      "预算表",
+      "增值税申报表",
+      "税款入库记录"
     ]
   },
   {
     "code": "ON-017",
-    "name": "主体增值税增值税税额与应税销售额同步增长系数",
+    "name": "主体增值税税额与应税销售额同步增长系数",
     "taxType": "增值税",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：本年累计增值税税额增长率=本年累计增值税税额/上年同期累计增值税税额-1；\n本年累计增值税应税销售额增长率=本年累计增值税应税销售额/上年同期累计增值税应税销售额-1；\n增值税增值税税额与应税销售额同步增长系数=本年累计增值税税额增长率/本年累计增值税应税销售额增长率；\n预警阈值：①反向波动：同步增长系数<0的提示预警；\n②同步增长系数>1.2，比如应税销售额同比增长20%，但税额增长24%或应税销售额下降20%，但税额下降24%；\n③0<同步增长系数<0.8，比如应税销售额同比增长80%，但税额增长<64%或应税销售额下降80%，但税额下降64%；\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：自动检测候选",
+    "basis": "脱敏税务风险预警指标：税额变化与应税销售额变化不同步。",
+    "suggestion": "复核税率、进项抵扣、进项转出、收入结构和跨期申报情况。",
+    "enabled": true,
+    "conditionText": "自动检测候选：本期/上期税额和应税销售额。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "any": [
+        {
+          "all": [
+            {
+              "field": "vatTaxPayable",
+              "operator": ">",
+              "value": 0,
+              "compareField": "priorVatTaxPayable",
+              "multiplier": 1.3
+            },
+            {
+              "field": "taxableSales",
+              "operator": "<=",
+              "value": 0,
+              "compareField": "priorTaxableSales",
+              "multiplier": 1.1
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "vatTaxPayable",
+              "operator": "<",
+              "value": 0,
+              "compareField": "priorVatTaxPayable",
+              "multiplier": 0.7
+            },
+            {
+              "field": "taxableSales",
+              "operator": ">=",
+              "value": 0,
+              "compareField": "priorTaxableSales",
+              "multiplier": 0.9
+            }
+          ]
+        }
+      ]
     },
-    "requiredFields": [],
+    "requiredFields": [
+      "priorVatTaxPayable",
+      "priorTaxableSales"
+    ],
     "materials": [
-      "增值税税额",
-      "应税销售额"
+      "本期增值税申报表",
+      "上期增值税申报表",
+      "销项明细",
+      "进项明细"
     ]
   },
   {
@@ -359,20 +561,20 @@
     "name": "主体进销项税率差",
     "taxType": "增值税",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：对接进销项税率差分析数据，展示主体当年度销项税额、进项税额、销项税额-进项税额、综合置信销项税率、综合置信进项税率、综合置信销项税率-综合置信进项税率；\n预警阈值：①对于同时满足1）销项税额-进项税额<0；2）销项税额>0；3）综合置信销项税率-综合置信进项税率<0的提示预警；\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：自动检测候选",
+    "basis": "脱敏税务风险预警指标：进项与销项税率差异偏大。",
+    "suggestion": "复核不同税率业务、免税/简易计税、进项抵扣范围和税率适用准确性。",
+    "enabled": true,
+    "conditionText": "检查清单：进销项税率差。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "field": "vatRateSpread",
+      "operator": ">",
+      "value": 0.03
     },
     "requiredFields": [],
     "materials": [
-      "增值税税额",
-      "销项税额",
-      "进项税额"
+      "销项发票明细",
+      "进项发票明细",
+      "税率适用说明"
     ]
   },
   {
@@ -380,20 +582,25 @@
     "name": "职工教育经费分析",
     "taxType": "企业所得税",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：主体年均人数；\n实际工资薪金总额 - 年累计；\n实际发生的职工教育经费（培训费）- 年累计；\n实际职工教育经费限额 - 年累计；\n实际调整的职工教育经费；\n预警阈值：①无人有职工教育经费；\n②本年职工教育经费超标；\n③本年职工教育经费发生额为负；\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：自动检测候选",
+    "basis": "企业所得税税前扣除限额：职工教育经费按适用比例扣除，当前按 8% 预警。",
+    "suggestion": "区分可当期扣除和结转以后年度扣除金额，保留培训真实性资料。",
+    "enabled": true,
+    "conditionText": "自动检测候选：工资薪金、职工教育经费。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "field": "educationExpense",
+      "operator": ">",
+      "value": 0,
+      "compareField": "payrollTotal",
+      "multiplier": 0.08
     },
-    "requiredFields": [],
+    "requiredFields": [
+      "payrollTotal"
+    ],
     "materials": [
-      "人员人数",
-      "工资薪金",
-      "职工教育经费"
+      "工资薪金明细",
+      "培训合同",
+      "培训记录",
+      "教育经费明细"
     ]
   },
   {
@@ -401,20 +608,25 @@
     "name": "广宣费分析",
     "taxType": "企业所得税",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：对接广宣费数据获取：\n①本年实际发生的营业收入；\n②本年实际发生的广宣费；\n③本年广宣费扣除限额；\n④实际剩余广宣费额度；\n⑤累计结转以后年度广宣费扣除额；\n预警阈值：①本年广宣费超标；\n②本年广宣费发生额为负数；\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：自动检测候选",
+    "basis": "企业所得税税前扣除限额：一般行业广告和业务宣传费不超过销售收入 15%。",
+    "suggestion": "测算可扣除限额，区分广告宣传、业务招待和赞助支出。",
+    "enabled": true,
+    "conditionText": "自动检测候选：收入、广告宣传费。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "field": "adExpense",
+      "operator": ">",
+      "value": 0,
+      "compareField": "annualRevenue",
+      "multiplier": 0.15
     },
-    "requiredFields": [],
+    "requiredFields": [
+      "annualRevenue"
+    ],
     "materials": [
-      "营业收入",
-      "收入",
-      "广告宣传费"
+      "广告合同",
+      "投放记录",
+      "广告宣传费明细",
+      "销售收入明细"
     ]
   },
   {
@@ -422,20 +634,24 @@
     "name": "业务招待费分析",
     "taxType": "企业所得税",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：招待费企业所得税扣除限额1：主体营业收入的5‰\n招待费企业所得税扣除限额2：本年业务招待费发生额的60%\n超额调整的业务招待费扣除基数=扣除限额2-扣除限额1；\n预警阈值：①扣除限额1<扣除限额2，提示预警；\n②本年招待费发生额为负数；\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：自动检测候选",
+    "basis": "企业所得税税前扣除限额：业务招待费按发生额 60% 且不超过销售收入 5‰。",
+    "suggestion": "按税法限额重新测算可扣除金额，对超限部分做纳税调整。",
+    "enabled": true,
+    "conditionText": "自动检测候选：收入、业务招待费。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "field": "entertainmentExpense",
+      "operator": ">",
+      "value": 0,
+      "compareField": "annualRevenue",
+      "multiplier": 0.005
     },
-    "requiredFields": [],
+    "requiredFields": [
+      "annualRevenue"
+    ],
     "materials": [
-      "营业收入",
-      "收入",
-      "业务招待费"
+      "业务招待费明细",
+      "销售收入明细",
+      "汇算清缴底稿"
     ]
   },
   {
@@ -443,22 +659,22 @@
     "name": "文建费理论值与实际值差异",
     "taxType": "文化事业建设费",
     "level": "中",
-    "basis": "预警类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：本年文建费属期申报税额；\n本年文建费理论申报税额（分别列示账面广告含税收入—拆分关联方、非关联方；关联方广告进项含税金额）；\n文建费理论值与实际值差异=本年文建费理论申报税额-本年文建费属期申报税额；\n预警阈值：文建费理论值-实际值差异>10万，提示预警；\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：自动检测候选",
+    "basis": "脱敏税务风险预警指标：文化事业建设费实缴额与理论值偏离。",
+    "suggestion": "复核文化事业建设费计费收入、扣除项目和实际申报入库金额。",
+    "enabled": true,
+    "conditionText": "检查清单：广告服务收入、文建费实缴。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "field": "cultureConstructionFeePaid",
+      "operator": "<",
+      "value": 0,
+      "compareField": "advertisingServiceRevenue",
+      "multiplier": 0.03
     },
     "requiredFields": [],
     "materials": [
-      "收入",
-      "广告宣传费",
-      "进项税额",
-      "文化事业建设费",
-      "关联交易数据"
+      "广告服务收入明细",
+      "文建费申报表",
+      "扣除项目明细"
     ]
   },
   {
@@ -466,18 +682,35 @@
     "name": "主体主营业务收入同比及环比波动",
     "taxType": "通用财务/经营",
     "level": "中",
-    "basis": "关注类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：主体主营业务收入月度波动=主体本月主营业务收入/主体上月主营业务收入-1；(每年1月该指标不提示预警)\n*输出本年月度平均的主营业务收入值供参考；\n主体主营业务收入同比变动=主体本年主营业务收入/主体上年同期主营业务收入-1；\n*拆分TP收入、非TP收入便于参考；\n预警阈值：/\n取值期间/频率：本月&上月；\n本年&上年同期； / 月度推送\n候选类型：需人工确认",
+    "basis": "脱敏税务风险预警指标：主营业务收入同比或环比波动较大。",
+    "suggestion": "复核收入确认、客户变化、业务模式变化和跨期调整。",
+    "enabled": true,
+    "conditionText": "自动检测候选：本年累计收入、上年同期收入。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "any": [
+        {
+          "field": "ytdRevenue",
+          "operator": ">",
+          "value": 0,
+          "compareField": "previousYearRevenue",
+          "multiplier": 1.3
+        },
+        {
+          "field": "ytdRevenue",
+          "operator": "<",
+          "value": 0,
+          "compareField": "previousYearRevenue",
+          "multiplier": 0.7
+        }
+      ]
     },
-    "requiredFields": [],
+    "requiredFields": [
+      "previousYearRevenue"
+    ],
     "materials": [
-      "收入"
+      "收入明细",
+      "上年同期收入明细",
+      "合同台账"
     ]
   },
   {
@@ -485,58 +718,62 @@
     "name": "其他应收款-代收代付余额",
     "taxType": "通用财务/经营",
     "level": "中",
-    "basis": "关注类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：①截至本月，其他应收款-代收代付科目余额；\n②截至上年末，其他应收款-代收代付科目余额；\n预警阈值：/\n取值期间/频率：本月期末数 / 月度推送\n候选类型：需人工确认",
+    "basis": "脱敏税务风险预警指标：其他应收款中代收代付余额长期存在或金额较大。",
+    "suggestion": "复核代收代付业务实质、合同依据、资金流和是否存在收入费用错列。",
+    "enabled": true,
+    "conditionText": "检查清单：其他应收代收代付余额。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "field": "otherReceivableAgencyBalance",
+      "operator": ">",
+      "value": 0
     },
     "requiredFields": [],
     "materials": [
-      "规则字段映射表",
-      "底层明细数据"
+      "其他应收款明细",
+      "代收代付协议",
+      "银行流水"
     ]
   },
   {
     "code": "ON-025",
     "name": "营业外支出发生额",
     "taxType": "通用财务/经营",
-    "level": "中",
-    "basis": "关注类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：输出营业外支出发生额及对应的科目构成；\n预警阈值：/\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：需人工确认",
+    "level": "低",
+    "basis": "脱敏税务风险预警指标：存在营业外支出发生额，需要复核税前扣除口径。",
+    "suggestion": "区分罚款、捐赠、资产损失等性质，复核税前扣除或纳税调整要求。",
+    "enabled": true,
+    "conditionText": "检查清单：营业外支出。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "field": "nonOperatingExpense",
+      "operator": ">",
+      "value": 0
     },
     "requiredFields": [],
     "materials": [
-      "规则字段映射表",
-      "底层明细数据"
+      "营业外支出明细",
+      "凭证附件",
+      "税前扣除说明"
     ]
   },
   {
     "code": "ON-026",
     "name": "营业外收入发生额",
     "taxType": "通用财务/经营",
-    "level": "中",
-    "basis": "关注类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：输出本年营业外收入发生额及对应的科目构成；\n预警阈值：/\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：需人工确认",
+    "level": "低",
+    "basis": "脱敏税务风险预警指标：存在营业外收入发生额，需要复核收入性质和申报口径。",
+    "suggestion": "复核政府补助、赔偿收入、资产处置等性质及企业所得税处理。",
+    "enabled": true,
+    "conditionText": "检查清单：营业外收入。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "field": "nonOperatingIncome",
+      "operator": ">",
+      "value": 0
     },
     "requiredFields": [],
     "materials": [
-      "收入"
+      "营业外收入明细",
+      "政府补助文件",
+      "资产处置资料"
     ]
   },
   {
@@ -544,38 +781,44 @@
     "name": "期末留抵税额",
     "taxType": "增值税",
     "level": "中",
-    "basis": "关注类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：展示本年增值税期末留抵税额\n预警阈值：/\n取值期间/频率：期末时点数 / 月度推送\n候选类型：关注提示",
+    "basis": "脱敏税务风险预警指标：期末留抵税额较大，需要复核形成原因。",
+    "suggestion": "复核进项留抵形成原因、存货和固定资产采购、留抵退税适用条件。",
+    "enabled": true,
+    "conditionText": "检查清单：期末留抵税额、销项税额。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "field": "endingVatCredit",
+      "operator": ">",
+      "value": 0,
+      "compareField": "outputTax",
+      "multiplier": 0.5
     },
     "requiredFields": [],
     "materials": [
-      "增值税税额"
+      "增值税申报表",
+      "进项明细",
+      "存货和固定资产采购资料"
     ]
   },
   {
     "code": "ON-028",
     "name": "主体向个人支付的非工资薪金所得",
     "taxType": "个人所得税",
-    "level": "中",
-    "basis": "关注类指标；来源：脱敏税务风险预警指标",
-    "suggestion": "复核相关数据口径，补充所需字段后再映射为可执行规则。",
-    "enabled": false,
-    "conditionText": "算法：对接个税数据明细，获取当年度该主体向个人支付的非工资薪金类所得金额（拆分劳务报酬所得、稿酬所得、偶然所得、特许权使用费所得、其他财产转让所得）；\n预警阈值：/\n取值期间/频率：YTD(本年累计) / 月度推送\n候选类型：需人工确认",
+    "level": "高",
+    "basis": "脱敏税务风险预警指标：向个人支付非工资薪金所得，需复核个税扣缴和发票凭证。",
+    "suggestion": "复核支付性质、合同、发票或扣缴申报记录，确认劳务报酬、稿酬、特许权使用费等个税处理。",
+    "enabled": true,
+    "conditionText": "检查清单：个人支付数据。",
     "conditionJson": {
-      "field": "",
-      "operator": "=",
-      "value": ""
+      "field": "nonPayrollPersonalPayment",
+      "operator": ">",
+      "value": 0
     },
     "requiredFields": [],
     "materials": [
-      "工资薪金",
-      "个人支付数据"
+      "个人支付明细",
+      "合同协议",
+      "扣缴申报记录",
+      "发票或收款凭证"
     ]
   }
 ]

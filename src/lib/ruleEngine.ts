@@ -32,6 +32,22 @@ export type RuleExecutionResult = {
 
 export const emptyRuleCondition: SimpleRuleCondition = { field: '', operator: '=', value: '' }
 
+const positiveRequiredFields = new Set([
+  'previousQuarterEmployees',
+  'previousQuarterRevenue',
+  'previousQuarterCostExpense',
+  'previousYearEbitProfit',
+  'budgetEbitProfit',
+  'budgetRevenue',
+  'previousYearRevenue',
+  'theoreticalVatTax',
+  'budgetVatTax',
+  'priorTaxableSales',
+  'priorVatTaxPayable',
+  'payrollTotal',
+  'annualRevenue',
+])
+
 export const conditionFields: Array<{ value: string; label: string }> = [
   { value: 'taxpayerType', label: '纳税人类型' },
   { value: 'consecutive12MonthSales', label: '连续 12 个月销售额' },
@@ -77,6 +93,45 @@ export const conditionFields: Array<{ value: string; label: string }> = [
   { value: 'inventoryAbnormal', label: '库存异常' },
   { value: 'rdDocsInsufficient', label: '研发资料不足' },
   { value: 'agencyComplianceRisk', label: '涉税服务合规风险' },
+  { value: 'previousQuarterEmployees', label: '上季度末人数' },
+  { value: 'quarterRevenue', label: '本季度收入' },
+  { value: 'previousQuarterRevenue', label: '上季度收入' },
+  { value: 'quarterCostExpense', label: '本季度成本费用' },
+  { value: 'previousQuarterCostExpense', label: '上季度成本费用' },
+  { value: 'ytdRevenue', label: '本年累计收入' },
+  { value: 'ytdCostExpense', label: '本年累计成本费用' },
+  { value: 'ytdProfit', label: '本年累计利润' },
+  { value: 'peopleRelatedExpense', label: '人员相关成本费用' },
+  { value: 'rentalArea', label: '承租面积' },
+  { value: 'subleaseArea', label: '转租面积' },
+  { value: 'monthlyMealBenefitExpense', label: '月福利性质餐费' },
+  { value: 'decorationExpense', label: '装修费用' },
+  { value: 'ebitProfit', label: 'EBIT 利润' },
+  { value: 'previousYearEbitProfit', label: '上年 EBIT 利润' },
+  { value: 'budgetEbitProfit', label: '预算 EBIT 利润' },
+  { value: 'budgetRevenue', label: '预算收入' },
+  { value: 'previousYearRevenue', label: '上年同期收入' },
+  { value: 'mainBusinessRevenue', label: '主营业务收入' },
+  { value: 'mainBusinessCost', label: '主营业务成本' },
+  { value: 'goodsSalesRevenue', label: '商品销售收入' },
+  { value: 'goodsCost', label: '商品销售成本' },
+  { value: 'redVatSpecialInvoiceAmount', label: '红字专票金额' },
+  { value: 'outputTax', label: '销项税额' },
+  { value: 'inputTax', label: '进项税额' },
+  { value: 'vatTaxPayable', label: '增值税应纳/入库税额' },
+  { value: 'taxableSales', label: '增值税应税销售额' },
+  { value: 'theoreticalVatTax', label: '理论增值税税额' },
+  { value: 'budgetVatTax', label: '预算增值税税额' },
+  { value: 'priorTaxableSales', label: '上期应税销售额' },
+  { value: 'priorVatTaxPayable', label: '上期增值税税额' },
+  { value: 'vatRateSpread', label: '进销项税率差' },
+  { value: 'advertisingServiceRevenue', label: '广告服务收入' },
+  { value: 'cultureConstructionFeePaid', label: '文化事业建设费实缴' },
+  { value: 'otherReceivableAgencyBalance', label: '其他应收代收代付余额' },
+  { value: 'nonOperatingExpense', label: '营业外支出发生额' },
+  { value: 'nonOperatingIncome', label: '营业外收入发生额' },
+  { value: 'endingVatCredit', label: '期末留抵税额' },
+  { value: 'nonPayrollPersonalPayment', label: '向个人支付非工资薪金所得' },
 ]
 
 export const builtInRuleConditions: Record<string, RuleCondition> = {
@@ -171,9 +226,15 @@ export function isClientValuePresent(value: ClientValue) {
   return value !== undefined && value !== null && value !== ''
 }
 
+export function isClientFieldPresent(field: string, value: ClientValue) {
+  if (!isClientValuePresent(value)) return false
+  if (positiveRequiredFields.has(field)) return Number(value) > 0
+  return true
+}
+
 export function missingRequiredFields(client: ClientSnapshot, condition?: RuleCondition, extraRequiredFields: string[] = []) {
   const fields = Array.from(new Set([...conditionRequiredFields(condition), ...extraRequiredFields]))
-  return fields.filter((field) => !isClientValuePresent(client[field]))
+  return fields.filter((field) => !isClientFieldPresent(field, client[field]))
 }
 
 export function conditionSummary(condition?: RuleCondition): string {

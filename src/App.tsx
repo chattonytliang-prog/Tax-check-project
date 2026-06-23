@@ -104,6 +104,45 @@ type Client = {
   rdDeductionEnjoyed: boolean
   rdDocsInsufficient: boolean
   agencyComplianceRisk: boolean
+  previousQuarterEmployees: number
+  quarterRevenue: number
+  previousQuarterRevenue: number
+  quarterCostExpense: number
+  previousQuarterCostExpense: number
+  ytdRevenue: number
+  ytdCostExpense: number
+  ytdProfit: number
+  peopleRelatedExpense: number
+  rentalArea: number
+  subleaseArea: number
+  monthlyMealBenefitExpense: number
+  decorationExpense: number
+  ebitProfit: number
+  previousYearEbitProfit: number
+  budgetEbitProfit: number
+  budgetRevenue: number
+  previousYearRevenue: number
+  mainBusinessRevenue: number
+  mainBusinessCost: number
+  goodsSalesRevenue: number
+  goodsCost: number
+  redVatSpecialInvoiceAmount: number
+  outputTax: number
+  inputTax: number
+  vatTaxPayable: number
+  taxableSales: number
+  theoreticalVatTax: number
+  budgetVatTax: number
+  priorTaxableSales: number
+  priorVatTaxPayable: number
+  vatRateSpread: number
+  advertisingServiceRevenue: number
+  cultureConstructionFeePaid: number
+  otherReceivableAgencyBalance: number
+  nonOperatingExpense: number
+  nonOperatingIncome: number
+  endingVatCredit: number
+  nonPayrollPersonalPayment: number
 }
 
 type RiskRule = {
@@ -245,6 +284,45 @@ const emptyClient: Client = {
   rdDeductionEnjoyed: false,
   rdDocsInsufficient: false,
   agencyComplianceRisk: false,
+  previousQuarterEmployees: 8,
+  quarterRevenue: 294000,
+  previousQuarterRevenue: 280000,
+  quarterCostExpense: 156000,
+  previousQuarterCostExpense: 148000,
+  ytdRevenue: 1180000,
+  ytdCostExpense: 720000,
+  ytdProfit: 240000,
+  peopleRelatedExpense: 0,
+  rentalArea: 120,
+  subleaseArea: 0,
+  monthlyMealBenefitExpense: 0,
+  decorationExpense: 0,
+  ebitProfit: 260000,
+  previousYearEbitProfit: 240000,
+  budgetEbitProfit: 250000,
+  budgetRevenue: 1200000,
+  previousYearRevenue: 980000,
+  mainBusinessRevenue: 1180000,
+  mainBusinessCost: 720000,
+  goodsSalesRevenue: 0,
+  goodsCost: 0,
+  redVatSpecialInvoiceAmount: 0,
+  outputTax: 0,
+  inputTax: 0,
+  vatTaxPayable: 0,
+  taxableSales: 1180000,
+  theoreticalVatTax: 0,
+  budgetVatTax: 0,
+  priorTaxableSales: 980000,
+  priorVatTaxPayable: 0,
+  vatRateSpread: 0,
+  advertisingServiceRevenue: 0,
+  cultureConstructionFeePaid: 0,
+  otherReceivableAgencyBalance: 0,
+  nonOperatingExpense: 0,
+  nonOperatingIncome: 0,
+  endingVatCredit: 0,
+  nonPayrollPersonalPayment: 0,
 }
 
 const blankClient: Client = {
@@ -268,6 +346,45 @@ const blankClient: Client = {
   assetsTotal: 0,
   employeeAnnualAvg: 0,
   smallProfitEnjoyed: false,
+  previousQuarterEmployees: 0,
+  quarterRevenue: 0,
+  previousQuarterRevenue: 0,
+  quarterCostExpense: 0,
+  previousQuarterCostExpense: 0,
+  ytdRevenue: 0,
+  ytdCostExpense: 0,
+  ytdProfit: 0,
+  peopleRelatedExpense: 0,
+  rentalArea: 0,
+  subleaseArea: 0,
+  monthlyMealBenefitExpense: 0,
+  decorationExpense: 0,
+  ebitProfit: 0,
+  previousYearEbitProfit: 0,
+  budgetEbitProfit: 0,
+  budgetRevenue: 0,
+  previousYearRevenue: 0,
+  mainBusinessRevenue: 0,
+  mainBusinessCost: 0,
+  goodsSalesRevenue: 0,
+  goodsCost: 0,
+  redVatSpecialInvoiceAmount: 0,
+  outputTax: 0,
+  inputTax: 0,
+  vatTaxPayable: 0,
+  taxableSales: 0,
+  theoreticalVatTax: 0,
+  budgetVatTax: 0,
+  priorTaxableSales: 0,
+  priorVatTaxPayable: 0,
+  vatRateSpread: 0,
+  advertisingServiceRevenue: 0,
+  cultureConstructionFeePaid: 0,
+  otherReceivableAgencyBalance: 0,
+  nonOperatingExpense: 0,
+  nonOperatingIncome: 0,
+  endingVatCredit: 0,
+  nonPayrollPersonalPayment: 0,
 }
 
 const demoClients: Client[] = [
@@ -732,6 +849,387 @@ const rules: RiskRule[] = [
   },
 ]
 
+const candidateRules: RiskRule[] = [
+  {
+    code: 'ON-001',
+    name: '主体无人员或人员变动异常',
+    taxType: '通用财务/经营',
+    level: '中',
+    basis: '脱敏税务风险预警指标：期末人数为 0，或本期人数较上期下降 50% 以上。',
+    caseRef: '自动检测候选：人员人数、上季度末人数。',
+    conditionJson: { any: [{ field: 'employees', operator: '<=', value: 0 }, { field: 'employees', operator: '<', value: 0, compareField: 'previousQuarterEmployees', multiplier: 0.5 }] },
+    requiredFields: ['previousQuarterEmployees'],
+    trigger: (c) => c.employees <= 0 || c.employees < c.previousQuarterEmployees * 0.5,
+    reason: (c) => `当前员工人数 ${c.employees} 人，上季度末人数 ${c.previousQuarterEmployees} 人，存在无人员或人员下降异常。`,
+    suggestion: '复核人员花名册、社保、工资申报和主体经营实质；如为持证或持续经营主体，应补充人员安排说明。',
+    materials: ['员工花名册', '社保清单', '工资申报明细', '主体经营说明'],
+  },
+  {
+    code: 'ON-002',
+    name: '主体无人员但有人员相关成本费用支出',
+    taxType: '通用财务/经营',
+    level: '中',
+    basis: '脱敏税务风险预警指标：本季度平均人数为 0，但发生与人员相关的房租、装修、办公、培训、差旅、会议、招待等费用。',
+    caseRef: '自动检测候选：人员人数、人员相关成本费用。',
+    conditionJson: { all: [{ field: 'employees', operator: '<=', value: 0 }, { field: 'peopleRelatedExpense', operator: '>', value: 0 }] },
+    trigger: (c) => c.employees <= 0 && c.peopleRelatedExpense > 0,
+    reason: (c) => `当前员工人数为 ${c.employees}，但人员相关成本费用为 ${money(c.peopleRelatedExpense)}。`,
+    suggestion: '复核费用性质、服务对象、租赁和装修用途，排除空壳主体挂费用或费用分摊不合理。',
+    materials: ['费用明细', '租赁合同', '装修合同', '办公差旅培训凭证'],
+  },
+  {
+    code: 'ON-003',
+    name: '主体有费用，无收入',
+    taxType: '通用财务/经营',
+    level: '中',
+    basis: '脱敏税务风险预警指标：本年累计收入为 0，本年累计成本费用大于 0。',
+    caseRef: '检查清单：YTD 收入、YTD 成本费用。',
+    conditionJson: { all: [{ field: 'ytdRevenue', operator: '<=', value: 0 }, { field: 'ytdCostExpense', operator: '>', value: 0 }] },
+    trigger: (c) => c.ytdRevenue <= 0 && c.ytdCostExpense > 0,
+    reason: (c) => `本年累计收入 ${money(c.ytdRevenue)}，本年累计成本费用 ${money(c.ytdCostExpense)}。`,
+    suggestion: '复核主体是否仍有经营职能、费用归属是否准确，必要时补充转让定价或成本分摊说明。',
+    materials: ['利润表', '费用明细', '主体职能说明', '关联交易资料'],
+  },
+  {
+    code: 'ON-004',
+    name: '人均租房面积',
+    taxType: '通用财务/经营',
+    level: '中',
+    basis: '脱敏税务风险预警指标：无人员但有租房面积，或人均租房面积不在合理范围。',
+    caseRef: '自动检测候选：租赁面积、人员人数。',
+    conditionJson: { any: [{ all: [{ field: 'employees', operator: '<=', value: 0 }, { field: 'rentalArea', operator: '>', value: 0 }] }, { field: 'rentalArea', operator: '>', value: 0, compareField: 'employees', multiplier: 20 }] },
+    trigger: (c) => (c.employees <= 0 && c.rentalArea > 0) || c.rentalArea > c.employees * 20,
+    reason: (c) => `当前员工人数 ${c.employees} 人，承租面积 ${c.rentalArea} 平方米。`,
+    suggestion: '复核承租面积、转租面积和实际办公人员，说明超额面积用途或调整费用归属。',
+    materials: ['租赁合同', '办公场地清单', '转租协议', '员工花名册'],
+  },
+  {
+    code: 'ON-005',
+    name: '福利费分析',
+    taxType: '企业所得税',
+    level: '中',
+    basis: '企业所得税税前扣除限额：职工福利费不超过工资薪金总额 14%。',
+    caseRef: '自动检测候选：工资薪金、福利费。',
+    conditionJson: { field: 'welfareExpense', operator: '>', value: 0, compareField: 'payrollTotal', multiplier: 0.14 },
+    requiredFields: ['payrollTotal'],
+    trigger: (c) => c.welfareExpense > c.payrollTotal * 0.14,
+    reason: (c) => `职工福利费 ${money(c.welfareExpense)}，工资薪金总额 ${money(c.payrollTotal)}，超过 14% 限额。`,
+    suggestion: '汇算清缴时测算福利费扣除限额，对超限部分纳税调增。',
+    materials: ['工资薪金明细', '福利费明细', '汇算清缴底稿'],
+  },
+  {
+    code: 'ON-006',
+    name: '人均福利性质餐费超出合理范围',
+    taxType: '通用财务/经营',
+    level: '中',
+    basis: '脱敏税务风险预警指标：福利性质餐费按人数测算明显偏高。',
+    caseRef: '检查清单：福利性质餐费、人员人数。',
+    conditionJson: { field: 'monthlyMealBenefitExpense', operator: '>', value: 0, compareField: 'employees', multiplier: 800 },
+    trigger: (c) => c.monthlyMealBenefitExpense > c.employees * 800,
+    reason: (c) => `月福利性质餐费 ${money(c.monthlyMealBenefitExpense)}，当前员工人数 ${c.employees} 人。`,
+    suggestion: '复核餐费性质、报销对象和发票真实性，区分业务招待费、福利费和个人消费。',
+    materials: ['餐费明细', '报销单', '员工名单', '发票样本'],
+  },
+  {
+    code: 'ON-007',
+    name: '不合理装修费用',
+    taxType: '通用财务/经营',
+    level: '中',
+    basis: '脱敏税务风险预警指标：装修费用与租赁面积、使用场景不匹配。',
+    caseRef: '检查清单：装修费用、租赁面积。',
+    conditionJson: { field: 'decorationExpense', operator: '>', value: 0, compareField: 'rentalArea', multiplier: 3000 },
+    trigger: (c) => c.decorationExpense > c.rentalArea * 3000,
+    reason: (c) => `装修费用 ${money(c.decorationExpense)}，承租面积 ${c.rentalArea} 平方米。`,
+    suggestion: '复核装修合同、工程验收和资本化/费用化处理，说明单位面积装修成本偏高原因。',
+    materials: ['装修合同', '工程验收单', '付款流水', '租赁合同'],
+  },
+  {
+    code: 'ON-008',
+    name: '主体EBIT利润率年度波动',
+    taxType: '通用财务/经营',
+    level: '中',
+    basis: '脱敏税务风险预警指标：EBIT 利润较上年明显波动。',
+    caseRef: '自动检测候选：EBIT 利润、上年 EBIT 利润。',
+    conditionJson: { any: [{ field: 'ebitProfit', operator: '>', value: 0, compareField: 'previousYearEbitProfit', multiplier: 1.3 }, { field: 'ebitProfit', operator: '<', value: 0, compareField: 'previousYearEbitProfit', multiplier: 0.7 }] },
+    requiredFields: ['previousYearEbitProfit'],
+    trigger: (c) => c.ebitProfit > c.previousYearEbitProfit * 1.3 || c.ebitProfit < c.previousYearEbitProfit * 0.7,
+    reason: (c) => `EBIT 利润 ${money(c.ebitProfit)}，上年 EBIT 利润 ${money(c.previousYearEbitProfit)}。`,
+    suggestion: '复核收入、成本、费用和关联交易变化，解释利润率异常波动原因。',
+    materials: ['利润表', '管理报表', '关联交易明细', '成本费用明细'],
+  },
+  {
+    code: 'ON-009',
+    name: '主体利润率情况',
+    taxType: '通用财务/经营',
+    level: '中',
+    basis: '脱敏税务风险预警指标：主体亏损或利润率明显偏低。',
+    caseRef: '检查清单：YTD 收入、YTD 利润。',
+    conditionJson: { any: [{ field: 'ytdProfit', operator: '<', value: 0 }, { field: 'ytdProfit', operator: '<', value: 0, compareField: 'ytdRevenue', multiplier: 0.03 }] },
+    trigger: (c) => c.ytdProfit < 0 || c.ytdProfit < c.ytdRevenue * 0.03,
+    reason: (c) => `本年累计收入 ${money(c.ytdRevenue)}，本年累计利润 ${money(c.ytdProfit)}。`,
+    suggestion: '复核主体职能、利润结构、亏损原因和关联交易定价是否合理。',
+    materials: ['利润表', '管理报表', '亏损说明', '关联交易资料'],
+  },
+  {
+    code: 'ON-010',
+    name: '主体EBIT预实差异',
+    taxType: '通用财务/经营',
+    level: '中',
+    basis: '脱敏税务风险预警指标：EBIT 实际值与预算值差异超过合理范围。',
+    caseRef: '自动检测候选：EBIT 利润、预算 EBIT 利润。',
+    conditionJson: { any: [{ field: 'ebitProfit', operator: '>', value: 0, compareField: 'budgetEbitProfit', multiplier: 1.2 }, { field: 'ebitProfit', operator: '<', value: 0, compareField: 'budgetEbitProfit', multiplier: 0.8 }] },
+    requiredFields: ['budgetEbitProfit'],
+    trigger: (c) => c.ebitProfit > c.budgetEbitProfit * 1.2 || c.ebitProfit < c.budgetEbitProfit * 0.8,
+    reason: (c) => `EBIT 利润 ${money(c.ebitProfit)}，预算 EBIT 利润 ${money(c.budgetEbitProfit)}。`,
+    suggestion: '复核预算口径、实际收入成本费用和异常调整事项。',
+    materials: ['预算表', '利润表', '预算差异分析'],
+  },
+  {
+    code: 'ON-011',
+    name: '主体营业收入预实差异',
+    taxType: '通用财务/经营',
+    level: '中',
+    basis: '脱敏税务风险预警指标：营业收入实际值与预算值差异超过合理范围。',
+    caseRef: '自动检测候选：收入、预算收入。',
+    conditionJson: { any: [{ field: 'ytdRevenue', operator: '>', value: 0, compareField: 'budgetRevenue', multiplier: 1.2 }, { field: 'ytdRevenue', operator: '<', value: 0, compareField: 'budgetRevenue', multiplier: 0.8 }] },
+    requiredFields: ['budgetRevenue'],
+    trigger: (c) => c.ytdRevenue > c.budgetRevenue * 1.2 || c.ytdRevenue < c.budgetRevenue * 0.8,
+    reason: (c) => `本年累计收入 ${money(c.ytdRevenue)}，预算收入 ${money(c.budgetRevenue)}。`,
+    suggestion: '核对收入确认、预算口径、未开票收入和关联交易安排。',
+    materials: ['预算表', '收入明细', '开票明细', '合同台账'],
+  },
+  {
+    code: 'ON-012',
+    name: '主营业务利润率',
+    taxType: '通用财务/经营',
+    level: '中',
+    basis: '脱敏税务风险预警指标：主营业务利润率偏低。',
+    caseRef: '检查清单：主营业务收入、主营业务成本、本年利润。',
+    conditionJson: { field: 'ytdProfit', operator: '<', value: 0, compareField: 'mainBusinessRevenue', multiplier: 0.05 },
+    trigger: (c) => c.ytdProfit < c.mainBusinessRevenue * 0.05,
+    reason: (c) => `本年利润 ${money(c.ytdProfit)}，主营业务收入 ${money(c.mainBusinessRevenue)}。`,
+    suggestion: '复核主营成本归集、收入确认和关联交易定价，说明低毛利或低利润原因。',
+    materials: ['主营收入明细', '主营成本明细', '利润表'],
+  },
+  {
+    code: 'ON-013',
+    name: '商品毛利率（商品销售相关）',
+    taxType: '通用财务/经营',
+    level: '中',
+    basis: '脱敏税务风险预警指标：商品销售毛利率偏低或成本收入倒挂。',
+    caseRef: '自动检测候选：商品销售收入、商品销售成本。',
+    conditionJson: { field: 'goodsSalesRevenue', operator: '<', value: 0, compareField: 'goodsCost', multiplier: 1.05 },
+    trigger: (c) => c.goodsSalesRevenue > 0 && c.goodsSalesRevenue < c.goodsCost * 1.05,
+    reason: (c) => `商品销售收入 ${money(c.goodsSalesRevenue)}，商品销售成本 ${money(c.goodsCost)}。`,
+    suggestion: '复核进销价格、库存结转、促销折扣和关联交易定价。',
+    materials: ['商品销售明细', '采购成本明细', '库存台账'],
+  },
+  {
+    code: 'ON-014',
+    name: '主体开具增值税专用发票红字发票',
+    taxType: '增值税',
+    level: '中',
+    basis: '脱敏税务风险预警指标：红字专票金额占销项税额或销售额比例偏高。',
+    caseRef: '自动检测候选：红字发票金额、销项税额。',
+    conditionJson: { field: 'redVatSpecialInvoiceAmount', operator: '>', value: 0, compareField: 'outputTax', multiplier: 0.2 },
+    trigger: (c) => c.redVatSpecialInvoiceAmount > c.outputTax * 0.2,
+    reason: (c) => `红字专票金额 ${money(c.redVatSpecialInvoiceAmount)}，销项税额 ${money(c.outputTax)}。`,
+    suggestion: '复核红字发票原因、退货折让依据和跨期收入调整。',
+    materials: ['红字发票清单', '销售合同', '退货折让资料'],
+  },
+  {
+    code: 'ON-015',
+    name: '增值税实际税负率与理论值偏离',
+    taxType: '增值税',
+    level: '中',
+    basis: '脱敏税务风险预警指标：实际增值税税额与理论税额差异较大。',
+    caseRef: '自动检测候选：增值税税额、理论税额。',
+    conditionJson: { any: [{ field: 'vatTaxPayable', operator: '>', value: 0, compareField: 'theoreticalVatTax', multiplier: 1.3 }, { field: 'vatTaxPayable', operator: '<', value: 0, compareField: 'theoreticalVatTax', multiplier: 0.7 }] },
+    requiredFields: ['theoreticalVatTax'],
+    trigger: (c) => c.vatTaxPayable > c.theoreticalVatTax * 1.3 || c.vatTaxPayable < c.theoreticalVatTax * 0.7,
+    reason: (c) => `实际增值税税额 ${money(c.vatTaxPayable)}，理论税额 ${money(c.theoreticalVatTax)}。`,
+    suggestion: '复核销项、进项、进项转出、税率适用和优惠政策是否准确。',
+    materials: ['增值税申报表', '销项明细', '进项明细', '理论税负测算表'],
+  },
+  {
+    code: 'ON-016',
+    name: '增值税入库税金的预实差异',
+    taxType: '增值税',
+    level: '中',
+    basis: '脱敏税务风险预警指标：增值税入库税金实际值与预算值偏离。',
+    caseRef: '自动检测候选：增值税税额、预算增值税。',
+    conditionJson: { any: [{ field: 'vatTaxPayable', operator: '>', value: 0, compareField: 'budgetVatTax', multiplier: 1.2 }, { field: 'vatTaxPayable', operator: '<', value: 0, compareField: 'budgetVatTax', multiplier: 0.8 }] },
+    requiredFields: ['budgetVatTax'],
+    trigger: (c) => c.vatTaxPayable > c.budgetVatTax * 1.2 || c.vatTaxPayable < c.budgetVatTax * 0.8,
+    reason: (c) => `实际增值税税额 ${money(c.vatTaxPayable)}，预算增值税 ${money(c.budgetVatTax)}。`,
+    suggestion: '复核预算口径、收入变化、进项抵扣和税金入库情况。',
+    materials: ['预算表', '增值税申报表', '税款入库记录'],
+  },
+  {
+    code: 'ON-017',
+    name: '主体增值税税额与应税销售额同步增长系数',
+    taxType: '增值税',
+    level: '中',
+    basis: '脱敏税务风险预警指标：税额变化与应税销售额变化不同步。',
+    caseRef: '自动检测候选：本期/上期税额和应税销售额。',
+    conditionJson: { any: [{ all: [{ field: 'vatTaxPayable', operator: '>', value: 0, compareField: 'priorVatTaxPayable', multiplier: 1.3 }, { field: 'taxableSales', operator: '<=', value: 0, compareField: 'priorTaxableSales', multiplier: 1.1 }] }, { all: [{ field: 'vatTaxPayable', operator: '<', value: 0, compareField: 'priorVatTaxPayable', multiplier: 0.7 }, { field: 'taxableSales', operator: '>=', value: 0, compareField: 'priorTaxableSales', multiplier: 0.9 }] }] },
+    requiredFields: ['priorVatTaxPayable', 'priorTaxableSales'],
+    trigger: (c) => (c.vatTaxPayable > c.priorVatTaxPayable * 1.3 && c.taxableSales <= c.priorTaxableSales * 1.1) || (c.vatTaxPayable < c.priorVatTaxPayable * 0.7 && c.taxableSales >= c.priorTaxableSales * 0.9),
+    reason: (c) => `本期税额 ${money(c.vatTaxPayable)}、上期税额 ${money(c.priorVatTaxPayable)}；本期应税销售额 ${money(c.taxableSales)}、上期 ${money(c.priorTaxableSales)}。`,
+    suggestion: '复核税率、进项抵扣、进项转出、收入结构和跨期申报情况。',
+    materials: ['本期增值税申报表', '上期增值税申报表', '销项明细', '进项明细'],
+  },
+  {
+    code: 'ON-018',
+    name: '主体进销项税率差',
+    taxType: '增值税',
+    level: '中',
+    basis: '脱敏税务风险预警指标：进项与销项税率差异偏大。',
+    caseRef: '检查清单：进销项税率差。',
+    conditionJson: { field: 'vatRateSpread', operator: '>', value: 0.03 },
+    trigger: (c) => c.vatRateSpread > 0.03,
+    reason: (c) => `录入的进销项税率差为 ${(c.vatRateSpread * 100).toFixed(2)}%。`,
+    suggestion: '复核不同税率业务、免税/简易计税、进项抵扣范围和税率适用准确性。',
+    materials: ['销项发票明细', '进项发票明细', '税率适用说明'],
+  },
+  {
+    code: 'ON-019',
+    name: '职工教育经费分析',
+    taxType: '企业所得税',
+    level: '中',
+    basis: '企业所得税税前扣除限额：职工教育经费按适用比例扣除，当前按 8% 预警。',
+    caseRef: '自动检测候选：工资薪金、职工教育经费。',
+    conditionJson: { field: 'educationExpense', operator: '>', value: 0, compareField: 'payrollTotal', multiplier: 0.08 },
+    requiredFields: ['payrollTotal'],
+    trigger: (c) => c.educationExpense > c.payrollTotal * 0.08,
+    reason: (c) => `职工教育经费 ${money(c.educationExpense)}，工资薪金总额 ${money(c.payrollTotal)}，超过 8% 预警线。`,
+    suggestion: '区分可当期扣除和结转以后年度扣除金额，保留培训真实性资料。',
+    materials: ['工资薪金明细', '培训合同', '培训记录', '教育经费明细'],
+  },
+  {
+    code: 'ON-020',
+    name: '广宣费分析',
+    taxType: '企业所得税',
+    level: '中',
+    basis: '企业所得税税前扣除限额：一般行业广告和业务宣传费不超过销售收入 15%。',
+    caseRef: '自动检测候选：收入、广告宣传费。',
+    conditionJson: { field: 'adExpense', operator: '>', value: 0, compareField: 'annualRevenue', multiplier: 0.15 },
+    requiredFields: ['annualRevenue'],
+    trigger: (c) => c.adExpense > c.annualRevenue * 0.15,
+    reason: (c) => `广告宣传费 ${money(c.adExpense)}，年销售收入 ${money(c.annualRevenue)}，超过 15% 预警线。`,
+    suggestion: '测算可扣除限额，区分广告宣传、业务招待和赞助支出。',
+    materials: ['广告合同', '投放记录', '广告宣传费明细', '销售收入明细'],
+  },
+  {
+    code: 'ON-021',
+    name: '业务招待费分析',
+    taxType: '企业所得税',
+    level: '中',
+    basis: '企业所得税税前扣除限额：业务招待费按发生额 60% 且不超过销售收入 5‰。',
+    caseRef: '自动检测候选：收入、业务招待费。',
+    conditionJson: { field: 'entertainmentExpense', operator: '>', value: 0, compareField: 'annualRevenue', multiplier: 0.005 },
+    requiredFields: ['annualRevenue'],
+    trigger: (c) => c.entertainmentExpense > c.annualRevenue * 0.005,
+    reason: (c) => `业务招待费 ${money(c.entertainmentExpense)}，年销售收入 ${money(c.annualRevenue)}，超过收入 5‰ 预警线。`,
+    suggestion: '按税法限额重新测算可扣除金额，对超限部分做纳税调整。',
+    materials: ['业务招待费明细', '销售收入明细', '汇算清缴底稿'],
+  },
+  {
+    code: 'ON-022',
+    name: '文建费理论值与实际值差异',
+    taxType: '文化事业建设费',
+    level: '中',
+    basis: '脱敏税务风险预警指标：文化事业建设费实缴额与理论值偏离。',
+    caseRef: '检查清单：广告服务收入、文建费实缴。',
+    conditionJson: { field: 'cultureConstructionFeePaid', operator: '<', value: 0, compareField: 'advertisingServiceRevenue', multiplier: 0.03 },
+    trigger: (c) => c.advertisingServiceRevenue > 0 && c.cultureConstructionFeePaid < c.advertisingServiceRevenue * 0.03,
+    reason: (c) => `广告服务收入 ${money(c.advertisingServiceRevenue)}，文化事业建设费实缴 ${money(c.cultureConstructionFeePaid)}。`,
+    suggestion: '复核文化事业建设费计费收入、扣除项目和实际申报入库金额。',
+    materials: ['广告服务收入明细', '文建费申报表', '扣除项目明细'],
+  },
+  {
+    code: 'ON-023',
+    name: '主体主营业务收入同比及环比波动',
+    taxType: '通用财务/经营',
+    level: '中',
+    basis: '脱敏税务风险预警指标：主营业务收入同比或环比波动较大。',
+    caseRef: '自动检测候选：本年累计收入、上年同期收入。',
+    conditionJson: { any: [{ field: 'ytdRevenue', operator: '>', value: 0, compareField: 'previousYearRevenue', multiplier: 1.3 }, { field: 'ytdRevenue', operator: '<', value: 0, compareField: 'previousYearRevenue', multiplier: 0.7 }] },
+    requiredFields: ['previousYearRevenue'],
+    trigger: (c) => c.ytdRevenue > c.previousYearRevenue * 1.3 || c.ytdRevenue < c.previousYearRevenue * 0.7,
+    reason: (c) => `本年累计收入 ${money(c.ytdRevenue)}，上年同期收入 ${money(c.previousYearRevenue)}。`,
+    suggestion: '复核收入确认、客户变化、业务模式变化和跨期调整。',
+    materials: ['收入明细', '上年同期收入明细', '合同台账'],
+  },
+  {
+    code: 'ON-024',
+    name: '其他应收款-代收代付余额',
+    taxType: '通用财务/经营',
+    level: '中',
+    basis: '脱敏税务风险预警指标：其他应收款中代收代付余额长期存在或金额较大。',
+    caseRef: '检查清单：其他应收代收代付余额。',
+    conditionJson: { field: 'otherReceivableAgencyBalance', operator: '>', value: 0 },
+    trigger: (c) => c.otherReceivableAgencyBalance > 0,
+    reason: (c) => `其他应收代收代付余额为 ${money(c.otherReceivableAgencyBalance)}。`,
+    suggestion: '复核代收代付业务实质、合同依据、资金流和是否存在收入费用错列。',
+    materials: ['其他应收款明细', '代收代付协议', '银行流水'],
+  },
+  {
+    code: 'ON-025',
+    name: '营业外支出发生额',
+    taxType: '通用财务/经营',
+    level: '低',
+    basis: '脱敏税务风险预警指标：存在营业外支出发生额，需要复核税前扣除口径。',
+    caseRef: '检查清单：营业外支出。',
+    conditionJson: { field: 'nonOperatingExpense', operator: '>', value: 0 },
+    trigger: (c) => c.nonOperatingExpense > 0,
+    reason: (c) => `营业外支出发生额为 ${money(c.nonOperatingExpense)}。`,
+    suggestion: '区分罚款、捐赠、资产损失等性质，复核税前扣除或纳税调整要求。',
+    materials: ['营业外支出明细', '凭证附件', '税前扣除说明'],
+  },
+  {
+    code: 'ON-026',
+    name: '营业外收入发生额',
+    taxType: '通用财务/经营',
+    level: '低',
+    basis: '脱敏税务风险预警指标：存在营业外收入发生额，需要复核收入性质和申报口径。',
+    caseRef: '检查清单：营业外收入。',
+    conditionJson: { field: 'nonOperatingIncome', operator: '>', value: 0 },
+    trigger: (c) => c.nonOperatingIncome > 0,
+    reason: (c) => `营业外收入发生额为 ${money(c.nonOperatingIncome)}。`,
+    suggestion: '复核政府补助、赔偿收入、资产处置等性质及企业所得税处理。',
+    materials: ['营业外收入明细', '政府补助文件', '资产处置资料'],
+  },
+  {
+    code: 'ON-027',
+    name: '期末留抵税额',
+    taxType: '增值税',
+    level: '中',
+    basis: '脱敏税务风险预警指标：期末留抵税额较大，需要复核形成原因。',
+    caseRef: '检查清单：期末留抵税额、销项税额。',
+    conditionJson: { field: 'endingVatCredit', operator: '>', value: 0, compareField: 'outputTax', multiplier: 0.5 },
+    trigger: (c) => c.endingVatCredit > c.outputTax * 0.5,
+    reason: (c) => `期末留抵税额 ${money(c.endingVatCredit)}，销项税额 ${money(c.outputTax)}。`,
+    suggestion: '复核进项留抵形成原因、存货和固定资产采购、留抵退税适用条件。',
+    materials: ['增值税申报表', '进项明细', '存货和固定资产采购资料'],
+  },
+  {
+    code: 'ON-028',
+    name: '主体向个人支付的非工资薪金所得',
+    taxType: '个人所得税',
+    level: '高',
+    basis: '脱敏税务风险预警指标：向个人支付非工资薪金所得，需复核个税扣缴和发票凭证。',
+    caseRef: '检查清单：个人支付数据。',
+    conditionJson: { field: 'nonPayrollPersonalPayment', operator: '>', value: 0 },
+    trigger: (c) => c.nonPayrollPersonalPayment > 0,
+    reason: (c) => `向个人支付的非工资薪金所得为 ${money(c.nonPayrollPersonalPayment)}。`,
+    suggestion: '复核支付性质、合同、发票或扣缴申报记录，确认劳务报酬、稿酬、特许权使用费等个税处理。',
+    materials: ['个人支付明细', '合同协议', '扣缴申报记录', '发票或收款凭证'],
+  },
+]
+
+const allBuiltInRules = [...rules, ...candidateRules]
+
 function money(value: number) {
   return new Intl.NumberFormat('zh-CN', {
     style: 'currency',
@@ -846,6 +1344,7 @@ function buildGroupSummaries(clients: Client[], managedRules: ManagedRule[] = []
 }
 
 function managedRuleToRisk(rule: ManagedRule): RiskRule {
+  const builtInRule = allBuiltInRules.find((item) => item.code === rule.code)
   return {
     code: rule.code,
     name: rule.name,
@@ -854,9 +1353,9 @@ function managedRuleToRisk(rule: ManagedRule): RiskRule {
     basis: rule.basis,
     caseRef: rule.conditionText,
     trigger: (client) => evaluateCondition(client, rule.conditionJson),
-    reason: () => {
+    reason: builtInRule?.reason || (() => {
       return `规则条件命中：${conditionSummary(rule.conditionJson)}。`
-    },
+    }),
     suggestion: rule.suggestion,
     materials: rule.materials,
     conditionJson: rule.conditionJson,
@@ -864,8 +1363,48 @@ function managedRuleToRisk(rule: ManagedRule): RiskRule {
   }
 }
 
+function riskRuleToManaged(rule: RiskRule): ManagedRule {
+  return {
+    code: rule.code,
+    name: rule.name,
+    taxType: rule.taxType,
+    level: rule.level,
+    basis: rule.basis,
+    suggestion: rule.suggestion,
+    enabled: true,
+    conditionText: rule.caseRef,
+    conditionJson: riskRuleCondition(rule),
+    requiredFields: rule.requiredFields || [],
+    materials: rule.materials,
+  }
+}
+
 function riskRuleCondition(rule: RiskRule) {
   return rule.conditionJson || builtInRuleConditions[rule.code] || emptyRuleCondition
+}
+
+function hydrateManagedRules(managed: ManagedRule[] = []) {
+  const existingByCode = new Map(managed.map((rule) => [rule.code, rule]))
+  const builtInCodes = new Set(allBuiltInRules.map((rule) => rule.code))
+  const hydratedBuiltIns = allBuiltInRules.map((builtInRule) => {
+    const fallback = riskRuleToManaged(builtInRule)
+    const existing = existingByCode.get(builtInRule.code)
+    if (!existing) return fallback
+
+    const shouldUseFallbackCondition = !isExecutableCondition(existing.conditionJson) && isExecutableCondition(fallback.conditionJson)
+    return {
+      ...fallback,
+      ...existing,
+      enabled: shouldUseFallbackCondition ? true : existing.enabled,
+      conditionText: shouldUseFallbackCondition ? fallback.conditionText : existing.conditionText,
+      conditionJson: shouldUseFallbackCondition ? fallback.conditionJson : existing.conditionJson,
+      requiredFields: shouldUseFallbackCondition ? fallback.requiredFields : existing.requiredFields,
+      materials: existing.materials.length ? existing.materials : fallback.materials,
+    }
+  })
+  const customRules = managed.filter((rule) => !builtInCodes.has(rule.code))
+
+  return [...hydratedBuiltIns, ...customRules].sort((a, b) => a.code.localeCompare(b.code, 'zh-CN'))
 }
 
 function riskRuleExecution(client: Client, rule: RiskRule) {
@@ -878,11 +1417,11 @@ function riskRuleExecution(client: Client, rule: RiskRule) {
 }
 
 function getSourceRules(managed: ManagedRule[] = []) {
-  const executableRules = managed
+  const executableRules = hydrateManagedRules(managed)
     .filter((rule) => rule.enabled && isExecutableCondition(rule.conditionJson))
     .map(managedRuleToRisk)
 
-  return executableRules.length ? executableRules : rules
+  return executableRules.length ? executableRules : allBuiltInRules
 }
 
 function detectRisks(client: Client, managed: ManagedRule[] = []): RiskResult[] {
@@ -1452,7 +1991,7 @@ function App() {
       try {
         const response = await apiGet<{ rules: ManagedRule[]; restrictedCount?: number }>('/api/rules')
         if (active) {
-          setManagedRules(response.rules)
+          setManagedRules(hydrateManagedRules(response.rules))
           setRestrictedRuleCount(response.restrictedCount || 0)
         }
       } catch (error) {
@@ -1625,7 +2164,7 @@ function App() {
 
   const refreshRules = async () => {
     const response = await apiGet<{ rules: ManagedRule[]; restrictedCount?: number }>('/api/rules')
-    setManagedRules(response.rules)
+    setManagedRules(hydrateManagedRules(response.rules))
     setRestrictedRuleCount(response.restrictedCount || 0)
   }
 
@@ -1695,7 +2234,7 @@ function App() {
 
     try {
       await Promise.all(
-        rules.map((rule) =>
+        allBuiltInRules.map((rule) =>
           apiSend<{ rule: ManagedRule }>('/api/rules', 'POST', {
             code: rule.code,
             name: rule.name,
@@ -1705,7 +2244,7 @@ function App() {
             suggestion: rule.suggestion,
             enabled: true,
             conditionText: rule.caseRef,
-            conditionJson: builtInRuleConditions[rule.code] || { field: '', operator: '=', value: '' },
+            conditionJson: riskRuleCondition(rule),
             requiredFields: rule.requiredFields || [],
             materials: rule.materials,
           }),
@@ -1719,20 +2258,23 @@ function App() {
   }
 
   const importCandidateRules = async () => {
-    if (!window.confirm('确定导入脱敏候选规则吗？候选规则会默认停用，不会直接影响风险检测。')) return
+    if (!window.confirm('确定导入脱敏候选规则吗？同编号 ON 规则会更新为可执行并启用。')) return
 
     try {
-      const response = await fetch('/rule-candidates/tax-warning-candidates.json')
-      if (!response.ok) {
-        throw new Error(`Candidate rules request failed: ${response.status}`)
-      }
-      const candidateRules = await response.json() as ManagedRule[]
       await Promise.all(
         candidateRules.map((rule) =>
           apiSend<{ rule: ManagedRule }>('/api/rules', 'POST', {
-            ...rule,
-            enabled: false,
-            conditionJson: emptyRuleCondition,
+            code: rule.code,
+            name: rule.name,
+            taxType: rule.taxType,
+            level: rule.level,
+            basis: rule.basis,
+            suggestion: rule.suggestion,
+            enabled: true,
+            conditionText: rule.caseRef,
+            conditionJson: riskRuleCondition(rule),
+            requiredFields: rule.requiredFields || [],
+            materials: rule.materials,
           }),
         ),
       )
@@ -3066,6 +3608,52 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
       <section className="form-section">
         <div className="section-title-row">
           <div>
+            <h3>趋势与预算数据</h3>
+            <p className="section-helper">用于执行同比、环比、预实差异、主体利润率和有费用无收入类规则。</p>
+          </div>
+          <span>趋势</span>
+        </div>
+        <div className="form-grid">
+          <Field label="上季度末人数"><input type="number" value={client.previousQuarterEmployees} onChange={num('previousQuarterEmployees')} /></Field>
+          <Field label="本季度收入"><input type="number" value={client.quarterRevenue} onChange={num('quarterRevenue')} /></Field>
+          <Field label="上季度收入"><input type="number" value={client.previousQuarterRevenue} onChange={num('previousQuarterRevenue')} /></Field>
+          <Field label="本季度成本费用"><input type="number" value={client.quarterCostExpense} onChange={num('quarterCostExpense')} /></Field>
+          <Field label="上季度成本费用"><input type="number" value={client.previousQuarterCostExpense} onChange={num('previousQuarterCostExpense')} /></Field>
+          <Field label="本年累计收入"><input type="number" value={client.ytdRevenue} onChange={num('ytdRevenue')} /></Field>
+          <Field label="本年累计成本费用"><input type="number" value={client.ytdCostExpense} onChange={num('ytdCostExpense')} /></Field>
+          <Field label="本年累计利润"><input type="number" value={client.ytdProfit} onChange={num('ytdProfit')} /></Field>
+          <Field label="EBIT 利润"><input type="number" value={client.ebitProfit} onChange={num('ebitProfit')} /></Field>
+          <Field label="上年 EBIT 利润"><input type="number" value={client.previousYearEbitProfit} onChange={num('previousYearEbitProfit')} /></Field>
+          <Field label="预算 EBIT 利润"><input type="number" value={client.budgetEbitProfit} onChange={num('budgetEbitProfit')} /></Field>
+          <Field label="预算收入"><input type="number" value={client.budgetRevenue} onChange={num('budgetRevenue')} /></Field>
+          <Field label="上年同期收入"><input type="number" value={client.previousYearRevenue} onChange={num('previousYearRevenue')} /></Field>
+          <Field label="主营业务收入"><input type="number" value={client.mainBusinessRevenue} onChange={num('mainBusinessRevenue')} /></Field>
+          <Field label="主营业务成本"><input type="number" value={client.mainBusinessCost} onChange={num('mainBusinessCost')} /></Field>
+          <Field label="商品销售收入"><input type="number" value={client.goodsSalesRevenue} onChange={num('goodsSalesRevenue')} /></Field>
+          <Field label="商品销售成本"><input type="number" value={client.goodsCost} onChange={num('goodsCost')} /></Field>
+        </div>
+      </section>
+
+      <section className="form-section">
+        <div className="section-title-row">
+          <div>
+            <h3>房租装修与人员费用</h3>
+            <p className="section-helper">用于执行无人员有费用、人均租房面积、福利性质餐费和装修费用合理性规则。</p>
+          </div>
+          <span>费用</span>
+        </div>
+        <div className="form-grid">
+          <Field label="人员相关成本费用"><input type="number" value={client.peopleRelatedExpense} onChange={num('peopleRelatedExpense')} /></Field>
+          <Field label="承租面积（平方米）"><input type="number" value={client.rentalArea} onChange={num('rentalArea')} /></Field>
+          <Field label="转租面积（平方米）"><input type="number" value={client.subleaseArea} onChange={num('subleaseArea')} /></Field>
+          <Field label="月福利性质餐费"><input type="number" value={client.monthlyMealBenefitExpense} onChange={num('monthlyMealBenefitExpense')} /></Field>
+          <Field label="装修费用"><input type="number" value={client.decorationExpense} onChange={num('decorationExpense')} /></Field>
+        </div>
+      </section>
+
+      <section className="form-section">
+        <div className="section-title-row">
+          <div>
             <h3>VAT 增值税资料</h3>
             <p className="section-helper">建议来源：增值税申报表、开票明细、平台账单、银行或第三方收款流水。</p>
           </div>
@@ -3075,6 +3663,19 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <Field label="月开票金额"><input type="number" value={client.monthlyInvoice} onChange={num('monthlyInvoice')} /></Field>
           <Field label="连续 12 个月销售额"><input type="number" value={client.consecutive12MonthSales} onChange={num('consecutive12MonthSales')} /></Field>
           <Field label="平台收入"><input type="number" value={client.platformRevenue} onChange={num('platformRevenue')} /></Field>
+          <Field label="红字专票金额"><input type="number" value={client.redVatSpecialInvoiceAmount} onChange={num('redVatSpecialInvoiceAmount')} /></Field>
+          <Field label="销项税额"><input type="number" value={client.outputTax} onChange={num('outputTax')} /></Field>
+          <Field label="进项税额"><input type="number" value={client.inputTax} onChange={num('inputTax')} /></Field>
+          <Field label="增值税应纳/入库税额"><input type="number" value={client.vatTaxPayable} onChange={num('vatTaxPayable')} /></Field>
+          <Field label="增值税应税销售额"><input type="number" value={client.taxableSales} onChange={num('taxableSales')} /></Field>
+          <Field label="理论增值税税额"><input type="number" value={client.theoreticalVatTax} onChange={num('theoreticalVatTax')} /></Field>
+          <Field label="预算增值税税额"><input type="number" value={client.budgetVatTax} onChange={num('budgetVatTax')} /></Field>
+          <Field label="上期应税销售额"><input type="number" value={client.priorTaxableSales} onChange={num('priorTaxableSales')} /></Field>
+          <Field label="上期增值税税额"><input type="number" value={client.priorVatTaxPayable} onChange={num('priorVatTaxPayable')} /></Field>
+          <Field label="进销项税率差"><input type="number" step="0.0001" value={client.vatRateSpread} onChange={num('vatRateSpread')} /></Field>
+          <Field label="广告服务收入"><input type="number" value={client.advertisingServiceRevenue} onChange={num('advertisingServiceRevenue')} /></Field>
+          <Field label="文化事业建设费实缴"><input type="number" value={client.cultureConstructionFeePaid} onChange={num('cultureConstructionFeePaid')} /></Field>
+          <Field label="期末留抵税额"><input type="number" value={client.endingVatCredit} onChange={num('endingVatCredit')} /></Field>
         </div>
         {renderMaterialGaps(vatMaterialGaps)}
         <div className="check-grid tax-check-grid">
@@ -3099,6 +3700,9 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <Field label="应纳税所得额"><input type="number" value={client.taxableIncome} onChange={num('taxableIncome')} /></Field>
           <Field label="资产总额"><input type="number" value={client.assetsTotal} onChange={num('assetsTotal')} /></Field>
           <Field label="全年平均人数"><input type="number" value={client.employeeAnnualAvg} onChange={num('employeeAnnualAvg')} /></Field>
+          <Field label="营业外支出发生额"><input type="number" value={client.nonOperatingExpense} onChange={num('nonOperatingExpense')} /></Field>
+          <Field label="营业外收入发生额"><input type="number" value={client.nonOperatingIncome} onChange={num('nonOperatingIncome')} /></Field>
+          <Field label="其他应收代收代付余额"><input type="number" value={client.otherReceivableAgencyBalance} onChange={num('otherReceivableAgencyBalance')} /></Field>
         </div>
         {renderMaterialGaps(citMaterialGaps)}
         <div className="check-grid tax-check-grid">
@@ -3117,6 +3721,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         <div className="form-grid">
           <Field label="劳务人员人数"><input type="number" value={client.laborCount} onChange={num('laborCount')} /></Field>
           <Field label="工资薪金总额"><input type="number" value={client.payrollTotal} onChange={num('payrollTotal')} /></Field>
+          <Field label="向个人支付非工资薪金所得"><input type="number" value={client.nonPayrollPersonalPayment} onChange={num('nonPayrollPersonalPayment')} /></Field>
         </div>
         {renderMaterialGaps(iitMaterialGaps)}
         <div className="check-grid tax-check-grid">

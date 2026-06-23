@@ -280,6 +280,11 @@ describe('ruleEngine', () => {
       { currentRevenue: 0, previousRevenue: 0, hasBusiness: false, manualOverride: false, budgetRevenue: 0 },
       condition,
       ['budgetRevenue'],
+    )).toEqual(['budgetRevenue'])
+    expect(missingRequiredFields(
+      { currentRevenue: 0, previousRevenue: 0, hasBusiness: false, manualOverride: false, budgetRevenue: 100 },
+      condition,
+      ['budgetRevenue'],
     )).toEqual([])
   })
 
@@ -304,6 +309,21 @@ describe('ruleEngine', () => {
     expect(evaluateRuleExecution({ currentRevenue: 110, previousRevenue: 100 }, revenueRule).status).toBe('not_matched')
     expect(evaluateRuleExecution({ currentRevenue: 150, previousRevenue: 100 }, { ...revenueRule, enabled: false }).status).toBe('disabled')
     expect(evaluateRuleExecution({ currentRevenue: 150, previousRevenue: 100 }, { ...revenueRule, conditionJson: emptyRuleCondition }).status).toBe('not_executable')
+  })
+
+  it('treats zero budget and prior-period values as missing for readiness checks', () => {
+    const budgetRule: ExecutableRule = {
+      code: 'REVENUE_BUDGET_DIFF',
+      enabled: true,
+      conditionJson: { field: 'ytdRevenue', operator: '>', value: 0, compareField: 'budgetRevenue', multiplier: 1.2 },
+      requiredFields: ['budgetRevenue'],
+    }
+
+    expect(evaluateRuleExecution({ ytdRevenue: 150, budgetRevenue: 0 }, budgetRule)).toMatchObject({
+      status: 'skipped_missing_data',
+      missingFields: ['budgetRevenue'],
+    })
+    expect(evaluateRuleExecution({ ytdRevenue: 150, budgetRevenue: 100 }, budgetRule).status).toBe('matched')
   })
 
   it('supports explicit required fields beyond the condition JSON', () => {
