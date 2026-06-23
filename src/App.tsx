@@ -45,6 +45,7 @@ import {
   formatAnalysisPeriod,
   formatMonthRange,
   getClientPeriodMonths,
+  monthFromIndex,
   monthIndex,
   summarizePeriodEntries,
   upsertPeriodEntry,
@@ -2522,6 +2523,7 @@ function App() {
   const [ruleDraft, setRuleDraft] = useState<ManagedRule>(emptyManagedRule)
   const [editingRuleCode, setEditingRuleCode] = useState('')
   const [selectedPeriodEntryIds, setSelectedPeriodEntryIds] = useState<string[]>([])
+  const [reportConfirmOpen, setReportConfirmOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [ruleQuery, setRuleQuery] = useState('')
   const [ruleStatusFilter, setRuleStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
@@ -2876,6 +2878,86 @@ function App() {
     ))
   }
 
+  const hydratePeriodDraft = (entry: ClientPeriodEntry, patchData: Partial<Client> = {}) => {
+    if (!selectedClient) return deriveClientMetrics({ ...entry.snapshot, ...patchData })
+    return deriveClientMetrics({
+      ...selectedClient,
+      ...entry.snapshot,
+      id: selectedClient.id,
+      name: selectedClient.name,
+      creditCode: selectedClient.creditCode,
+      region: selectedClient.region,
+      industry: selectedClient.industry,
+      taxpayerType: selectedClient.taxpayerType,
+      establishedAt: selectedClient.establishedAt,
+      projectScope: selectedClient.projectScope,
+      groupName: selectedClient.groupName,
+      entityRole: selectedClient.entityRole,
+      periodEntries: selectedClient.periodEntries,
+      ...patchData,
+    })
+  }
+
+  const nextPeriodPatch = (entry: ClientPeriodEntry): Partial<Client> => {
+    if (entry.analysisPeriodType === '月度' && entry.months[0]) {
+      const nextMonth = monthFromIndex(monthIndex(entry.months[0]) + 1)
+      return { analysisMonth: nextMonth, analysisYear: nextMonth.slice(0, 4) }
+    }
+    if (entry.analysisPeriodType === '季度') {
+      const quarterOrder: AnalysisQuarter[] = ['Q1', 'Q2', 'Q3', 'Q4']
+      const currentIndex = quarterOrder.indexOf(entry.analysisQuarter)
+      const nextQuarter = currentIndex >= 0 && currentIndex < 3 ? quarterOrder[currentIndex + 1] : 'Q1'
+      const nextYear = currentIndex === 3 ? String(Number(entry.analysisYear || new Date().getFullYear()) + 1) : entry.analysisYear
+      return { analysisQuarter: nextQuarter, analysisYear: nextYear }
+    }
+    if (entry.analysisPeriodType === '年度') {
+      const nextYear = String(Number(entry.analysisYear || new Date().getFullYear()) + 1)
+      return { analysisYear: nextYear, periodStartDate: `${nextYear}-01-01`, periodEndDate: `${nextYear}-12-31` }
+    }
+    if (entry.months.length > 0) {
+      const firstNextMonth = monthFromIndex(monthIndex(entry.months[entry.months.length - 1]) + 1)
+      const lastNextMonth = monthFromIndex(monthIndex(firstNextMonth) + entry.months.length - 1)
+      return {
+        analysisYear: firstNextMonth.slice(0, 4),
+        periodStartDate: `${firstNextMonth}-01`,
+        periodEndDate: `${lastNextMonth}-31`,
+      }
+    }
+    return {}
+  }
+
+  const persistClientUpdate = async (updatedClient: Client) => {
+    setClients((current) => current.map((client) => (client.id === updatedClient.id ? updatedClient : client)))
+    try {
+      await apiSend<{ client: Client }>('/api/clients', 'POST', {
+        ...updatedClient,
+        riskLevel: getOverallLevel(detectRisks(updatedClient, managedRules)),
+      })
+      setDataStatus('connected')
+    } catch (error) {
+      console.warn('Client updated locally only.', error)
+      setDataStatus('fallback')
+    }
+  }
+
+  const editPeriodEntry = (entry: ClientPeriodEntry) => {
+    setEditingClient(hydratePeriodDraft(entry))
+    setPage('form')
+  }
+
+  const copyPeriodEntryToNext = (entry: ClientPeriodEntry) => {
+    setEditingClient(hydratePeriodDraft(entry, nextPeriodPatch(entry)))
+    setPage('form')
+  }
+
+  const deletePeriodEntry = async (entry: ClientPeriodEntry) => {
+    if (!selectedClient) return
+    if (!window.confirm(`确定删除期间数据「${entry.label}」吗？已生成的历史报告不会删除。`)) return
+    const updatedClient = { ...selectedClient, periodEntries: selectedClient.periodEntries.filter((item) => item.id !== entry.id) }
+    setSelectedPeriodEntryIds((current) => current.filter((id) => id !== entry.id))
+    await persistClientUpdate(updatedClient)
+  }
+
   const canUseAdmin = authUser?.role === 'admin' || authUser?.actor?.role === 'admin'
 
   const refreshAdminUsers = async () => {
@@ -3078,19 +3160,19 @@ function App() {
     setEditingClient({ ...blankClient, id: editingClient.id || crypto.randomUUID() })
   }
 
-  const createReport = async () => {
+  const createReport = async (confirmed = false) => {
     if (!selectedClient || aiReportStage) return
     if (selectedPeriodEntries.length > 0 && !selectedPeriodsContinuous) {
       window.alert('选择的月份不连续，不能合并生成一份报告。请改选连续月份，例如 1-3 月、4-6 月或全年。')
       return
     }
+    if (!confirmed) {
+      setReportConfirmOpen(true)
+      return
+    }
+    setReportConfirmOpen(false)
 
     const reportClient = deriveClientMetrics({ ...(selectedDetectionClient || selectedClient), periodEntries: [] })
-    const reportIssues = validateClientForReport(reportClient)
-    if (reportIssues.length > 0) {
-      const confirmed = window.confirm(`基础检测资料仍缺少：${validationSummary(reportIssues)}。\n\n可以继续生成报告，但报告会标记为资料不足，仅供线索参考。是否继续？`)
-      if (!confirmed) return
-    }
     const startedAt = Date.now()
     const risks = detectRisks(reportClient, managedRules)
     const baseReport: Report = {
@@ -3652,7 +3734,7 @@ function App() {
                 >
                   <RefreshCcw /> 编辑资料
                 </button>
-                <button className="primary-button" onClick={createReport} disabled={Boolean(aiReportStage)}>
+                <button className="primary-button" onClick={() => createReport()} disabled={Boolean(aiReportStage)}>
                   <Sparkles /> {aiReportStage === 'reviewing' ? 'AI 正在复核数据...' : aiReportStage === 'generating' ? 'AI 正在生成报告...' : '生成报告'}
                 </button>
               </div>
@@ -3672,16 +3754,22 @@ function App() {
                     {selectedClient.periodEntries.map((entry) => {
                       const checked = selectedPeriodEntryIds.includes(entry.id)
                       return (
-                        <button
+                        <article
                           key={entry.id}
-                          type="button"
                           className={checked ? 'period-entry-card active' : 'period-entry-card'}
-                          onClick={() => togglePeriodEntry(entry.id)}
                         >
                           <span>{entry.label}</span>
                           <strong>{formatMonthRange(entry.months)}</strong>
                           <small>{entry.months.length} 个月｜保存于 {entry.savedAt}</small>
-                        </button>
+                          <div className="period-card-actions">
+                            <button type="button" onClick={() => togglePeriodEntry(entry.id)}>
+                              {checked ? '取消选择' : '选择分析'}
+                            </button>
+                            <button type="button" onClick={() => editPeriodEntry(entry)}>编辑</button>
+                            <button type="button" onClick={() => copyPeriodEntryToNext(entry)}>复制下一期</button>
+                            <button type="button" className="danger-action" onClick={() => void deletePeriodEntry(entry)}>删除</button>
+                          </div>
+                        </article>
                       )
                     })}
                   </div>
@@ -3841,12 +3929,63 @@ function App() {
           </section>
         )}
 
+        {reportConfirmOpen && selectedClient && (
+          <div className="modal-backdrop" role="presentation" onClick={() => setReportConfirmOpen(false)}>
+            <section className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="report-confirm-title" onClick={(event) => event.stopPropagation()}>
+              <div className="modal-title-row">
+                <div>
+                  <p className="eyebrow">报告前确认</p>
+                  <h3 id="report-confirm-title">确认本次分析范围和数据质量</h3>
+                </div>
+                <button type="button" className="icon-text-button" onClick={() => setReportConfirmOpen(false)}>关闭</button>
+              </div>
+              <div className="confirm-grid">
+                <article>
+                  <span>分析范围</span>
+                  <strong>{selectedPeriodLabel}</strong>
+                  <small>{selectedPeriodEntries.length ? `使用 ${selectedPeriodEntries.length} 期期间数据` : '使用企业当前录入数据'}</small>
+                </article>
+                <article>
+                  <span>月份连续性</span>
+                  <strong>{selectedPeriodsContinuous ? '连续' : '不连续'}</strong>
+                  <small>{selectedPeriodEntries.length ? formatMonthRange(selectedPeriodMonths) : '未选择归档期间'}</small>
+                </article>
+                <article>
+                  <span>数据口径</span>
+                  <strong>{selectedDetectionClient?.dataBasis || selectedClient.dataBasis || '未填写'}</strong>
+                  <small>{selectedDetectionClient?.comparisonPeriod || '未设置对比期间'}</small>
+                </article>
+                <article>
+                  <span>检测缺失</span>
+                  <strong>{currentReportIssues.length} 项</strong>
+                  <small>{currentReportIssues.length ? validationSummary(currentReportIssues) : '基础检测必填项已补齐'}</small>
+                </article>
+              </div>
+              {selectedClientPeriodWarnings.length > 0 && (
+                <div className="period-warning-list">
+                  <strong>数据一致性提示</strong>
+                  {selectedClientPeriodWarnings.map((warning) => <p key={warning}>{warning}</p>)}
+                </div>
+              )}
+              {currentReportIssues.length > 0 && (
+                <p className="period-warning">当前仍有检测必填字段缺失，可以继续生成报告，但报告会标记为资料不足，仅供线索参考。</p>
+              )}
+              <div className="modal-actions">
+                <button type="button" className="secondary-button" onClick={() => setReportConfirmOpen(false)}>返回检查</button>
+                <button type="button" className="primary-button" disabled={!selectedPeriodsContinuous || Boolean(aiReportStage)} onClick={() => void createReport(true)}>
+                  确认生成报告
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
+
         {page === 'report' && selectedClient && (
           <ReportPage
             report={reports.find((report) => report.clientId === selectedClient.id)}
             client={selectedClient}
             risks={currentRisks}
-            onGenerate={createReport}
+            onGenerate={() => createReport()}
             aiStage={aiReportStage}
             onUpdate={(content) =>
               setReports((current) =>
