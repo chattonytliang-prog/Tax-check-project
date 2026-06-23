@@ -918,7 +918,7 @@ function App() {
   const [ruleDraft, setRuleDraft] = useState<ManagedRule>(emptyManagedRule)
   const [editingRuleCode, setEditingRuleCode] = useState('')
   const [query, setQuery] = useState('')
-  const [dataStatus, setDataStatus] = useState<'loading' | 'connected' | 'fallback'>('loading')
+  const [, setDataStatus] = useState<'loading' | 'connected' | 'fallback'>('loading')
   const [aiReportStage, setAiReportStage] = useState<'reviewing' | 'generating' | null>(null)
 
   useEffect(() => {
@@ -1141,7 +1141,7 @@ function App() {
   }
 
   const importBuiltInRules = async () => {
-    if (!window.confirm('确定把当前内置规则导入 D1 规则库吗？同编号规则会被覆盖。')) return
+    if (!window.confirm('确定把当前内置规则导入规则库吗？同编号规则会被覆盖。')) return
 
     try {
       await Promise.all(
@@ -1460,7 +1460,7 @@ function App() {
             <span>合耀科技 HY AI</span>
             <strong>把税务经验沉淀成可复核的风控流程</strong>
           </div>
-          <p>当前版本内置 30 条测试规则，适合内部演示、业务访谈和产品验证。</p>
+          <p>围绕企业财税画像、风险规则检测和报告流转，帮助财务负责人更快完成税务风险初筛。</p>
         </aside>
       </main>
     )
@@ -1524,11 +1524,6 @@ function App() {
       </aside>
 
       <main className="workspace">
-        <div className={`data-status ${dataStatus}`}>
-          {dataStatus === 'loading' && '正在连接云端数据库...'}
-          {dataStatus === 'connected' && '云端数据库已连接，企业档案和报告会保存到 D1。'}
-          {dataStatus === 'fallback' && '当前为演示数据模式：请在 Cloudflare Pages 绑定 D1 数据库后使用持久化能力。'}
-        </div>
         {page === 'dashboard' && (
           <section className="page">
             <header className="page-header">
@@ -1579,12 +1574,12 @@ function App() {
               </section>
               <section className="panel dark-panel">
                 <Sparkles />
-                <h3>第一阶段目标</h3>
-                <p>先验证内部团队是否能用风险体检报告完成识别、复核和流转，而不是一开始做完整自动做账系统。</p>
+                <h3>税务风险体检流程</h3>
+                <p>从企业财税画像出发，先用规则引擎完成确定性检测，再由 AI 辅助复核数据疑点并生成可流转报告。</p>
                 <ul>
-                  <li>企业画像录入</li>
-                  <li>30 条规则命中</li>
-                  <li>报告预览与 Word 导出</li>
+                  <li>录入企业基础、经营、发票和人员数据</li>
+                  <li>自动识别增值税、所得税、发票和资金风险</li>
+                  <li>生成风险体检报告并支持 Word 导出</li>
                 </ul>
               </section>
             </div>
@@ -2027,7 +2022,7 @@ function App() {
                 <div className="empty-state wide">
                   <Settings2 />
                   <h3>规则库还没有入库规则</h3>
-                  <p>管理员可以点击“导入内置规则”，先把当前 30 条测试规则写入 D1，再继续编辑维护。</p>
+                  <p>管理员可以点击“导入内置规则”，先初始化当前规则库，再继续编辑维护。</p>
                 </div>
               )}
             </div>
