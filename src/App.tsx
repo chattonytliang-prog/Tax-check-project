@@ -2140,11 +2140,76 @@ function ClientForm({ client, onChange }: { client: Client; onChange: (client: C
   const num = (key: keyof Client) => (event: React.ChangeEvent<HTMLInputElement>) => {
     patch(key, Number(event.target.value || 0) as never)
   }
+  const completeness = getDataCompleteness(client)
+  const vatChecks: Array<[keyof Client, string]> = [
+    ['unbilledIncome', '存在大额未开票收入'],
+    ['nearVatExemption', '长期接近小规模免税临界点'],
+    ['longTermZeroDeclaration', '长期零申报'],
+    ['prepaidLongTerm', '预收款长期挂账'],
+    ['supplierNoInput', '供应商只有销项少进项'],
+    ['invoiceNameMismatch', '发票品名与业务不符'],
+    ['abnormalInvoice', '异常/重复发票入账'],
+  ]
+  const citChecks: Array<[keyof Client, string]> = [
+    ['largeExpenseNoInvoice', '大额费用无票'],
+    ['serviceFeeInvoices', '大额服务费/咨询费发票'],
+    ['inventoryAbnormal', '库存异常'],
+    ['longTermLoss', '长期亏损'],
+    ['nonFinancialInterestAbnormal', '非金融借款利息异常'],
+    ['smallProfitEnjoyed', '享受小型微利优惠'],
+    ['taxBenefitDataMissing', '优惠资料不足'],
+    ['rdDeductionEnjoyed', '享受研发加计扣除'],
+    ['rdDocsInsufficient', '研发资料不足'],
+  ]
+  const iitChecks: Array<[keyof Client, string]> = [
+    ['salarySplit', '工资拆分为报销/劳务/个体户发票'],
+    ['noIitWithholding', '劳务佣金未见个税扣缴'],
+    ['individualVendorRelated', '关联个体户承接服务'],
+  ]
+  const comprehensiveChecks: Array<[keyof Client, string]> = [
+    ['privateAccountCollection', '个人账户收取经营款'],
+    ['relatedTransactions', '存在关联交易'],
+    ['purchaseSalesMismatch', '进销品类不匹配'],
+    ['relatedEntitiesNearThreshold', '关联主体接近 500 万临界点'],
+    ['fundsReturn', '采购付款后资金回流'],
+    ['intercompanyManagementFee', '企业间管理费异常'],
+    ['relatedPricingAbnormal', '关联交易价格异常'],
+    ['agencyComplianceRisk', '涉税服务/内部协助风险'],
+  ]
+  const renderChecks = (items: Array<[keyof Client, string]>) => items.map(([key, label]) => (
+    <BoolField
+      key={String(key)}
+      label={label}
+      checked={client[key] as boolean}
+      onChange={(value) => patch(key, value as never)}
+    />
+  ))
 
   return (
     <div className="form-layout">
+      <section className="form-section intake-overview">
+        <div>
+          <p className="eyebrow">录入路线</p>
+          <h3>按税务健康检查口径采集资料</h3>
+          <p className="section-helper">
+            先录入企业共用画像，再按增值税、企业所得税、个人所得税与综合线索补充关键字段。当前版本只采集可量化信息和风险标记，不要求访谈、抽凭或上传底稿。
+          </p>
+        </div>
+        <div className="intake-score">
+          <span>{completeness.label}</span>
+          <strong>{completeness.score}%</strong>
+          <small>{completeness.note}</small>
+        </div>
+      </section>
+
       <section className="form-section">
-        <h3>基本信息</h3>
+        <div className="section-title-row">
+          <div>
+            <h3>基础资料（共用）</h3>
+            <p className="section-helper">用于确定审阅主体、地区、行业、纳税人身份和适用检查口径。</p>
+          </div>
+          <span>Step 1</span>
+        </div>
         <div className="form-grid">
           <Field label="企业名称"><input value={client.name} onChange={(e) => patch('name', e.target.value)} /></Field>
           <Field label="统一社会信用代码"><input value={client.creditCode} onChange={(e) => patch('creditCode', e.target.value)} /></Field>
@@ -2166,83 +2231,93 @@ function ClientForm({ client, onChange }: { client: Client; onChange: (client: C
       </section>
 
       <section className="form-section">
-        <h3>经营与收款数据</h3>
+        <div className="section-title-row">
+          <div>
+            <h3>快速体检数据（共用）</h3>
+            <p className="section-helper">用于先跑通整体经营规模、收入成本、收款流水和人员匹配关系。</p>
+          </div>
+          <span>Step 2</span>
+        </div>
         <div className="form-grid">
           <Field label="月收入"><input type="number" value={client.monthlyRevenue} onChange={num('monthlyRevenue')} /></Field>
-          <Field label="月开票金额"><input type="number" value={client.monthlyInvoice} onChange={num('monthlyInvoice')} /></Field>
           <Field label="月成本费用"><input type="number" value={client.monthlyCost} onChange={num('monthlyCost')} /></Field>
           <Field label="月利润"><input type="number" value={client.monthlyProfit} onChange={num('monthlyProfit')} /></Field>
           <Field label="年销售收入"><input type="number" value={client.annualRevenue} onChange={num('annualRevenue')} /></Field>
-          <Field label="连续 12 个月销售额"><input type="number" value={client.consecutive12MonthSales} onChange={num('consecutive12MonthSales')} /></Field>
-          <Field label="平台收入"><input type="number" value={client.platformRevenue} onChange={num('platformRevenue')} /></Field>
           <Field label="收款流水"><input type="number" value={client.collectionFlow} onChange={num('collectionFlow')} /></Field>
+          <Field label="员工人数"><input type="number" value={client.employees} onChange={num('employees')} /></Field>
+          <Field label="社保人数"><input type="number" value={client.socialSecurityCount} onChange={num('socialSecurityCount')} /></Field>
+          <Field label="工资申报人数"><input type="number" value={client.salaryDeclaredCount} onChange={num('salaryDeclaredCount')} /></Field>
         </div>
       </section>
 
       <section className="form-section">
-        <h3>人员与费用</h3>
+        <div className="section-title-row">
+          <div>
+            <h3>VAT 增值税资料</h3>
+            <p className="section-helper">建议来源：增值税申报表、开票明细、平台账单、银行或第三方收款流水。</p>
+          </div>
+          <span>VAT</span>
+        </div>
         <div className="form-grid">
-          <Field label="员工人数"><input type="number" value={client.employees} onChange={num('employees')} /></Field>
-          <Field label="社保人数"><input type="number" value={client.socialSecurityCount} onChange={num('socialSecurityCount')} /></Field>
-          <Field label="工资申报人数"><input type="number" value={client.salaryDeclaredCount} onChange={num('salaryDeclaredCount')} /></Field>
-          <Field label="劳务人员人数"><input type="number" value={client.laborCount} onChange={num('laborCount')} /></Field>
-          <Field label="工资薪金总额"><input type="number" value={client.payrollTotal} onChange={num('payrollTotal')} /></Field>
+          <Field label="月开票金额"><input type="number" value={client.monthlyInvoice} onChange={num('monthlyInvoice')} /></Field>
+          <Field label="连续 12 个月销售额"><input type="number" value={client.consecutive12MonthSales} onChange={num('consecutive12MonthSales')} /></Field>
+          <Field label="平台收入"><input type="number" value={client.platformRevenue} onChange={num('platformRevenue')} /></Field>
+        </div>
+        <div className="check-grid tax-check-grid">
+          {renderChecks(vatChecks)}
+        </div>
+      </section>
+
+      <section className="form-section">
+        <div className="section-title-row">
+          <div>
+            <h3>CIT 企业所得税资料</h3>
+            <p className="section-helper">覆盖年度利润、扣除限额、优惠适用和费用真实性等企业所得税检查点。</p>
+          </div>
+          <span>CIT</span>
+        </div>
+        <div className="form-grid">
           <Field label="业务招待费"><input type="number" value={client.entertainmentExpense} onChange={num('entertainmentExpense')} /></Field>
           <Field label="广告宣传费"><input type="number" value={client.adExpense} onChange={num('adExpense')} /></Field>
           <Field label="职工福利费"><input type="number" value={client.welfareExpense} onChange={num('welfareExpense')} /></Field>
           <Field label="工会经费"><input type="number" value={client.unionExpense} onChange={num('unionExpense')} /></Field>
           <Field label="职工教育经费"><input type="number" value={client.educationExpense} onChange={num('educationExpense')} /></Field>
-        </div>
-      </section>
-
-      <section className="form-section">
-        <h3>优惠与年度指标</h3>
-        <div className="form-grid">
           <Field label="应纳税所得额"><input type="number" value={client.taxableIncome} onChange={num('taxableIncome')} /></Field>
           <Field label="资产总额"><input type="number" value={client.assetsTotal} onChange={num('assetsTotal')} /></Field>
           <Field label="全年平均人数"><input type="number" value={client.employeeAnnualAvg} onChange={num('employeeAnnualAvg')} /></Field>
         </div>
+        <div className="check-grid tax-check-grid">
+          {renderChecks(citChecks)}
+        </div>
       </section>
 
       <section className="form-section">
-        <h3>异常标记</h3>
-        <div className="check-grid">
-          {[
-            ['privateAccountCollection', '个人账户收取经营款'],
-            ['unbilledIncome', '存在大额未开票收入'],
-            ['largeExpenseNoInvoice', '大额费用无票'],
-            ['serviceFeeInvoices', '大额服务费/咨询费发票'],
-            ['relatedTransactions', '存在关联交易'],
-            ['longTermZeroDeclaration', '长期零申报'],
-            ['longTermLoss', '长期亏损'],
-            ['inventoryAbnormal', '库存异常'],
-            ['purchaseSalesMismatch', '进销品类不匹配'],
-            ['relatedEntitiesNearThreshold', '关联主体接近 500 万临界点'],
-            ['nearVatExemption', '长期接近小规模免税临界点'],
-            ['prepaidLongTerm', '预收款长期挂账'],
-            ['supplierNoInput', '供应商只有销项少进项'],
-            ['invoiceNameMismatch', '发票品名与业务不符'],
-            ['fundsReturn', '采购付款后资金回流'],
-            ['abnormalInvoice', '异常/重复发票入账'],
-            ['nonFinancialInterestAbnormal', '非金融借款利息异常'],
-            ['intercompanyManagementFee', '企业间管理费异常'],
-            ['relatedPricingAbnormal', '关联交易价格异常'],
-            ['salarySplit', '工资拆分为报销/劳务/个体户发票'],
-            ['noIitWithholding', '劳务佣金未见个税扣缴'],
-            ['individualVendorRelated', '关联个体户承接服务'],
-            ['smallProfitEnjoyed', '享受小型微利优惠'],
-            ['taxBenefitDataMissing', '优惠资料不足'],
-            ['rdDeductionEnjoyed', '享受研发加计扣除'],
-            ['rdDocsInsufficient', '研发资料不足'],
-            ['agencyComplianceRisk', '涉税服务/内部协助风险'],
-          ].map(([key, label]) => (
-            <BoolField
-              key={key}
-              label={label}
-              checked={client[key as keyof Client] as boolean}
-              onChange={(value) => patch(key as keyof Client, value as never)}
-            />
-          ))}
+        <div className="section-title-row">
+          <div>
+            <h3>IIT 个税与薪酬资料</h3>
+            <p className="section-helper">用于检查员工、社保、工资申报、劳务佣金和个税扣缴情形是否匹配。</p>
+          </div>
+          <span>IIT</span>
+        </div>
+        <div className="form-grid">
+          <Field label="劳务人员人数"><input type="number" value={client.laborCount} onChange={num('laborCount')} /></Field>
+          <Field label="工资薪金总额"><input type="number" value={client.payrollTotal} onChange={num('payrollTotal')} /></Field>
+        </div>
+        <div className="check-grid tax-check-grid">
+          {renderChecks(iitChecks)}
+        </div>
+      </section>
+
+      <section className="form-section">
+        <div className="section-title-row">
+          <div>
+            <h3>综合风险线索</h3>
+            <p className="section-helper">记录跨税种、资金流、关联方和业务实质类线索，作为报告复核重点。</p>
+          </div>
+          <span>综合</span>
+        </div>
+        <div className="check-grid tax-check-grid">
+          {renderChecks(comprehensiveChecks)}
         </div>
       </section>
     </div>
