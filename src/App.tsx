@@ -3447,15 +3447,34 @@ function App() {
     }
   }
 
-  const openClientForRiskSelection = (client: Client) => {
+  const openClientForPeriodSelection = (client: Client) => {
     setSelectedClientId(client.id)
     setSelectedPeriodEntryIds([])
     setPage('result')
   }
 
-  const openArchiveForRiskSelection = () => {
+  const runClientRiskDetection = (client: Client) => {
+    setSelectedClientId(client.id)
+    if (!client.periodEntries.length) {
+      setSelectedPeriodEntryIds([])
+      setPage('result')
+      window.alert('当前企业还没有保存期间数据，请先到数据录入页保存一条期间数据。')
+      return
+    }
+    const months = client.periodEntries.flatMap((entry) => entry.months)
+    if (client.periodEntries.length > 1 && !areMonthsContinuous(months)) {
+      setSelectedPeriodEntryIds([])
+      setPage('result')
+      window.alert('当前企业的已录入月份不连续，不能一键检测。请先点击“期间选择”，选择连续月份后再生成检测结果。')
+      return
+    }
+    setSelectedPeriodEntryIds(client.periodEntries.map((entry) => entry.id))
+    setPage('result')
+  }
+
+  const openRiskDetectionPage = () => {
     setSelectedPeriodEntryIds([])
-    setPage('clients')
+    setPage('result')
   }
 
   const handleAuthSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -3658,7 +3677,7 @@ function App() {
           >
             <Plus /> 数据录入
           </button>
-          <button className={page === 'result' ? 'active' : ''} onClick={openArchiveForRiskSelection}>
+          <button className={page === 'result' ? 'active' : ''} onClick={openRiskDetectionPage}>
             <Gauge /> 风险检测
           </button>
           <button className={page === 'reports' || page === 'report' ? 'active' : ''} onClick={() => setPage('reports')}>
@@ -3944,9 +3963,6 @@ function App() {
                         >
                           查看
                         </button>
-                        <button onClick={() => openClientForRiskSelection(client)}>
-                          检测
-                        </button>
                         <button
                           onClick={() => {
                             setEditingClient(deriveClientMetrics(client))
@@ -3991,8 +4007,8 @@ function App() {
           <section className="page">
             <header className="page-header">
               <div>
-                <p className="eyebrow">风险检测结果</p>
-                <h2>{selectedClient.name}</h2>
+                <p className="eyebrow">风险检测</p>
+                <h2>选择企业和期间数据</h2>
               </div>
               <div className="header-actions">
                 <button
@@ -4009,6 +4025,59 @@ function App() {
                 </button>
               </div>
             </header>
+            <section className="panel archive-overview-panel">
+              <div className="panel-title">
+                <div>
+                  <p className="eyebrow">已有档案</p>
+                  <h3>从已保存期间发起检测</h3>
+                  <p className="section-helper">风险检测只基于企业档案中的期间数据。先做期间选择，或在期间连续时直接检测。</p>
+                </div>
+                <span>{clients.length} 个企业</span>
+              </div>
+              <div className="table-panel compact-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>企业名称</th>
+                      <th>项目口径</th>
+                      <th>行业</th>
+                      <th>纳税人类型</th>
+                      <th>地区</th>
+                      <th>期间数据</th>
+                      <th>风险等级</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clientRows.map(({ client, level }) => (
+                      <tr key={`risk-source-${client.id}`}>
+                        <td>
+                          <strong>{client.name}</strong>
+                          <small>{client.creditCode}</small>
+                        </td>
+                        <td>
+                          <strong>{getProjectScope(client)}</strong>
+                          <small>{getGroupName(client) || getEntityRole(client)}</small>
+                        </td>
+                        <td>{client.industry}</td>
+                        <td>{client.taxpayerType}</td>
+                        <td>{client.region}</td>
+                        <td>{client.periodEntries.length ? `${client.periodEntries.length} 期` : '未归档'}</td>
+                        <td><LevelBadge level={level} /></td>
+                        <td className="row-actions">
+                          <button onClick={() => openClientForPeriodSelection(client)}>
+                            期间选择
+                          </button>
+                          <button onClick={() => runClientRiskDetection(client)}>
+                            检测
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
             <section className="panel period-analysis-panel">
               <div className="panel-title">
                 <div>
@@ -4323,7 +4392,7 @@ function App() {
                         <td><LevelBadge level={level} /></td>
                         <td>{report ? '已生成' : '未生成'}</td>
                         <td className="row-actions">
-                          <button onClick={() => openClientForRiskSelection(client)}>
+                          <button onClick={() => openClientForPeriodSelection(client)}>
                             选择期间
                           </button>
                           {report && (
