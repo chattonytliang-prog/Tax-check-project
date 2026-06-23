@@ -6,8 +6,7 @@ const DEFAULT_MODEL = 'deepseek-v4-flash'
 
 function compactRisk(risk) {
   return {
-    issueId: risk.issueId || risk.code,
-    code: risk.code,
+    order: risk.displayOrder || 0,
     name: risk.name,
     level: risk.level,
     taxType: risk.taxType,
@@ -56,21 +55,33 @@ function removeFalseShortEstablishmentClaims(content, establishmentFacts) {
     .trim()
 }
 
+function removeInternalReportArtifacts(content) {
+  return String(content || '')
+    .replace(/[（(]\s*Issue\s+[A-Z-]*\d+\s*[)）]/gi, '')
+    .replace(/\bIssue\s+[A-Z-]*\d+\b/gi, '风险事项')
+    .replace(/\b(issueId|code)\s*[:：=]\s*[A-Z-]*\d+\b/gi, '')
+    .replace(/\b[a-z][A-Za-z0-9_]*(?:\s*[=!<>]=?\s*(?:true|false|\d+(?:\.\d+)?|'[^']*'|"[^"]*"))/g, '相关规则条件')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 function buildPrompt(client, risks, content, aiReview, establishmentFacts) {
   return `请基于以下企业税务风险体检资料，重写一份专业、清晰、适合企业老板和财务负责人阅读的税务风险体检报告。
 
 要求：
 1. 只能基于输入资料分析，不要编造不存在的数据、政策或案例。
-2. 已命中风险事项只能来自“风险事项（Issue）”列表，不得新增未命中的风险，不得删除已命中的风险。
+2. 已命中风险事项只能来自“风险事项”列表，不得新增未命中的风险，不得删除已命中的风险。
 3. AI 数据复核中发现的疑点，只能写入“数据复核提示”或“观察项”，不能写成已命中风险。
 4. 保留风险提示性质，不要承诺最终税务处理结论。
 5. 输出中文纯文本，不要使用 Markdown 代码块。
-6. 结构包含：企业基本情况、综合风险结论、资料完整性说明、AI 数据复核提示、分税种风险摘要、重点风险事项、Issue 明细与整改建议、整改优先级、建议补充资料、免责声明。
+6. 结构包含：企业基本情况、综合风险结论、资料完整性说明、AI 数据复核提示、分税种风险摘要、重点风险事项、风险明细与整改建议、整改优先级、建议补充资料、免责声明。
 7. 语气专业、审慎、可执行。
 8. 企业成立时长必须以“系统计算事实”为准，不得自行推断。
 9. 只有当 isEstablishedLessThan12Months 为 true 时，才允许写“成立不足 12 个月 / 成立不足一年 / 不满 12 个月”等表述。
 10. 如果 isEstablishedLessThan12Months 为 false，禁止出现任何“成立不足 12 个月”或同义表述。
-11. 每个 Issue 必须保留输入中的 issueId、风险等级、涉及税种、触发原因、建议补充资料和整改建议。
+11. 每个风险事项必须保留风险等级、涉及税种、触发原因、建议补充资料和整改建议。
+12. 面向客户的报告中禁止输出内部规则编号、issueId、code、内部字段名或类似“smallProfitEnjoyed=true”的条件表达式。
 
 企业资料：
 ${JSON.stringify(client, null, 2)}
@@ -78,7 +89,7 @@ ${JSON.stringify(client, null, 2)}
 系统计算事实：
 ${JSON.stringify(establishmentFacts, null, 2)}
 
-风险事项（Issue）：
+风险事项：
 ${JSON.stringify(risks.map(compactRisk), null, 2)}
 
 AI 数据复核：
@@ -148,10 +159,10 @@ export async function onRequestPost({ request, env }) {
     }
 
     const data = await response.json()
-    const enhancedContent = removeFalseShortEstablishmentClaims(
+    const enhancedContent = removeInternalReportArtifacts(removeFalseShortEstablishmentClaims(
       data?.choices?.[0]?.message?.content?.trim() || '',
       establishmentFacts,
-    )
+    ))
     if (!enhancedContent) {
       return json({ error: 'DeepSeek returned empty content' }, { status: 502 })
     }

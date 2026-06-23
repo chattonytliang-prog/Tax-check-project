@@ -6,8 +6,7 @@ const DEFAULT_MODEL = 'deepseek-v4-flash'
 
 function compactRisk(risk) {
   return {
-    issueId: risk.issueId || risk.code,
-    code: risk.code,
+    order: risk.displayOrder || 0,
     name: risk.name,
     level: risk.level,
     taxType: risk.taxType,
@@ -53,10 +52,17 @@ function hasFalseShortEstablishmentClaim(text, establishmentFacts) {
 }
 
 function sanitizeReview(review, establishmentFacts) {
+  const clean = (item) => String(item || '')
+    .replace(/[（(]\s*Issue\s+[A-Z-]*\d+\s*[)）]/gi, '')
+    .replace(/\bIssue\s+[A-Z-]*\d+\b/gi, '风险事项')
+    .replace(/\b(issueId|code)\s*[:：=]\s*[A-Z-]*\d+\b/gi, '')
+    .replace(/\b[a-z][A-Za-z0-9_]*(?:\s*[=!<>]=?\s*(?:true|false|\d+(?:\.\d+)?|'[^']*'|"[^"]*"))/g, '相关规则条件')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
   return {
-    dataQualityWarnings: review.dataQualityWarnings.filter((item) => !hasFalseShortEstablishmentClaim(item, establishmentFacts)),
-    nearThresholdWarnings: review.nearThresholdWarnings.filter((item) => !hasFalseShortEstablishmentClaim(item, establishmentFacts)),
-    riskReviewNotes: review.riskReviewNotes.filter((item) => !hasFalseShortEstablishmentClaim(item, establishmentFacts)),
+    dataQualityWarnings: review.dataQualityWarnings.filter((item) => !hasFalseShortEstablishmentClaim(item, establishmentFacts)).map(clean).filter(Boolean),
+    nearThresholdWarnings: review.nearThresholdWarnings.filter((item) => !hasFalseShortEstablishmentClaim(item, establishmentFacts)).map(clean).filter(Boolean),
+    riskReviewNotes: review.riskReviewNotes.filter((item) => !hasFalseShortEstablishmentClaim(item, establishmentFacts)).map(clean).filter(Boolean),
   }
 }
 
@@ -71,6 +77,7 @@ function buildPrompt(client, risks, establishmentFacts) {
 5. 只有当 isEstablishedLessThan12Months 为 true 时，才允许写“成立不足 12 个月 / 成立不足一年 / 不满 12 个月”等表述。
 6. 如果 isEstablishedLessThan12Months 为 false，禁止出现任何“成立不足 12 个月”或同义表述。
 7. 输出必须是严格 JSON，不要 Markdown，不要解释 JSON 之外的内容。
+8. 禁止输出内部规则编号、issueId、code、内部字段名或类似“smallProfitEnjoyed=true”的条件表达式。
 
 JSON 格式：
 {
@@ -85,7 +92,7 @@ ${JSON.stringify(establishmentFacts, null, 2)}
 企业输入数据：
 ${JSON.stringify(client, null, 2)}
 
-规则引擎已命中风险事项（Issue）：
+规则引擎已命中风险事项：
 ${JSON.stringify(risks.map(compactRisk), null, 2)}`
 }
 
