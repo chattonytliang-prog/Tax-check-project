@@ -3756,11 +3756,27 @@ function App() {
 }
 
 function ClientForm({ client, clients, onChange }: { client: Client; clients: Client[]; onChange: (client: Client) => void }) {
+  const [numberDrafts, setNumberDrafts] = useState<Record<string, string>>({})
   const patch = <K extends keyof Client>(key: K, value: Client[K]) => {
     onChange(applyAutoDerivedMetrics(client, { ...client, [key]: value }))
   }
   const num = (key: keyof Client) => (event: React.ChangeEvent<HTMLInputElement>) => {
-    patch(key, Number(event.target.value || 0) as never)
+    const rawValue = event.target.value
+    setNumberDrafts((current) => ({ ...current, [String(key)]: rawValue }))
+    patch(key, Number(rawValue || 0) as never)
+  }
+  const numberValue = (key: keyof Client) => (
+    Object.prototype.hasOwnProperty.call(numberDrafts, String(key))
+      ? numberDrafts[String(key)]
+      : client[key] as number
+  )
+  const clearNumberDraft = (key: keyof Client) => {
+    setNumberDrafts((current) => {
+      if (!Object.prototype.hasOwnProperty.call(current, String(key))) return current
+      const next = { ...current }
+      delete next[String(key)]
+      return next
+    })
   }
   const setManualDerivedField = (key: keyof Client, enabled: boolean) => {
     const manualDerivedFields = { ...(client.manualDerivedFields || {}), [String(key)]: enabled }
@@ -3790,9 +3806,10 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         <div className="derived-field-shell">
           <input
             type="number"
-            value={client[key] as number}
+            value={numberValue(key)}
             disabled={!isManual}
             onChange={num(key)}
+            onBlur={() => clearNumberDraft(key)}
           />
           <div className="derived-field-meta">
             <span>系统计算：{config.source}</span>
@@ -4023,14 +4040,14 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <span>Step 3</span>
         </div>
         <div className="form-grid">
-          <Field label="月收入"><input type="number" value={client.monthlyRevenue} onChange={num('monthlyRevenue')} /></Field>
-          <Field label="月成本费用"><input type="number" value={client.monthlyCost} onChange={num('monthlyCost')} /></Field>
-          <Field label="月利润"><input type="number" value={client.monthlyProfit} onChange={num('monthlyProfit')} /></Field>
+          <Field label="月收入"><input type="number" value={numberValue('monthlyRevenue')} onChange={num('monthlyRevenue')} onBlur={() => clearNumberDraft('monthlyRevenue')} /></Field>
+          <Field label="月成本费用"><input type="number" value={numberValue('monthlyCost')} onChange={num('monthlyCost')} onBlur={() => clearNumberDraft('monthlyCost')} /></Field>
+          <Field label="月利润"><input type="number" value={numberValue('monthlyProfit')} onChange={num('monthlyProfit')} onBlur={() => clearNumberDraft('monthlyProfit')} /></Field>
           {renderDerivedNumberField('annualRevenue')}
-          <Field label="收款流水"><input type="number" value={client.collectionFlow} onChange={num('collectionFlow')} /></Field>
-          <Field label="员工人数"><input type="number" value={client.employees} onChange={num('employees')} /></Field>
-          <Field label="社保人数"><input type="number" value={client.socialSecurityCount} onChange={num('socialSecurityCount')} /></Field>
-          <Field label="工资申报人数"><input type="number" value={client.salaryDeclaredCount} onChange={num('salaryDeclaredCount')} /></Field>
+          <Field label="收款流水"><input type="number" value={numberValue('collectionFlow')} onChange={num('collectionFlow')} onBlur={() => clearNumberDraft('collectionFlow')} /></Field>
+          <Field label="员工人数"><input type="number" value={numberValue('employees')} onChange={num('employees')} onBlur={() => clearNumberDraft('employees')} /></Field>
+          <Field label="社保人数"><input type="number" value={numberValue('socialSecurityCount')} onChange={num('socialSecurityCount')} onBlur={() => clearNumberDraft('socialSecurityCount')} /></Field>
+          <Field label="工资申报人数"><input type="number" value={numberValue('salaryDeclaredCount')} onChange={num('salaryDeclaredCount')} onBlur={() => clearNumberDraft('salaryDeclaredCount')} /></Field>
         </div>
       </section>
 
@@ -4044,19 +4061,19 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <span>趋势</span>
         </div>
         <div className="form-grid">
-          <Field label="上季度末人数"><input type="number" value={client.previousQuarterEmployees} onChange={num('previousQuarterEmployees')} /></Field>
+          <Field label="上季度末人数"><input type="number" value={numberValue('previousQuarterEmployees')} onChange={num('previousQuarterEmployees')} onBlur={() => clearNumberDraft('previousQuarterEmployees')} /></Field>
           {renderDerivedNumberField('quarterRevenue')}
-          <Field label="上季度收入"><input type="number" value={client.previousQuarterRevenue} onChange={num('previousQuarterRevenue')} /></Field>
+          <Field label="上季度收入"><input type="number" value={numberValue('previousQuarterRevenue')} onChange={num('previousQuarterRevenue')} onBlur={() => clearNumberDraft('previousQuarterRevenue')} /></Field>
           {renderDerivedNumberField('quarterCostExpense')}
-          <Field label="上季度成本费用"><input type="number" value={client.previousQuarterCostExpense} onChange={num('previousQuarterCostExpense')} /></Field>
+          <Field label="上季度成本费用"><input type="number" value={numberValue('previousQuarterCostExpense')} onChange={num('previousQuarterCostExpense')} onBlur={() => clearNumberDraft('previousQuarterCostExpense')} /></Field>
           {renderDerivedNumberField('ytdRevenue')}
           {renderDerivedNumberField('ytdCostExpense')}
           {renderDerivedNumberField('ytdProfit')}
           {renderDerivedNumberField('ebitProfit')}
-          <Field label="上年 EBIT 利润"><input type="number" value={client.previousYearEbitProfit} onChange={num('previousYearEbitProfit')} /></Field>
-          <Field label="预算 EBIT 利润"><input type="number" value={client.budgetEbitProfit} onChange={num('budgetEbitProfit')} /></Field>
-          <Field label="预算收入"><input type="number" value={client.budgetRevenue} onChange={num('budgetRevenue')} /></Field>
-          <Field label="上年同期收入"><input type="number" value={client.previousYearRevenue} onChange={num('previousYearRevenue')} /></Field>
+          <Field label="上年 EBIT 利润"><input type="number" value={numberValue('previousYearEbitProfit')} onChange={num('previousYearEbitProfit')} onBlur={() => clearNumberDraft('previousYearEbitProfit')} /></Field>
+          <Field label="预算 EBIT 利润"><input type="number" value={numberValue('budgetEbitProfit')} onChange={num('budgetEbitProfit')} onBlur={() => clearNumberDraft('budgetEbitProfit')} /></Field>
+          <Field label="预算收入"><input type="number" value={numberValue('budgetRevenue')} onChange={num('budgetRevenue')} onBlur={() => clearNumberDraft('budgetRevenue')} /></Field>
+          <Field label="上年同期收入"><input type="number" value={numberValue('previousYearRevenue')} onChange={num('previousYearRevenue')} onBlur={() => clearNumberDraft('previousYearRevenue')} /></Field>
           {renderDerivedNumberField('mainBusinessRevenue')}
           {renderDerivedNumberField('mainBusinessCost')}
           {renderDerivedNumberField('goodsSalesRevenue')}
@@ -4074,11 +4091,11 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <span>费用</span>
         </div>
         <div className="form-grid">
-          <Field label="人员相关成本费用"><input type="number" value={client.peopleRelatedExpense} onChange={num('peopleRelatedExpense')} /></Field>
-          <Field label="承租面积（平方米）"><input type="number" value={client.rentalArea} onChange={num('rentalArea')} /></Field>
-          <Field label="转租面积（平方米）"><input type="number" value={client.subleaseArea} onChange={num('subleaseArea')} /></Field>
-          <Field label="月福利性质餐费"><input type="number" value={client.monthlyMealBenefitExpense} onChange={num('monthlyMealBenefitExpense')} /></Field>
-          <Field label="装修费用"><input type="number" value={client.decorationExpense} onChange={num('decorationExpense')} /></Field>
+          <Field label="人员相关成本费用"><input type="number" value={numberValue('peopleRelatedExpense')} onChange={num('peopleRelatedExpense')} onBlur={() => clearNumberDraft('peopleRelatedExpense')} /></Field>
+          <Field label="承租面积（平方米）"><input type="number" value={numberValue('rentalArea')} onChange={num('rentalArea')} onBlur={() => clearNumberDraft('rentalArea')} /></Field>
+          <Field label="转租面积（平方米）"><input type="number" value={numberValue('subleaseArea')} onChange={num('subleaseArea')} onBlur={() => clearNumberDraft('subleaseArea')} /></Field>
+          <Field label="月福利性质餐费"><input type="number" value={numberValue('monthlyMealBenefitExpense')} onChange={num('monthlyMealBenefitExpense')} onBlur={() => clearNumberDraft('monthlyMealBenefitExpense')} /></Field>
+          <Field label="装修费用"><input type="number" value={numberValue('decorationExpense')} onChange={num('decorationExpense')} onBlur={() => clearNumberDraft('decorationExpense')} /></Field>
         </div>
       </section>
 
@@ -4092,22 +4109,22 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <span>VAT</span>
         </div>
         <div className="form-grid">
-          <Field label="月开票金额"><input type="number" value={client.monthlyInvoice} onChange={num('monthlyInvoice')} /></Field>
-          <Field label="连续 12 个月销售额"><input type="number" value={client.consecutive12MonthSales} onChange={num('consecutive12MonthSales')} /></Field>
-          <Field label="平台收入"><input type="number" value={client.platformRevenue} onChange={num('platformRevenue')} /></Field>
-          <Field label="红字专票金额"><input type="number" value={client.redVatSpecialInvoiceAmount} onChange={num('redVatSpecialInvoiceAmount')} /></Field>
-          <Field label="销项税额"><input type="number" value={client.outputTax} onChange={num('outputTax')} /></Field>
-          <Field label="进项税额"><input type="number" value={client.inputTax} onChange={num('inputTax')} /></Field>
-          <Field label="增值税应纳/入库税额"><input type="number" value={client.vatTaxPayable} onChange={num('vatTaxPayable')} /></Field>
+          <Field label="月开票金额"><input type="number" value={numberValue('monthlyInvoice')} onChange={num('monthlyInvoice')} onBlur={() => clearNumberDraft('monthlyInvoice')} /></Field>
+          <Field label="连续 12 个月销售额"><input type="number" value={numberValue('consecutive12MonthSales')} onChange={num('consecutive12MonthSales')} onBlur={() => clearNumberDraft('consecutive12MonthSales')} /></Field>
+          <Field label="平台收入"><input type="number" value={numberValue('platformRevenue')} onChange={num('platformRevenue')} onBlur={() => clearNumberDraft('platformRevenue')} /></Field>
+          <Field label="红字专票金额"><input type="number" value={numberValue('redVatSpecialInvoiceAmount')} onChange={num('redVatSpecialInvoiceAmount')} onBlur={() => clearNumberDraft('redVatSpecialInvoiceAmount')} /></Field>
+          <Field label="销项税额"><input type="number" value={numberValue('outputTax')} onChange={num('outputTax')} onBlur={() => clearNumberDraft('outputTax')} /></Field>
+          <Field label="进项税额"><input type="number" value={numberValue('inputTax')} onChange={num('inputTax')} onBlur={() => clearNumberDraft('inputTax')} /></Field>
+          <Field label="增值税应纳/入库税额"><input type="number" value={numberValue('vatTaxPayable')} onChange={num('vatTaxPayable')} onBlur={() => clearNumberDraft('vatTaxPayable')} /></Field>
           {renderDerivedNumberField('taxableSales')}
-          <Field label="理论增值税税额"><input type="number" value={client.theoreticalVatTax} onChange={num('theoreticalVatTax')} /></Field>
-          <Field label="预算增值税税额"><input type="number" value={client.budgetVatTax} onChange={num('budgetVatTax')} /></Field>
-          <Field label="上期应税销售额"><input type="number" value={client.priorTaxableSales} onChange={num('priorTaxableSales')} /></Field>
-          <Field label="上期增值税税额"><input type="number" value={client.priorVatTaxPayable} onChange={num('priorVatTaxPayable')} /></Field>
-          <Field label="进销项税率差"><input type="number" step="0.0001" value={client.vatRateSpread} onChange={num('vatRateSpread')} /></Field>
-          <Field label="广告服务收入"><input type="number" value={client.advertisingServiceRevenue} onChange={num('advertisingServiceRevenue')} /></Field>
-          <Field label="文化事业建设费实缴"><input type="number" value={client.cultureConstructionFeePaid} onChange={num('cultureConstructionFeePaid')} /></Field>
-          <Field label="期末留抵税额"><input type="number" value={client.endingVatCredit} onChange={num('endingVatCredit')} /></Field>
+          <Field label="理论增值税税额"><input type="number" value={numberValue('theoreticalVatTax')} onChange={num('theoreticalVatTax')} onBlur={() => clearNumberDraft('theoreticalVatTax')} /></Field>
+          <Field label="预算增值税税额"><input type="number" value={numberValue('budgetVatTax')} onChange={num('budgetVatTax')} onBlur={() => clearNumberDraft('budgetVatTax')} /></Field>
+          <Field label="上期应税销售额"><input type="number" value={numberValue('priorTaxableSales')} onChange={num('priorTaxableSales')} onBlur={() => clearNumberDraft('priorTaxableSales')} /></Field>
+          <Field label="上期增值税税额"><input type="number" value={numberValue('priorVatTaxPayable')} onChange={num('priorVatTaxPayable')} onBlur={() => clearNumberDraft('priorVatTaxPayable')} /></Field>
+          <Field label="进销项税率差"><input type="number" step="0.0001" value={numberValue('vatRateSpread')} onChange={num('vatRateSpread')} onBlur={() => clearNumberDraft('vatRateSpread')} /></Field>
+          <Field label="广告服务收入"><input type="number" value={numberValue('advertisingServiceRevenue')} onChange={num('advertisingServiceRevenue')} onBlur={() => clearNumberDraft('advertisingServiceRevenue')} /></Field>
+          <Field label="文化事业建设费实缴"><input type="number" value={numberValue('cultureConstructionFeePaid')} onChange={num('cultureConstructionFeePaid')} onBlur={() => clearNumberDraft('cultureConstructionFeePaid')} /></Field>
+          <Field label="期末留抵税额"><input type="number" value={numberValue('endingVatCredit')} onChange={num('endingVatCredit')} onBlur={() => clearNumberDraft('endingVatCredit')} /></Field>
         </div>
         {renderMaterialGaps(vatMaterialGaps)}
         <div className="check-grid tax-check-grid">
@@ -4125,17 +4142,17 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <span>CIT</span>
         </div>
         <div className="form-grid">
-          <Field label="业务招待费"><input type="number" value={client.entertainmentExpense} onChange={num('entertainmentExpense')} /></Field>
-          <Field label="广告宣传费"><input type="number" value={client.adExpense} onChange={num('adExpense')} /></Field>
-          <Field label="职工福利费"><input type="number" value={client.welfareExpense} onChange={num('welfareExpense')} /></Field>
-          <Field label="工会经费"><input type="number" value={client.unionExpense} onChange={num('unionExpense')} /></Field>
-          <Field label="职工教育经费"><input type="number" value={client.educationExpense} onChange={num('educationExpense')} /></Field>
-          <Field label="应纳税所得额"><input type="number" value={client.taxableIncome} onChange={num('taxableIncome')} /></Field>
-          <Field label="资产总额"><input type="number" value={client.assetsTotal} onChange={num('assetsTotal')} /></Field>
-          <Field label="全年平均人数"><input type="number" value={client.employeeAnnualAvg} onChange={num('employeeAnnualAvg')} /></Field>
-          <Field label="营业外支出发生额"><input type="number" value={client.nonOperatingExpense} onChange={num('nonOperatingExpense')} /></Field>
-          <Field label="营业外收入发生额"><input type="number" value={client.nonOperatingIncome} onChange={num('nonOperatingIncome')} /></Field>
-          <Field label="其他应收代收代付余额"><input type="number" value={client.otherReceivableAgencyBalance} onChange={num('otherReceivableAgencyBalance')} /></Field>
+          <Field label="业务招待费"><input type="number" value={numberValue('entertainmentExpense')} onChange={num('entertainmentExpense')} onBlur={() => clearNumberDraft('entertainmentExpense')} /></Field>
+          <Field label="广告宣传费"><input type="number" value={numberValue('adExpense')} onChange={num('adExpense')} onBlur={() => clearNumberDraft('adExpense')} /></Field>
+          <Field label="职工福利费"><input type="number" value={numberValue('welfareExpense')} onChange={num('welfareExpense')} onBlur={() => clearNumberDraft('welfareExpense')} /></Field>
+          <Field label="工会经费"><input type="number" value={numberValue('unionExpense')} onChange={num('unionExpense')} onBlur={() => clearNumberDraft('unionExpense')} /></Field>
+          <Field label="职工教育经费"><input type="number" value={numberValue('educationExpense')} onChange={num('educationExpense')} onBlur={() => clearNumberDraft('educationExpense')} /></Field>
+          <Field label="应纳税所得额"><input type="number" value={numberValue('taxableIncome')} onChange={num('taxableIncome')} onBlur={() => clearNumberDraft('taxableIncome')} /></Field>
+          <Field label="资产总额"><input type="number" value={numberValue('assetsTotal')} onChange={num('assetsTotal')} onBlur={() => clearNumberDraft('assetsTotal')} /></Field>
+          <Field label="全年平均人数"><input type="number" value={numberValue('employeeAnnualAvg')} onChange={num('employeeAnnualAvg')} onBlur={() => clearNumberDraft('employeeAnnualAvg')} /></Field>
+          <Field label="营业外支出发生额"><input type="number" value={numberValue('nonOperatingExpense')} onChange={num('nonOperatingExpense')} onBlur={() => clearNumberDraft('nonOperatingExpense')} /></Field>
+          <Field label="营业外收入发生额"><input type="number" value={numberValue('nonOperatingIncome')} onChange={num('nonOperatingIncome')} onBlur={() => clearNumberDraft('nonOperatingIncome')} /></Field>
+          <Field label="其他应收代收代付余额"><input type="number" value={numberValue('otherReceivableAgencyBalance')} onChange={num('otherReceivableAgencyBalance')} onBlur={() => clearNumberDraft('otherReceivableAgencyBalance')} /></Field>
         </div>
         {renderMaterialGaps(citMaterialGaps)}
         <div className="check-grid tax-check-grid">
@@ -4153,9 +4170,9 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <span>IIT</span>
         </div>
         <div className="form-grid">
-          <Field label="劳务人员人数"><input type="number" value={client.laborCount} onChange={num('laborCount')} /></Field>
-          <Field label="工资薪金总额"><input type="number" value={client.payrollTotal} onChange={num('payrollTotal')} /></Field>
-          <Field label="向个人支付非工资薪金所得"><input type="number" value={client.nonPayrollPersonalPayment} onChange={num('nonPayrollPersonalPayment')} /></Field>
+          <Field label="劳务人员人数"><input type="number" value={numberValue('laborCount')} onChange={num('laborCount')} onBlur={() => clearNumberDraft('laborCount')} /></Field>
+          <Field label="工资薪金总额"><input type="number" value={numberValue('payrollTotal')} onChange={num('payrollTotal')} onBlur={() => clearNumberDraft('payrollTotal')} /></Field>
+          <Field label="向个人支付非工资薪金所得"><input type="number" value={numberValue('nonPayrollPersonalPayment')} onChange={num('nonPayrollPersonalPayment')} onBlur={() => clearNumberDraft('nonPayrollPersonalPayment')} /></Field>
         </div>
         {renderMaterialGaps(iitMaterialGaps)}
         <div className="check-grid tax-check-grid">
