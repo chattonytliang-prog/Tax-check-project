@@ -40,9 +40,10 @@ import {
 import './App.css'
 
 type Page = 'dashboard' | 'clients' | 'form' | 'result' | 'report' | 'reports' | 'rules' | 'admin'
-type TaxpayerType = '小规模纳税人' | '一般纳税人' | '个体工商户'
+type TaxpayerType = '' | '小规模纳税人' | '一般纳税人' | '个体工商户'
 type ProjectScope = '单主体' | '集团项目'
 type EntityRole = '单体企业' | '集团总部' | '经营主体' | '关联主体' | '个体户/个人独资'
+type RulePageSize = 10 | 20 | 50 | 'all'
 
 type Client = {
   id: string
@@ -244,6 +245,29 @@ const emptyClient: Client = {
   rdDeductionEnjoyed: false,
   rdDocsInsufficient: false,
   agencyComplianceRisk: false,
+}
+
+const blankClient: Client = {
+  ...emptyClient,
+  region: '',
+  industry: '',
+  taxpayerType: '',
+  establishedAt: '',
+  monthlyRevenue: 0,
+  monthlyInvoice: 0,
+  monthlyCost: 0,
+  monthlyProfit: 0,
+  annualRevenue: 0,
+  consecutive12MonthSales: 0,
+  collectionFlow: 0,
+  employees: 0,
+  socialSecurityCount: 0,
+  salaryDeclaredCount: 0,
+  payrollTotal: 0,
+  taxableIncome: 0,
+  assetsTotal: 0,
+  employeeAnnualAvg: 0,
+  smallProfitEnjoyed: false,
 }
 
 const demoClients: Client[] = [
@@ -1316,6 +1340,12 @@ function App() {
   const [ruleDraft, setRuleDraft] = useState<ManagedRule>(emptyManagedRule)
   const [editingRuleCode, setEditingRuleCode] = useState('')
   const [query, setQuery] = useState('')
+  const [ruleQuery, setRuleQuery] = useState('')
+  const [ruleStatusFilter, setRuleStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
+  const [ruleLevelFilter, setRuleLevelFilter] = useState<'all' | RiskLevel>('all')
+  const [ruleTaxFilter, setRuleTaxFilter] = useState('all')
+  const [rulePageSize, setRulePageSize] = useState<RulePageSize>(50)
+  const [rulePage, setRulePage] = useState(1)
   const [, setDataStatus] = useState<'loading' | 'connected' | 'fallback'>('loading')
   const [aiReportStage, setAiReportStage] = useState<'reviewing' | 'generating' | null>(null)
 
@@ -1553,6 +1583,39 @@ function App() {
     series: [{ type: 'bar', data: currentPriorityRows.map((row) => row.value), barMaxWidth: 28, itemStyle: { borderRadius: [0, 6, 6, 0] } }],
   }), [currentPriorityRows])
 
+  const ruleTaxOptions = useMemo(() => {
+    return Array.from(new Set(managedRules.map((rule) => rule.taxType || '未填写税种'))).sort((a, b) => a.localeCompare(b, 'zh-CN'))
+  }, [managedRules])
+  const filteredRules = useMemo(() => {
+    const normalizedQuery = ruleQuery.trim().toLowerCase()
+    return managedRules.filter((rule) => {
+      const searchable = [
+        rule.code,
+        rule.name,
+        rule.taxType,
+        rule.basis,
+        rule.suggestion,
+        rule.conditionText,
+        rule.materials.join(' '),
+        rule.requiredFields.join(' '),
+      ].join(' ').toLowerCase()
+      const matchesQuery = !normalizedQuery || searchable.includes(normalizedQuery)
+      const matchesStatus = ruleStatusFilter === 'all'
+        || (ruleStatusFilter === 'enabled' ? rule.enabled : !rule.enabled)
+      const matchesLevel = ruleLevelFilter === 'all' || rule.level === ruleLevelFilter
+      const matchesTax = ruleTaxFilter === 'all' || (rule.taxType || '未填写税种') === ruleTaxFilter
+
+      return matchesQuery && matchesStatus && matchesLevel && matchesTax
+    })
+  }, [managedRules, ruleLevelFilter, ruleQuery, ruleStatusFilter, ruleTaxFilter])
+  const rulePageCount = rulePageSize === 'all'
+    ? 1
+    : Math.max(1, Math.ceil(filteredRules.length / rulePageSize))
+  const normalizedRulePage = Math.min(rulePage, rulePageCount)
+  const visibleRules = rulePageSize === 'all'
+    ? filteredRules
+    : filteredRules.slice((normalizedRulePage - 1) * rulePageSize, normalizedRulePage * rulePageSize)
+
   const canUseAdmin = authUser?.role === 'admin' || authUser?.actor?.role === 'admin'
 
   const refreshAdminUsers = async () => {
@@ -1707,6 +1770,12 @@ function App() {
       console.warn('Client saved locally only.', error)
       setDataStatus('fallback')
     }
+  }
+
+  const clearEditingClient = () => {
+    const confirmed = window.confirm('确定清空当前录入内容吗？此操作不会删除已保存档案，保存前可继续编辑。')
+    if (!confirmed) return
+    setEditingClient({ ...blankClient, id: editingClient.id || crypto.randomUUID() })
   }
 
   const createReport = async () => {
@@ -2239,9 +2308,14 @@ function App() {
                 <p className="eyebrow">资料录入</p>
                 <h2>企业财税画像</h2>
               </div>
-              <button className="primary-button" onClick={saveClient}>
-                <ShieldCheck /> 保存并检测
-              </button>
+              <div className="header-actions">
+                <button className="secondary-button danger-secondary" onClick={clearEditingClient}>
+                  <Trash2 /> 全部清空
+                </button>
+                <button className="primary-button" onClick={saveClient}>
+                  <ShieldCheck /> 保存并检测
+                </button>
+              </div>
             </header>
             <ClientForm client={editingClient} clients={clients} onChange={setEditingClient} />
           </section>
@@ -2646,8 +2720,111 @@ function App() {
                 </div>
               </section>
             )}
+            <section className="panel rule-filter-panel">
+              <div className="rule-filter-grid">
+                <label className="filter-field wide-filter">
+                  <span>筛选规则</span>
+                  <div className="filter-input">
+                    <Search />
+                    <input
+                      value={ruleQuery}
+                      onChange={(event) => {
+                        setRuleQuery(event.target.value)
+                        setRulePage(1)
+                      }}
+                      placeholder="搜索编号、名称、税种、条件、材料"
+                    />
+                  </div>
+                </label>
+                <label className="filter-field">
+                  <span>启用状态</span>
+                  <select
+                    value={ruleStatusFilter}
+                    onChange={(event) => {
+                      setRuleStatusFilter(event.target.value as typeof ruleStatusFilter)
+                      setRulePage(1)
+                    }}
+                  >
+                    <option value="all">全部</option>
+                    <option value="enabled">启用</option>
+                    <option value="disabled">停用</option>
+                  </select>
+                </label>
+                <label className="filter-field">
+                  <span>风险等级</span>
+                  <select
+                    value={ruleLevelFilter}
+                    onChange={(event) => {
+                      setRuleLevelFilter(event.target.value as typeof ruleLevelFilter)
+                      setRulePage(1)
+                    }}
+                  >
+                    <option value="all">全部</option>
+                    <option value="高">高风险</option>
+                    <option value="中">中风险</option>
+                    <option value="低">低风险</option>
+                  </select>
+                </label>
+                <label className="filter-field">
+                  <span>税种</span>
+                  <select
+                    value={ruleTaxFilter}
+                    onChange={(event) => {
+                      setRuleTaxFilter(event.target.value)
+                      setRulePage(1)
+                    }}
+                  >
+                    <option value="all">全部</option>
+                    {ruleTaxOptions.map((taxType) => <option key={taxType} value={taxType}>{taxType}</option>)}
+                  </select>
+                </label>
+                <label className="filter-field">
+                  <span>每页显示</span>
+                  <select
+                    value={String(rulePageSize)}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      setRulePageSize(value === 'all' ? 'all' : Number(value) as RulePageSize)
+                      setRulePage(1)
+                    }}
+                  >
+                    <option value="10">10 条</option>
+                    <option value="20">20 条</option>
+                    <option value="50">50 条</option>
+                    <option value="all">全部</option>
+                  </select>
+                </label>
+              </div>
+              <div className="rule-filter-footer">
+                <span>
+                  共 {managedRules.length} 条规则，当前显示 {filteredRules.length} 条
+                  {rulePageSize !== 'all' && filteredRules.length > 0
+                    ? `，第 ${(normalizedRulePage - 1) * rulePageSize + 1}-${Math.min(normalizedRulePage * rulePageSize, filteredRules.length)} 条`
+                    : ''}
+                </span>
+                {rulePageSize !== 'all' && (
+                  <div className="pagination-actions">
+                    <button
+                      className="secondary-button"
+                      disabled={normalizedRulePage <= 1}
+                      onClick={() => setRulePage((current) => Math.max(1, current - 1))}
+                    >
+                      上一页
+                    </button>
+                    <strong>{normalizedRulePage} / {rulePageCount}</strong>
+                    <button
+                      className="secondary-button"
+                      disabled={normalizedRulePage >= rulePageCount}
+                      onClick={() => setRulePage((current) => Math.min(rulePageCount, current + 1))}
+                    >
+                      下一页
+                    </button>
+                  </div>
+                )}
+              </div>
+            </section>
             <div className="rules-grid">
-              {managedRules.map((rule) => (
+              {visibleRules.map((rule) => (
                 <article className="rule-card" key={rule.code}>
                   <div>
                     <span className="rule-code">{rule.code}</span>
@@ -2672,6 +2849,13 @@ function App() {
                   )}
                 </article>
               ))}
+              {!visibleRules.length && managedRules.length > 0 && (
+                <div className="empty-state wide">
+                  <Search />
+                  <h3>没有匹配的规则</h3>
+                  <p>调整关键词、状态、等级或税种筛选后再查看。</p>
+                </div>
+              )}
               {restrictedRuleCount > 0 && (
                 <article className="rule-card locked-rule-card">
                   <div>
@@ -2843,11 +3027,13 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <Field label="地区"><input value={client.region} onChange={(e) => patch('region', e.target.value)} /></Field>
           <Field label="行业">
             <select value={client.industry} onChange={(e) => patch('industry', e.target.value)}>
+              <option value="">未选择</option>
               {['餐饮', '商贸', '电商', '服务', '建筑', '劳务', '直播自媒体', '制造', '零售', '个体户'].map((item) => <option key={item}>{item}</option>)}
             </select>
           </Field>
           <Field label="纳税人类型">
             <select value={client.taxpayerType} onChange={(e) => patch('taxpayerType', e.target.value as TaxpayerType)}>
+              <option value="">未选择</option>
               <option>小规模纳税人</option>
               <option>一般纳税人</option>
               <option>个体工商户</option>

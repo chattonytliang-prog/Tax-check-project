@@ -384,6 +384,15 @@ button svg,
   color: var(--ink);
 }
 
+.secondary-button.danger-secondary {
+  border-color: rgba(182, 49, 54, 0.24);
+  color: var(--red);
+}
+
+.secondary-button.danger-secondary:hover {
+  background: rgba(182, 49, 54, 0.08);
+}
+
 .row-actions button.danger-action,
 .report-actions button.danger-action {
   border-color: rgba(182, 49, 54, 0.24);
@@ -921,6 +930,83 @@ th {
   margin-bottom: 18px;
 }
 
+.rule-filter-panel {
+  margin-bottom: 16px;
+  padding: 16px;
+}
+
+.rule-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.8fr) repeat(4, minmax(140px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.filter-field {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.filter-field select,
+.filter-input {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.filter-field select {
+  padding: 0 12px;
+  color: var(--ink);
+  outline: none;
+}
+
+.filter-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.filter-input svg {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+}
+
+.filter-input input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+}
+
+.rule-filter-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pagination-actions strong {
+  color: var(--ink);
+  white-space: nowrap;
+}
+
 .rule-editor-textareas {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1436,6 +1522,7 @@ textarea:focus {
   .stat-grid,
   .result-summary,
   .form-grid,
+  .rule-filter-grid,
   .check-grid,
   .skipped-rule-list,
   .rule-editor-textareas,
@@ -1461,6 +1548,7 @@ textarea:focus {
   .page-header,
   .ai-review-header,
   .section-title-row,
+  .rule-filter-footer,
   .compact-row {
     align-items: stretch;
     flex-direction: column;
@@ -1469,6 +1557,7 @@ textarea:focus {
   .stat-grid,
   .result-summary,
   .form-grid,
+  .rule-filter-grid,
   .check-grid,
   .risk-list,
   .report-grid,
