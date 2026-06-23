@@ -910,6 +910,56 @@ th {
   gap: 10px;
 }
 
+.period-picker {
+  display: grid;
+  gap: 12px;
+}
+
+.period-picker-year {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.period-picker-title,
+.period-picker-quarters,
+.period-picker-months {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.period-picker-title strong {
+  min-width: 70px;
+  color: var(--ink);
+}
+
+.period-picker button {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: white;
+  color: var(--ink);
+  font-weight: 850;
+}
+
+.period-picker button:hover:not(:disabled),
+.period-picker button.active {
+  border-color: rgba(18, 174, 234, 0.48);
+  background: rgba(18, 174, 234, 0.1);
+  color: #067b9e;
+}
+
+.period-picker button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
 .period-entry-card {
   display: grid;
   gap: 6px;

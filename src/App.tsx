@@ -48,6 +48,7 @@ import {
   monthFromIndex,
   monthIndex,
   monthsBetween,
+  quarterMonths,
   summarizePeriodEntries,
   upsertPeriodEntry,
   type AnalysisPeriodType,
@@ -1748,6 +1749,13 @@ function deriveClientMetrics(client: Client): Client {
 
 const demoClients: Client[] = createDemoClients()
 const demoCaseCreditCodes = new Set(demoClients.map((client) => client.creditCode))
+const demoClientsByCreditCode = new Map(demoClients.map((client) => [client.creditCode, client]))
+
+function refreshDemoClientTemplate(client: Client): Client {
+  const demoClient = demoClientsByCreditCode.get(client.creditCode)
+  if (!demoClient || client.periodEntries.length >= demoPeriodMonths.length) return client
+  return deriveClientMetrics({ ...demoClient, id: client.id })
+}
 
 function applyAutoDerivedMetrics(_previous: Client, next: Client) {
   return deriveClientMetrics(next)
@@ -2688,7 +2696,7 @@ function App() {
 
         if (!active) return
 
-        const normalizedClients = clientsResponse.clients.map((client) => deriveClientMetrics(normalizeClient(client)))
+        const normalizedClients = clientsResponse.clients.map((client) => refreshDemoClientTemplate(deriveClientMetrics(normalizeClient(client))))
         const visibleClients = normalizedClients.length ? normalizedClients : createDemoClients()
         setClients(visibleClients)
         setReports(reportsResponse.reports)
@@ -2984,9 +2992,31 @@ function App() {
     if (!years.size) years.add(String(new Date().getFullYear()))
     return Array.from(years).sort((a, b) => Number(b) - Number(a))
   }, [selectedClient])
+  const selectedClientAvailableMonths = useMemo(() => (
+    new Set(selectedClient?.periodEntries.flatMap((entry) => entry.months) || [])
+  ), [selectedClient])
   const periodEntriesForMonth = (client: Client, year: string, monthIndexValue: number) => {
     const month = `${year}-${String(monthIndexValue + 1).padStart(2, '0')}`
     return client.periodEntries.filter((entry) => entry.months.includes(month))
+  }
+
+  const selectPeriodMonths = (months: string[], label: string) => {
+    if (!selectedClient) return
+    const expectedMonths = Array.from(new Set(months)).sort((a, b) => monthIndex(a) - monthIndex(b))
+    const entries = expectedMonths.map((month) => selectedClient.periodEntries.find((entry) => entry.months.length === 1 && entry.months[0] === month))
+    if (entries.some((entry) => !entry)) {
+      window.alert(`当前企业缺少「${label}」的完整月度归档数据。请先补齐月度数据，或在下方选择已有期间卡片。`)
+      return
+    }
+    setSelectedPeriodEntryIds(entries.map((entry) => entry!.id))
+  }
+
+  const selectQuarterMonths = (year: string, quarter: AnalysisQuarter) => {
+    selectPeriodMonths(quarterMonths(year, quarter), `${year}年${quarter}`)
+  }
+
+  const selectYearMonths = (year: string) => {
+    selectPeriodMonths(monthsBetween(`${year}-01`, `${year}-12`), `${year}全年`)
   }
 
   const togglePeriodEntry = (entryId: string) => {
@@ -4115,6 +4145,51 @@ function App() {
               </div>
               {selectedClient.periodEntries.length > 0 ? (
                 <>
+                  <div className="period-picker">
+                    {selectedClientPeriodYears.map((year) => {
+                      const yearMonths = monthsBetween(`${year}-01`, `${year}-12`)
+                      const hasFullYear = yearMonths.every((month) => selectedClientAvailableMonths.has(month))
+                      return (
+                        <section key={year} className="period-picker-year">
+                          <div className="period-picker-title">
+                            <strong>{year} 年</strong>
+                            <button type="button" disabled={!hasFullYear} onClick={() => selectYearMonths(year)}>
+                              全年
+                            </button>
+                          </div>
+                          <div className="period-picker-quarters">
+                            {(['Q1', 'Q2', 'Q3', 'Q4'] as AnalysisQuarter[]).map((quarter) => {
+                              const months = quarterMonths(year, quarter)
+                              const disabled = !months.every((month) => selectedClientAvailableMonths.has(month))
+                              return (
+                                <button key={quarter} type="button" disabled={disabled} onClick={() => selectQuarterMonths(year, quarter)}>
+                                  {quarter}
+                                </button>
+                              )
+                            })}
+                          </div>
+                          <div className="period-picker-months">
+                            {monthNames.map((label, index) => {
+                              const month = `${year}-${String(index + 1).padStart(2, '0')}`
+                              const disabled = !selectedClientAvailableMonths.has(month)
+                              const active = selectedPeriodMonths.includes(month)
+                              return (
+                                <button
+                                  key={month}
+                                  type="button"
+                                  className={active ? 'active' : ''}
+                                  disabled={disabled}
+                                  onClick={() => selectPeriodMonths([month], month)}
+                                >
+                                  {label}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </section>
+                      )
+                    })}
+                  </div>
                   <div className="period-entry-grid">
                     {selectedClient.periodEntries.map((entry) => {
                       const checked = selectedPeriodEntryIdSet.has(entry.id)
