@@ -1614,6 +1614,13 @@ const importFieldAliases: Record<string, keyof Client> = {
   向个人支付非工资薪金所得: 'nonPayrollPersonalPayment',
 }
 
+const clientFieldLabels = Object.entries(importFieldAliases).reduce<Record<string, string>>((labels, [label, field]) => {
+  if (!labels[String(field)] || label.length < labels[String(field)].length) {
+    labels[String(field)] = label
+  }
+  return labels
+}, {})
+
 function normalizeImportKey(key: string) {
   return key.replace(/[：:\s（）()_/-]/g, '').trim()
 }
@@ -1909,7 +1916,7 @@ function getSkippedRules(client: Client, managed: ManagedRule[] = []): SkippedRu
 }
 
 function fieldLabel(field: string) {
-  return conditionFields.find((item) => item.value === field)?.label || field
+  return conditionFields.find((item) => item.value === field)?.label || clientFieldLabels[field] || field
 }
 
 function buildReportContent(client: Client, risks: RiskResult[]) {
@@ -2099,18 +2106,26 @@ function Field({
   label,
   children,
   requirement,
+  missing,
 }: {
   label: string
   children: React.ReactNode
   requirement?: IntakeRequirement
+  missing?: 'required' | 'recommended'
 }) {
   const resolvedRequirement = getFieldRequirement(label, requirement)
   const tag = requirementText(resolvedRequirement)
   return (
-    <label className="field" data-field-label={label} data-requirement={resolvedRequirement || undefined}>
+    <label
+      className={`field ${missing ? `missing-${missing}` : ''}`}
+      data-field-label={label}
+      data-requirement={resolvedRequirement || undefined}
+      data-missing={missing || undefined}
+    >
       <span className="field-label-line">
         <span>{label}</span>
         {tag && <em className={`field-requirement ${resolvedRequirement}`}>{tag}</em>}
+        {missing && <em className={`field-missing-badge ${missing}`}>待补</em>}
       </span>
       {children}
     </label>
@@ -4110,6 +4125,23 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
   const reportTotal = reportRequirementLabels().length
   const missingSaveLabels = new Set(saveIssues.map((issue) => issue.label))
   const missingReportLabels = new Set(reportIssues.map((issue) => issue.label))
+  const missingStateForLabel = (label: string): 'required' | 'recommended' | undefined => {
+    if (missingSaveLabels.has(label)) return 'required'
+    if (missingReportLabels.has(label)) return 'recommended'
+    return undefined
+  }
+  const countMissingLabels = (labels: string[]) => labels.filter((label) => missingSaveLabels.has(label) || missingReportLabels.has(label)).length
+  const sectionNavItems = [
+    { id: 'intake-project', label: '项目', missing: countMissingLabels(['项目口径', '集团项目名称', '主体角色']) },
+    { id: 'intake-basic', label: '基础', missing: countMissingLabels(['企业名称', '地区', '行业', '纳税人类型', '成立时间']) },
+    { id: 'intake-quick', label: '快检', missing: countMissingLabels(['月收入', '月成本费用', '月利润', '收款流水', '员工人数', '社保人数', '工资申报人数']) },
+    { id: 'intake-trend', label: '趋势', missing: 0 },
+    { id: 'intake-cost', label: '费用', missing: 0 },
+    { id: 'intake-vat', label: 'VAT', missing: countMissingLabels(['月开票金额', '连续 12 个月销售额']) },
+    { id: 'intake-cit', label: 'CIT', missing: countMissingLabels(['工资薪金总额']) },
+    { id: 'intake-iit', label: 'IIT', missing: 0 },
+    { id: 'intake-comprehensive', label: '综合', missing: 0 },
+  ]
   const renderMissingChips = (issues: IntakeValidationIssue[], emptyText: string) => (
     <div className="chips action-chips">
       {issues.length
@@ -4121,6 +4153,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         : <span>{emptyText}</span>}
     </div>
   )
+  const firstMissingIssue = saveIssues[0] || reportIssues[0]
   const renderSectionRequirementSummary = (labels: string[]) => {
     const requiredLabels = labels.filter((label) => intakeRequirementLabels[label] === 'required' || intakeRequirementLabels[label] === 'recommended')
     if (!requiredLabels.length) return null
@@ -4181,7 +4214,13 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         ? await parseClientImportWorkbook(await file.arrayBuffer())
         : parseClientImportText(await file.text())
       const patchData = coerceImportedClientPatch(parsedPatch)
+      const importedLabels = Object.keys(patchData).map(fieldLabel)
+      if (!importedLabels.length) {
+        window.alert('未识别到可填充字段。请确认表头或字段名使用系统字段名、中文字段名，或采用“字段名 / 值”两列格式。')
+        return
+      }
       onChange(deriveClientMetrics({ ...client, ...patchData }))
+      window.alert(`已从表格填充 ${importedLabels.length} 个字段：${importedLabels.slice(0, 12).join('、')}${importedLabels.length > 12 ? '等' : ''}`)
     } catch (error) {
       console.warn('Failed to import client file.', error)
       window.alert('文件解析失败。请使用 JSON、CSV、TSV、XLS 或 XLSX，并使用系统字段名或中文字段名。')
@@ -4352,10 +4391,17 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
             先录入企业共用画像，再按增值税、企业所得税、个人所得税与综合线索补充关键字段。多主体项目建议按主体分别建档，集团口径另行汇总。当前版本只采集可量化信息和风险标记，不要求访谈、抽凭或上传底稿。
           </p>
           <p className="auto-fill-note">系统会根据基础数据自动计算部分检测口径；如需改用特殊口径，请在对应字段切换“手动填写”并说明原因。</p>
-          <label className="secondary-button compact-button file-import-button">
-            <FileText /> 上传表格填充
-            <input type="file" accept=".json,.csv,.tsv,.txt,.xlsx,.xls" onChange={(event) => void importClientFile(event.target.files?.[0] || null)} />
-          </label>
+          <div className="intake-overview-actions">
+            <label className="secondary-button compact-button file-import-button">
+              <FileText /> 上传表格填充
+              <input type="file" accept=".json,.csv,.tsv,.txt,.xlsx,.xls" onChange={(event) => void importClientFile(event.target.files?.[0] || null)} />
+            </label>
+            {firstMissingIssue && (
+              <button type="button" className="secondary-button compact-button" onClick={() => focusFieldByLabel(firstMissingIssue.label)}>
+                <AlertTriangle /> 补第一个缺失项
+              </button>
+            )}
+          </div>
         </div>
         <div className="intake-score">
           <span>{completeness.label}</span>
@@ -4378,18 +4424,11 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
       </section>
 
       <nav className="intake-section-nav" aria-label="录入子目录">
-        {[
-          ['intake-project', '项目'],
-          ['intake-basic', '基础'],
-          ['intake-quick', '快检'],
-          ['intake-trend', '趋势'],
-          ['intake-cost', '费用'],
-          ['intake-vat', 'VAT'],
-          ['intake-cit', 'CIT'],
-          ['intake-iit', 'IIT'],
-          ['intake-comprehensive', '综合'],
-        ].map(([id, label]) => (
-          <button key={id} type="button" onClick={() => jumpToSection(id)}>{label}</button>
+        {sectionNavItems.map((item) => (
+          <button key={item.id} type="button" className={item.missing ? 'has-missing' : ''} onClick={() => jumpToSection(item.id)}>
+            {item.label}
+            {item.missing > 0 && <span>{item.missing}</span>}
+          </button>
         ))}
       </nav>
 
@@ -4420,7 +4459,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
               <option>集团项目</option>
             </select>
           </Field>
-          <Field label="集团项目名称" requirement={getProjectScope(client) === '集团项目' ? 'conditional' : 'optional'}>
+          <Field label="集团项目名称" requirement={getProjectScope(client) === '集团项目' ? 'conditional' : 'optional'} missing={missingStateForLabel('集团项目名称')}>
             <input
               value={client.groupName || ''}
               list="group-name-options"
@@ -4432,7 +4471,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
               {existingGroupNames.map((item) => <option key={item} value={item} />)}
             </datalist>
           </Field>
-          <Field label="主体角色" requirement={getProjectScope(client) === '集团项目' ? 'conditional' : 'optional'}>
+          <Field label="主体角色" requirement={getProjectScope(client) === '集团项目' ? 'conditional' : 'optional'} missing={missingStateForLabel('主体角色')}>
             <select value={getEntityRole(client)} onChange={(e) => patch('entityRole', e.target.value as EntityRole)} disabled={getProjectScope(client) !== '集团项目'}>
               <option>集团总部</option>
               <option>经营主体</option>
@@ -4454,10 +4493,10 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           {renderSectionActions('基础资料', 'Step 2', clearBasicSection)}
         </div>
         <div className="form-grid">
-          <Field label="企业名称"><input value={client.name} onChange={(e) => patch('name', e.target.value)} /></Field>
+          <Field label="企业名称" missing={missingStateForLabel('企业名称')}><input value={client.name} onChange={(e) => patch('name', e.target.value)} /></Field>
           <Field label="统一社会信用代码"><input value={client.creditCode} onChange={(e) => patch('creditCode', e.target.value)} /></Field>
-          <Field label="地区"><input value={client.region} onChange={(e) => patch('region', e.target.value)} /></Field>
-          <Field label="行业">
+          <Field label="地区" missing={missingStateForLabel('地区')}><input value={client.region} onChange={(e) => patch('region', e.target.value)} /></Field>
+          <Field label="行业" missing={missingStateForLabel('行业')}>
             <select
               value={getIndustrySelectValue(client.industry)}
               onChange={(e) => {
@@ -4477,7 +4516,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
               />
             )}
           </Field>
-          <Field label="纳税人类型">
+          <Field label="纳税人类型" missing={missingStateForLabel('纳税人类型')}>
             <select value={client.taxpayerType} onChange={(e) => patch('taxpayerType', e.target.value as TaxpayerType)}>
               <option value="">未选择</option>
               <option>小规模纳税人</option>
@@ -4485,7 +4524,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
               <option>个体工商户</option>
             </select>
           </Field>
-          <Field label="成立时间"><input type="date" value={client.establishedAt} onChange={(e) => patch('establishedAt', e.target.value)} /></Field>
+          <Field label="成立时间" missing={missingStateForLabel('成立时间')}><input type="date" value={client.establishedAt} onChange={(e) => patch('establishedAt', e.target.value)} /></Field>
         </div>
       </section>
 
@@ -4500,14 +4539,14 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           {renderSectionActions('快检数据', 'Step 3', clearQuickSection)}
         </div>
         <div className="form-grid">
-          <Field label="月收入"><input type="number" value={numberValue('monthlyRevenue')} onChange={num('monthlyRevenue')} onFocus={() => focusNumber('monthlyRevenue')} onBlur={() => clearNumberDraft('monthlyRevenue')} /></Field>
-          <Field label="月成本费用"><input type="number" value={numberValue('monthlyCost')} onChange={num('monthlyCost')} onFocus={() => focusNumber('monthlyCost')} onBlur={() => clearNumberDraft('monthlyCost')} /></Field>
-          <Field label="月利润"><input type="number" value={numberValue('monthlyProfit')} onChange={num('monthlyProfit')} onFocus={() => focusNumber('monthlyProfit')} onBlur={() => clearNumberDraft('monthlyProfit')} /></Field>
+          <Field label="月收入" missing={missingStateForLabel('月收入')}><input type="number" value={numberValue('monthlyRevenue')} onChange={num('monthlyRevenue')} onFocus={() => focusNumber('monthlyRevenue')} onBlur={() => clearNumberDraft('monthlyRevenue')} /></Field>
+          <Field label="月成本费用" missing={missingStateForLabel('月成本费用')}><input type="number" value={numberValue('monthlyCost')} onChange={num('monthlyCost')} onFocus={() => focusNumber('monthlyCost')} onBlur={() => clearNumberDraft('monthlyCost')} /></Field>
+          <Field label="月利润" missing={missingStateForLabel('月利润')}><input type="number" value={numberValue('monthlyProfit')} onChange={num('monthlyProfit')} onFocus={() => focusNumber('monthlyProfit')} onBlur={() => clearNumberDraft('monthlyProfit')} /></Field>
           {renderDerivedNumberField('annualRevenue')}
-          <Field label="收款流水"><input type="number" value={numberValue('collectionFlow')} onChange={num('collectionFlow')} onFocus={() => focusNumber('collectionFlow')} onBlur={() => clearNumberDraft('collectionFlow')} /></Field>
-          <Field label="员工人数"><input type="number" value={numberValue('employees')} onChange={num('employees')} onFocus={() => focusNumber('employees')} onBlur={() => clearNumberDraft('employees')} /></Field>
-          <Field label="社保人数"><input type="number" value={numberValue('socialSecurityCount')} onChange={num('socialSecurityCount')} onFocus={() => focusNumber('socialSecurityCount')} onBlur={() => clearNumberDraft('socialSecurityCount')} /></Field>
-          <Field label="工资申报人数"><input type="number" value={numberValue('salaryDeclaredCount')} onChange={num('salaryDeclaredCount')} onFocus={() => focusNumber('salaryDeclaredCount')} onBlur={() => clearNumberDraft('salaryDeclaredCount')} /></Field>
+          <Field label="收款流水" missing={missingStateForLabel('收款流水')}><input type="number" value={numberValue('collectionFlow')} onChange={num('collectionFlow')} onFocus={() => focusNumber('collectionFlow')} onBlur={() => clearNumberDraft('collectionFlow')} /></Field>
+          <Field label="员工人数" missing={missingStateForLabel('员工人数')}><input type="number" value={numberValue('employees')} onChange={num('employees')} onFocus={() => focusNumber('employees')} onBlur={() => clearNumberDraft('employees')} /></Field>
+          <Field label="社保人数" missing={missingStateForLabel('社保人数')}><input type="number" value={numberValue('socialSecurityCount')} onChange={num('socialSecurityCount')} onFocus={() => focusNumber('socialSecurityCount')} onBlur={() => clearNumberDraft('socialSecurityCount')} /></Field>
+          <Field label="工资申报人数" missing={missingStateForLabel('工资申报人数')}><input type="number" value={numberValue('salaryDeclaredCount')} onChange={num('salaryDeclaredCount')} onFocus={() => focusNumber('salaryDeclaredCount')} onBlur={() => clearNumberDraft('salaryDeclaredCount')} /></Field>
         </div>
       </section>
 
@@ -4570,8 +4609,8 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           {renderSectionActions('VAT 数据', 'VAT', clearVatSection)}
         </div>
         <div className="form-grid">
-          <Field label="月开票金额"><input type="number" value={numberValue('monthlyInvoice')} onChange={num('monthlyInvoice')} onFocus={() => focusNumber('monthlyInvoice')} onBlur={() => clearNumberDraft('monthlyInvoice')} /></Field>
-          <Field label="连续 12 个月销售额"><input type="number" value={numberValue('consecutive12MonthSales')} onChange={num('consecutive12MonthSales')} onFocus={() => focusNumber('consecutive12MonthSales')} onBlur={() => clearNumberDraft('consecutive12MonthSales')} /></Field>
+          <Field label="月开票金额" missing={missingStateForLabel('月开票金额')}><input type="number" value={numberValue('monthlyInvoice')} onChange={num('monthlyInvoice')} onFocus={() => focusNumber('monthlyInvoice')} onBlur={() => clearNumberDraft('monthlyInvoice')} /></Field>
+          <Field label="连续 12 个月销售额" missing={missingStateForLabel('连续 12 个月销售额')}><input type="number" value={numberValue('consecutive12MonthSales')} onChange={num('consecutive12MonthSales')} onFocus={() => focusNumber('consecutive12MonthSales')} onBlur={() => clearNumberDraft('consecutive12MonthSales')} /></Field>
           <Field label="平台收入"><input type="number" value={numberValue('platformRevenue')} onChange={num('platformRevenue')} onFocus={() => focusNumber('platformRevenue')} onBlur={() => clearNumberDraft('platformRevenue')} /></Field>
           <Field label="红字专票金额"><input type="number" value={numberValue('redVatSpecialInvoiceAmount')} onChange={num('redVatSpecialInvoiceAmount')} onFocus={() => focusNumber('redVatSpecialInvoiceAmount')} onBlur={() => clearNumberDraft('redVatSpecialInvoiceAmount')} /></Field>
           <Field label="销项税额"><input type="number" value={numberValue('outputTax')} onChange={num('outputTax')} onFocus={() => focusNumber('outputTax')} onBlur={() => clearNumberDraft('outputTax')} /></Field>
@@ -4633,7 +4672,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         </div>
         <div className="form-grid">
           <Field label="劳务人员人数"><input type="number" value={numberValue('laborCount')} onChange={num('laborCount')} onFocus={() => focusNumber('laborCount')} onBlur={() => clearNumberDraft('laborCount')} /></Field>
-          <Field label="工资薪金总额"><input type="number" value={numberValue('payrollTotal')} onChange={num('payrollTotal')} onFocus={() => focusNumber('payrollTotal')} onBlur={() => clearNumberDraft('payrollTotal')} /></Field>
+          <Field label="工资薪金总额" missing={missingStateForLabel('工资薪金总额')}><input type="number" value={numberValue('payrollTotal')} onChange={num('payrollTotal')} onFocus={() => focusNumber('payrollTotal')} onBlur={() => clearNumberDraft('payrollTotal')} /></Field>
           <Field label="向个人支付非工资薪金所得"><input type="number" value={numberValue('nonPayrollPersonalPayment')} onChange={num('nonPayrollPersonalPayment')} onFocus={() => focusNumber('nonPayrollPersonalPayment')} onBlur={() => clearNumberDraft('nonPayrollPersonalPayment')} /></Field>
         </div>
         {renderMaterialGaps(iitMaterialGaps)}

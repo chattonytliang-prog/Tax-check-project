@@ -850,6 +850,31 @@ th {
   font-weight: 800;
 }
 
+.intake-section-nav button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.intake-section-nav button.has-missing {
+  color: var(--orange);
+  border-color: rgba(183, 106, 32, 0.26);
+  background: rgba(183, 106, 32, 0.08);
+}
+
+.intake-section-nav button span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  color: white;
+  background: var(--orange);
+  font-size: 11px;
+  line-height: 1;
+}
+
 .intake-section-nav button:hover,
 .action-chips button:hover {
   color: var(--ink);
@@ -896,6 +921,14 @@ th {
   color: #bcefed;
   font-size: 13px;
   line-height: 1.7;
+}
+
+.intake-overview-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
 }
 
 .intake-score {
@@ -1138,6 +1171,7 @@ th {
   align-items: center;
   gap: 8px;
   min-height: 20px;
+  flex-wrap: wrap;
 }
 
 .field-requirement {
@@ -1183,6 +1217,27 @@ th {
   border-color: rgba(12, 140, 130, 0.2);
 }
 
+.field-missing-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-style: normal;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.field-missing-badge.required {
+  color: white;
+  background: var(--red);
+}
+
+.field-missing-badge.recommended {
+  color: white;
+  background: var(--orange);
+}
+
 .field input,
 .field select,
 textarea {
@@ -1207,6 +1262,20 @@ textarea:focus {
   background: rgba(241, 247, 249, 0.92);
   color: #4a6470;
   cursor: not-allowed;
+}
+
+.field.missing-required input,
+.field.missing-required select,
+.field.missing-required textarea {
+  border-color: rgba(182, 49, 54, 0.55);
+  background: rgba(182, 49, 54, 0.04);
+}
+
+.field.missing-recommended input,
+.field.missing-recommended select,
+.field.missing-recommended textarea {
+  border-color: rgba(183, 106, 32, 0.52);
+  background: rgba(183, 106, 32, 0.04);
 }
 
 .intake-requirement-panel {
