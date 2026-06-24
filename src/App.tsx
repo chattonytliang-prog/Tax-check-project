@@ -3081,6 +3081,17 @@ function legacyReportHtml(report: Report) {
   return `<section><h1>${escapeHtml(report.clientName)}税务风险体检报告</h1><pre>${escapeHtml(sanitizePublicReportContent(report.content))}</pre></section>`
 }
 
+function reportDocumentFooterHtml(report: Report) {
+  const generatedAt = report.createdAt || formatDate()
+  return `
+    <footer class="document-footer">
+      <strong>合耀科技 HY AI 税务风控工作台</strong>
+      <span>生成时间：${escapeHtml(generatedAt)}</span>
+      <span>本报告仅供经营管理和税务风险复核参考，不替代税务机关认定、专项鉴证或正式法律/税务意见。</span>
+    </footer>
+  `
+}
+
 function professionalReportDocumentHtml(report: Report, mode: 'word' | 'print') {
   const body = report.structured ? structuredReportHtml(report.structured) : legacyReportHtml(report)
   const printScript = mode === 'print'
@@ -3222,15 +3233,29 @@ function professionalReportDocumentHtml(report: Report, mode: 'word' | 'print') 
           .lead { font-size: 15px; font-weight: 800; color: #18343c; }
           .muted { color: #637982; }
           li { margin: 4px 0; }
+          .document-footer {
+            display: grid;
+            gap: 4px;
+            padding: 18px 38px 24px;
+            border-top: 1px solid #d9e5e8;
+            color: #526970;
+            font-size: 12px;
+            background: #f7fbfb;
+          }
+          .document-footer strong {
+            color: #0b2f38;
+            font-size: 13px;
+          }
           @media print {
             body { background: #fff; }
             main { max-width: none; box-shadow: none; }
             .cover { page-break-after: always; }
+            .document-footer { background: #fff; }
           }
         </style>
       </head>
       <body>
-        <main>${body}</main>
+        <main>${body}${reportDocumentFooterHtml(report)}</main>
         ${printScript}
       </body>
     </html>`
