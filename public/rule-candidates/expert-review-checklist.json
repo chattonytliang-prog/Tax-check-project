@@ -1735,6 +1735,78 @@
         "not_applicable"
       ],
       "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-097",
+      "sourceCandidateId": "manual-final-shape",
+      "name": "税收优惠留存资料完整性复核",
+      "taxArea": "综合核查",
+      "riskCategory": "专家核查",
+      "triggerSignal": "企业享受税收优惠、减免税或加计扣除时触发。",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-098",
+      "sourceCandidateId": "manual-final-shape",
+      "name": "关联交易同期资料准备情况复核",
+      "taxArea": "综合核查",
+      "riskCategory": "专家核查",
+      "triggerSignal": "企业存在关联交易、关联往来或关联服务费时触发。",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-099",
+      "sourceCandidateId": "manual-final-shape",
+      "name": "发票流资金流合同流一致性复核",
+      "taxArea": "综合核查",
+      "riskCategory": "专家核查",
+      "triggerSignal": "企业存在大额发票、资金往来或异常供应商时触发。",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-100",
+      "sourceCandidateId": "manual-final-shape",
+      "name": "重大税会差异事项复核",
+      "taxArea": "综合核查",
+      "riskCategory": "专家核查",
+      "triggerSignal": "企业存在大额纳税调整、暂时性差异或申报表其他项目时触发。",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
     }
   ]
 }
