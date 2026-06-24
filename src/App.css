@@ -898,6 +898,14 @@ th {
   align-items: flex-start;
 }
 
+.period-title-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .period-analysis-panel .panel-title span {
   display: inline-flex;
   align-items: center;

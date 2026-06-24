@@ -4601,7 +4601,17 @@ function App() {
                   <h3>第二步：选择连续期间</h3>
                   <p className="section-helper">最小单位为月份。可以选择单月、连续多月、季度或全年；不连续月份不能合并成一份报告。</p>
                 </div>
-                <span>{selectedPeriodLabel}</span>
+                <div className="period-title-actions">
+                  <span>{selectedPeriodLabel}</span>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={proceedToRiskConfirmation}
+                    disabled={!selectedPeriodEntries.length || !selectedPeriodsContinuous}
+                  >
+                    {!selectedPeriodEntries.length ? '请选择期间' : !selectedPeriodsContinuous ? '期间需连续' : '确认期间'}
+                  </button>
+                </div>
               </div>
               {selectedClient.periodEntries.length > 0 ? (
                 <>
