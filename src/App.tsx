@@ -40,6 +40,7 @@ import {
   type SimpleRuleCondition,
 } from './lib/ruleEngine'
 import { advancedCandidateRuleConfigs, type AdvancedCandidateRuleConfig } from './lib/advancedCandidateRuleConfigs'
+import { reportFileName } from './lib/reportFileName'
 import { deepReportRuleTemplates } from './lib/reportRuleTemplates'
 import { publicRiskBasis, publicRiskReason } from './lib/reportTextSanitizer'
 import {
@@ -2921,15 +2922,6 @@ function sanitizePublicReportContent(content: string) {
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
-}
-
-function reportFileName(report: Report, extension: string) {
-  const date = report.createdAt?.slice(0, 10).replace(/[/:]/g, '-') || formatDate().slice(0, 10)
-  const safeClientName = (report.clientName || '企业')
-    .replace(/[\\/:*?"<>|]/g, '')
-    .replace(/\s+/g, '')
-    .slice(0, 40)
-  return `${safeClientName}-中国税务健康检查报告-${date}.${extension}`
 }
 
 function exportBadgeHtml(level: RiskLevel) {
