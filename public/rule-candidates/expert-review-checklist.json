@@ -1,0 +1,1740 @@
+{
+  "version": "2026-06-24-stage-1",
+  "purpose": "expert_review_checklist_items_are_triggered_by_context_but_do_not_count_as_automatic_risk_findings",
+  "displayPolicy": {
+    "summaryMax": 5,
+    "reportBodyMax": 15,
+    "appendixAllowed": true,
+    "advisorWorkpaperShowsAllTriggered": true
+  },
+  "items": [
+    {
+      "id": "ER-001",
+      "sourceCandidateId": "XLS-011",
+      "name": "往来科目余额及波动",
+      "taxArea": "通用财务指标",
+      "riskCategory": "资产负债表/利润表项目",
+      "triggerSignal": "合同负债期末余额>500万",
+      "priority": "high",
+      "reportPlacement": "summary_or_body",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-002",
+      "sourceCandidateId": "XLS-016",
+      "name": "往来科目余额及波动",
+      "taxArea": "通用财务指标",
+      "riskCategory": "资产负债表/利润表项目",
+      "triggerSignal": "本期合同负债期末余额/上期合同负债期末余额>50%",
+      "priority": "high",
+      "reportPlacement": "summary_or_body",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-003",
+      "sourceCandidateId": "XLS-021",
+      "name": "往来科目余额及波动",
+      "taxArea": "通用财务指标",
+      "riskCategory": "资产负债表/利润表项目",
+      "triggerSignal": "（合同负债+应收账款+其他应收款）/营业收入>300%",
+      "priority": "high",
+      "reportPlacement": "summary_or_body",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-004",
+      "sourceCandidateId": "XLS-025",
+      "name": "往来科目核算逻辑",
+      "taxArea": "通用财务指标",
+      "riskCategory": "税务稽查",
+      "triggerSignal": "大额合同负债核算内容",
+      "priority": "high",
+      "reportPlacement": "summary_or_body",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-005",
+      "sourceCandidateId": "XLS-026",
+      "name": "会计科目数据不合理",
+      "taxArea": "通用财务指标",
+      "riskCategory": "税务稽查",
+      "triggerSignal": "合同负债期末余额<0",
+      "priority": "high",
+      "reportPlacement": "summary_or_body",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-006",
+      "sourceCandidateId": "XLS-033",
+      "name": "会计政策相关",
+      "taxArea": "通用财务指标",
+      "riskCategory": "税务稽查",
+      "triggerSignal": "询问企业资本化/费用化的标准，是否将资本性支出一次计入成本费用",
+      "priority": "high",
+      "reportPlacement": "summary_or_body",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-007",
+      "sourceCandidateId": "XLS-034",
+      "name": "会计政策相关",
+      "taxArea": "通用财务指标",
+      "riskCategory": "税务稽查",
+      "triggerSignal": "询问企业成本核算方法，关注同一年度内调整成本核算方法的合理性 —— 尤其是亏损主体",
+      "priority": "high",
+      "reportPlacement": "summary_or_body",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-008",
+      "sourceCandidateId": "XLS-071",
+      "name": "历年调整表中其他调整项目核实",
+      "taxArea": "企业所得税",
+      "riskCategory": "企业所得税税负率/预缴率",
+      "triggerSignal": "结果输出_历年调整表中暂3.11-时间性差异-其他累计金额≠0",
+      "priority": "high",
+      "reportPlacement": "summary_or_body",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-009",
+      "sourceCandidateId": "XLS-081",
+      "name": "企业所得税申报表“其他类”核实",
+      "taxArea": "企业所得税",
+      "riskCategory": "成本/费用/损失类",
+      "triggerSignal": "A102010 第39行“营业外支出-其他”金额 >100万",
+      "priority": "high",
+      "reportPlacement": "summary_or_body",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-010",
+      "sourceCandidateId": "XLS-082",
+      "name": "企业所得税申报表“其他类”核实",
+      "taxArea": "企业所得税",
+      "riskCategory": "成本/费用/损失类",
+      "triggerSignal": "A104000 第25行“二十五、其他”金额>100万",
+      "priority": "high",
+      "reportPlacement": "summary_or_body",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-011",
+      "sourceCandidateId": "XLS-083",
+      "name": "企业所得税申报表“其他类”核实",
+      "taxArea": "企业所得税",
+      "riskCategory": "成本/费用/损失类",
+      "triggerSignal": "A105000 第11行、30行、35行、43行、45行 各种其他，任一金额>100万",
+      "priority": "high",
+      "reportPlacement": "summary_or_body",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-012",
+      "sourceCandidateId": "XLS-084",
+      "name": "企业所得税申报表“其他类”核实",
+      "taxArea": "企业所得税",
+      "riskCategory": "成本/费用/损失类",
+      "triggerSignal": "A105050 第13行“九、其他”金额>100万",
+      "priority": "high",
+      "reportPlacement": "summary_or_body",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-013",
+      "sourceCandidateId": "XLS-085",
+      "name": "企业所得税申报表“其他类”核实",
+      "taxArea": "企业所得税",
+      "riskCategory": "成本/费用/损失类",
+      "triggerSignal": "A105080 第25行第5列“其他长期待摊费用—税收折旧、摊销额”金额>100万",
+      "priority": "high",
+      "reportPlacement": "summary_or_body",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-014",
+      "sourceCandidateId": "XLS-118",
+      "name": "文建费与广告收入（发票）差异",
+      "taxArea": "印花税+文建费+小税种",
+      "riskCategory": "小税种",
+      "triggerSignal": "核实文化事业建设费应税项目扣除清单是否符合广告发布服务范围",
+      "priority": "high",
+      "reportPlacement": "summary_or_body",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-015",
+      "sourceCandidateId": "XLS-119",
+      "name": "企业所得税A104000 第25行“其他”包含哪些？",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查基础问题",
+      "triggerSignal": "企业所得税A104000 第25行“其他”包含哪些？",
+      "priority": "high",
+      "reportPlacement": "summary_or_body",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-016",
+      "sourceCandidateId": "XLS-120",
+      "name": "企业所得税A105000中，大额调减项目具体是什么？",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查基础问题",
+      "triggerSignal": "企业所得税A105000中，大额调减项目具体是什么？",
+      "priority": "high",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-017",
+      "sourceCandidateId": "XLS-121",
+      "name": "企业日常税务合规管控方法",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查基础问题",
+      "triggerSignal": "企业日常税务合规管控方法",
+      "priority": "high",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-018",
+      "sourceCandidateId": "XLS-122",
+      "name": "进项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "抽查用于抵扣的进项税发票是否真实合法",
+      "priority": "high",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-019",
+      "sourceCandidateId": "XLS-123",
+      "name": "进项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "抽查进项税发票开票方与收款方是否一致",
+      "priority": "high",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-020",
+      "sourceCandidateId": "XLS-124",
+      "name": "进项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "询问企业是否有食堂，对应进项是否转出",
+      "priority": "high",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-021",
+      "sourceCandidateId": "XLS-125",
+      "name": "进项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "询问企业是否有员工免费通勤，对应进项是否转出",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-022",
+      "sourceCandidateId": "XLS-126",
+      "name": "进项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "询问企业是否有简易计税方法计税项目、免征增值税项目，其是否存在对应进项税",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-023",
+      "sourceCandidateId": "XLS-127",
+      "name": "进项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "询问企业是否有非正常损失项目",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-024",
+      "sourceCandidateId": "XLS-128",
+      "name": "进项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "筛选关键词：餐饮、食品、日用品、衣、礼品、娱乐、美容、美发、烟、酒、月饼、粽子、茶、零食、利息、贷款等",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-025",
+      "sourceCandidateId": "XLS-129",
+      "name": "进项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "全量检查企业是否使用“海关进口增值税专用缴款书”进行进项抵扣，如有检查进口货物品种、数量、服务内容等，是否与企业实际业务匹配",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-026",
+      "sourceCandidateId": "XLS-130",
+      "name": "进项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "比对电子税局系统中的“红字发票”金额是否大于企业进项转出的金额",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-027",
+      "sourceCandidateId": "XLS-131",
+      "name": "进项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "检查是否有与销售量、销售额挂钩的返还收入，如有，检查是否冲减进项税额",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-028",
+      "sourceCandidateId": "XLS-132",
+      "name": "销项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "询问企业是否存在以货物、服务进行易货、抵债的情况，如有检查相关收入是否入账并申报",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-029",
+      "sourceCandidateId": "XLS-133",
+      "name": "销项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "询问企业销售商品/服务的收入确认原则及增值税纳税申报时间，如是否有预收款不确认销售收入，长期挂账",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-030",
+      "sourceCandidateId": "XLS-134",
+      "name": "销项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "询问企业是否有向外单位或个人的转售水、电等收入，上述收入确认原则及增值税纳税申报时间",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-031",
+      "sourceCandidateId": "XLS-135",
+      "name": "销项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "检查企业收入明细账的借方数字，询问是否存在“净额”入账，如有检查收入被冲减的合理性",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-032",
+      "sourceCandidateId": "XLS-136",
+      "name": "销项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "检查是否存在视同销售行为，是否对外赠送货物/服务/礼品未申报",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-033",
+      "sourceCandidateId": "XLS-137",
+      "name": "销项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "检查大额红字发票开具是否合理",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-034",
+      "sourceCandidateId": "XLS-138",
+      "name": "销项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "询问企业是否存在违约金、赔偿、手续费、补贴、集资费、返还利润、奖励费、运输装卸费等价外费用",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-035",
+      "sourceCandidateId": "XLS-139",
+      "name": "销项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "询问企业是否涉及混合销售，主要业务税率适用是否正确",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-036",
+      "sourceCandidateId": "XLS-140",
+      "name": "销项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "检查是否涉及多种销项税率，了解如何分别核算不同税率的销售额（包括免税项目），以及销售额在不同税率收入之间的分配是否合理",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-037",
+      "sourceCandidateId": "XLS-141",
+      "name": "销项税",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "要求提供跨期开票（如增值税存在未开票收入)的明细，包括公司名称、发票号码、开具日期（后期开票），金额等",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-038",
+      "sourceCandidateId": "XLS-142",
+      "name": "增值税资金池",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "资金池的计息本金和利息如何计算",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-039",
+      "sourceCandidateId": "XLS-143",
+      "name": "增值税资金池",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "资金池是否约定利息支付时间，申报是否晚于纳税义务发生时间",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-040",
+      "sourceCandidateId": "XLS-144",
+      "name": "增值税资金池",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查增值税",
+      "triggerSignal": "资金池利率是否公允",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-041",
+      "sourceCandidateId": "XLS-145",
+      "name": "收入",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "各种收入是否按照权责发生制原则确认并计税",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-042",
+      "sourceCandidateId": "XLS-146",
+      "name": "收入",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "重点检查“其他应付款”、“递延收入”、“预提费用”科目，是否存在延迟确认收入",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-043",
+      "sourceCandidateId": "XLS-147",
+      "name": "收入",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "检查企业是否存在非货币性资产收益，如有是否计入应纳税所得额",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-044",
+      "sourceCandidateId": "XLS-148",
+      "name": "收入",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "检查企业是否存在减免流转税及各项补贴、政府奖励，如有是否计入应纳税所得额",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-045",
+      "sourceCandidateId": "XLS-149",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "检查企业大额成本费用，如销售费用、管理费用、营业外支出、捐赠、罚没大额支出的性质",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-046",
+      "sourceCandidateId": "XLS-150",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "技术服务成本占成本比例>80%，具体提供了什么技术服务",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-047",
+      "sourceCandidateId": "XLS-151",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "全量检查发票，针对大额“咨询费”、“运营活动”或境外invoice服务内容",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-048",
+      "sourceCandidateId": "XLS-152",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "检查企业是否列支应由其他纳税人负担的费用——为境外企业代扣代缴的企业所得税",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-049",
+      "sourceCandidateId": "XLS-153",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "检查企业是否列支应由其他纳税人负担的费用——为集团其他主体承担的房租支出",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-050",
+      "sourceCandidateId": "XLS-154",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "检查企业发生的工资、薪金支出是否符合合理性原则，如存在巨额奖金，是否涉及股权激励",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-051",
+      "sourceCandidateId": "XLS-155",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "检查职工福利费、工会经费和职工教育经费归集的内容，是否符合要求，如团建费是否属于福利费",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-052",
+      "sourceCandidateId": "XLS-156",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "检查是否存在超标准、超范围为职工支付社会保险费和住房公积金",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-053",
+      "sourceCandidateId": "XLS-157",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "检查企业资产折旧及资产发票的取得情况——是否存在固定资产加速折旧",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-054",
+      "sourceCandidateId": "XLS-158",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "检查企业资产折旧及资产发票的取得情况——是否存在500万以下的资产一次性税务扣除",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-055",
+      "sourceCandidateId": "XLS-159",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "检查企业资产折旧及资产发票的取得情况——是否存在新租赁准则调整，企业如何调整",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-056",
+      "sourceCandidateId": "XLS-160",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "检查企业是否将具有广宣性质的全部费用，计入“广告费和业务宣传费”进行纳税调整？",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-057",
+      "sourceCandidateId": "XLS-161",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "检查各类资产减值准备、风险准备金是否纳税调整",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-058",
+      "sourceCandidateId": "XLS-162",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "检查利息税前扣除，包括：是否存在从“非金融机构”借款，利息是否按照金融机构同期贷款利率计算；是否存在应资本化的利息支出",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-059",
+      "sourceCandidateId": "XLS-163",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "检查资产损失扣除——是否按照2011年15号、2018年25号文留存资料备查",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-060",
+      "sourceCandidateId": "XLS-164",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "检查资产损失扣除——是否存在已作损失处理的资产部分或全部收回，或有补偿的部分，如有是否纳税调整或计入收入",
+      "priority": "medium",
+      "reportPlacement": "body_or_appendix",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-061",
+      "sourceCandidateId": "XLS-165",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "检查手续费及佣金扣除——是否将回扣、提成、返利、进场费等计入手续费及佣金支出",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-062",
+      "sourceCandidateId": "XLS-166",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查企业所得税",
+      "triggerSignal": "检查手续费及佣金扣除——收取对象是否是具有合法经营资格的中介机构及个人",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-063",
+      "sourceCandidateId": "XLS-167",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查印花税 —— 与分税种税务指标中印花税一致，因为不在重复列示",
+      "triggerSignal": "成本",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-064",
+      "sourceCandidateId": "XLS-168",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查房产税+土地使用税",
+      "triggerSignal": "检查企业的土地价值是否计入房产价值缴纳房产税",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-065",
+      "sourceCandidateId": "XLS-169",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查房产税+土地使用税",
+      "triggerSignal": "检查企业是否存在与房屋不可分割的附属设施（如中央空调、智能化楼宇设备），如有是否计入房产原值缴纳房产税",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-066",
+      "sourceCandidateId": "XLS-170",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查房产税+土地使用税",
+      "triggerSignal": "检查企业是否存在应资本化的利息，如有是否计入房产原值缴纳房产税",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-067",
+      "sourceCandidateId": "XLS-171",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查房产税+土地使用税",
+      "triggerSignal": "检查企业土地实际面积与土地使用证是否存在差异，如有是否按照土地实际面积缴纳城镇土地使用税",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-068",
+      "sourceCandidateId": "XLS-172",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查个人所得税",
+      "triggerSignal": "检查奖金、离职补偿金、未休年假补贴是否申报个人所得税",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-069",
+      "sourceCandidateId": "XLS-173",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查个人所得税",
+      "triggerSignal": "对外赠送礼品、卡券、实物福利等，是否按偶然所得或其他适用项目扣缴个人所得税",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-070",
+      "sourceCandidateId": "XLS-174",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查个人所得税",
+      "triggerSignal": "检查企业是否存在员工借款、股东借款或内部个人借款未计提利息，是否涉及个人所得税风险",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-071",
+      "sourceCandidateId": "XLS-175",
+      "name": "成本",
+      "taxArea": "税务稽查",
+      "riskCategory": "税务稽查个人所得税",
+      "triggerSignal": "高管多处任职、工资外激励、股权激励或特殊补贴，是否完整扣缴个人所得税",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-072",
+      "sourceCandidateId": "XLS-204",
+      "name": "超债资比分析",
+      "taxArea": "BP收集指标",
+      "riskCategory": "债资比监控类",
+      "triggerSignal": "筛选超债资比且实际企业所得税税负率>15%的主体预警，主体可优化业务及资金流程，降低债资比。\n企业所得税税负率用上一年汇缴的税负率，数据来源：https://data.bytedance.net/aeolus/pages/dashboard/940261?appId=1005920&sheetId=1111290 （一般会在次年6、7月维护上年汇缴情况，目前看板没有现成的，需要再计算）",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-073",
+      "sourceCandidateId": "XLS-205",
+      "name": "利息收支的税务成本问题",
+      "taxArea": "BP收集指标",
+      "riskCategory": "债资比监控类",
+      "triggerSignal": "· 借款方债资比超标+税率差导致利息支出无法税前扣除形成浪费、同时借出方利息收入会造成额外税务成本\n或\n· 借款方有大额应收关联方账款未及时回款造成资金占用、形成利息支出\n· 在集采、有限功能分销商利润率较低的情况下+利息支出不在现有TP交易收入补偿的范围内，即使利息支出符合税前扣除条件也会导致主体亏损，单体财务情况不合理",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-074",
+      "sourceCandidateId": "XLS-206",
+      "name": "注册地为虚拟注册地址",
+      "taxArea": "BP收集指标",
+      "riskCategory": "开票经济类",
+      "triggerSignal": "虚拟地方需要调整，避免被识别为“开票经济”",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-075",
+      "sourceCandidateId": "XLS-207",
+      "name": "有开票经济风险无租赁",
+      "taxArea": "BP收集指标",
+      "riskCategory": "开票经济类",
+      "triggerSignal": "筛选年收入大于1亿元且无租赁面积主体预警，及时安排租赁",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-076",
+      "sourceCandidateId": "XLS-208",
+      "name": "开票经济风险",
+      "taxArea": "BP收集指标",
+      "riskCategory": "开票经济类",
+      "triggerSignal": "· 开票经济，企业人少，但开票金额大，税负低",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-077",
+      "sourceCandidateId": "XLS-209",
+      "name": "有业务，但综合税负率极低， 低于千分之八",
+      "taxArea": "BP收集指标",
+      "riskCategory": "开票经济类",
+      "triggerSignal": "税负率极低自营主体预警，避免被识别为“开票经济”",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-078",
+      "sourceCandidateId": "XLS-210",
+      "name": "有业务，但综合税负率极低， 低于千分之一",
+      "taxArea": "BP收集指标",
+      "riskCategory": "开票经济类",
+      "triggerSignal": "税负率极低主体预警，避免被识别为“开票经济”",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-079",
+      "sourceCandidateId": "XLS-211",
+      "name": "累亏过期情况",
+      "taxArea": "BP收集指标",
+      "riskCategory": "亏损过期类",
+      "triggerSignal": "· 根据主体资质情况，提前提示当年和次年即将过期的亏损额",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-080",
+      "sourceCandidateId": "XLS-212",
+      "name": "关联方交易发票红冲的税务风险",
+      "taxArea": "BP收集指标",
+      "riskCategory": "关联交易监控类",
+      "triggerSignal": "· 存在关联方预开票的情况，由于业务萎缩，或者TP定位变更，导致预开票的金额无法消化，需要红冲发票或寻找其他解决方案\n· 两税差大，从应对稽查视角能否证明预收的合理性、服务是否真实提供、相关账单和结算单是否准备齐套\n· 收票方（付款方）增值税晚交风险。收票方账面未确认成本，但取得了发票，抵扣了增值税",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-081",
+      "sourceCandidateId": "XLS-213",
+      "name": "同城关联方",
+      "taxArea": "BP收集指标",
+      "riskCategory": "关联交易监控类",
+      "triggerSignal": "· 对于TP定位人力成本加成主体，如果关联方收入主要来源于同一个城市，需要考虑是否必须通过主体\n· 考虑能否做人员换签直接到业主，减少TP交易链路长度，同时考虑企业存在的商业合理性\n· TP链路会导致税务成本增加、增加TP交易复杂性，包括同城市有税率差的TP交易\nOR\n· 两头主要都是关联交易，企业存在必要性",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-082",
+      "sourceCandidateId": "XLS-214",
+      "name": "关联交易合理性监控",
+      "taxArea": "BP收集指标",
+      "riskCategory": "关联交易监控类",
+      "triggerSignal": "· 新增、减少关联方的情况，可能由于TP定位变更，导致关联方变更，特别是增加税务成本、增加TP交易复杂性、有税率差的关联交易\n· 同一个关联方，既存在关联收入，又存在关联支出（双向TP) \n· 关联交易的合理性，和TP定位变更后，相关加成率等是否同步变化\n· 提前识别合理性，准备应对稽查的解释口径，如果没有合理性，通过调整交易链路、红冲发票等方式提前解决",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-083",
+      "sourceCandidateId": "XLS-215",
+      "name": "关联交易（高税率向低税率付款）",
+      "taxArea": "BP收集指标",
+      "riskCategory": "关联交易监控类",
+      "triggerSignal": "关注关联交易实质， 协议、实质均可解释，有证据支持",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-084",
+      "sourceCandidateId": "XLS-001",
+      "name": "资产负债表/利润表波动",
+      "taxArea": "通用财务指标",
+      "riskCategory": "资产负债表/利润表项目",
+      "triggerSignal": "本期资产总额/上期（同期）资产总额>50%",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-085",
+      "sourceCandidateId": "XLS-002",
+      "name": "资产负债表/利润表波动",
+      "taxArea": "通用财务指标",
+      "riskCategory": "资产负债表/利润表项目",
+      "triggerSignal": "本期利润总额/上期（同期）利润总额>50%",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-086",
+      "sourceCandidateId": "XLS-012",
+      "name": "往来科目余额及波动",
+      "taxArea": "通用财务指标",
+      "riskCategory": "资产负债表/利润表项目",
+      "triggerSignal": "应付账款期末余额>500万",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-087",
+      "sourceCandidateId": "XLS-013",
+      "name": "往来科目余额及波动",
+      "taxArea": "通用财务指标",
+      "riskCategory": "资产负债表/利润表项目",
+      "triggerSignal": "其他应付款期末余额>500万",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-088",
+      "sourceCandidateId": "XLS-014",
+      "name": "往来科目余额及波动",
+      "taxArea": "通用财务指标",
+      "riskCategory": "资产负债表/利润表项目",
+      "triggerSignal": "应收账款期末余额>500万",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-089",
+      "sourceCandidateId": "XLS-015",
+      "name": "往来科目余额及波动",
+      "taxArea": "通用财务指标",
+      "riskCategory": "资产负债表/利润表项目",
+      "triggerSignal": "其他应收款期末余额>500万",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-090",
+      "sourceCandidateId": "XLS-017",
+      "name": "往来科目余额及波动",
+      "taxArea": "通用财务指标",
+      "riskCategory": "资产负债表/利润表项目",
+      "triggerSignal": "本期应付账款期末余额/上期应付账款期末余额>50%",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-091",
+      "sourceCandidateId": "XLS-018",
+      "name": "往来科目余额及波动",
+      "taxArea": "通用财务指标",
+      "riskCategory": "资产负债表/利润表项目",
+      "triggerSignal": "本期其他应付款期末余额/上期其他应付款期末余额>50%",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-092",
+      "sourceCandidateId": "XLS-019",
+      "name": "往来科目余额及波动",
+      "taxArea": "通用财务指标",
+      "riskCategory": "资产负债表/利润表项目",
+      "triggerSignal": "本期应收账款期末余额/上期应收账款期末余额>50%",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-093",
+      "sourceCandidateId": "XLS-020",
+      "name": "往来科目余额及波动",
+      "taxArea": "通用财务指标",
+      "riskCategory": "资产负债表/利润表项目",
+      "triggerSignal": "本期其他应收款期末余额/上期其他应收款债期末余额>50%",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-094",
+      "sourceCandidateId": "XLS-052",
+      "name": "不动产/旅客运输服务抵扣",
+      "taxArea": "增值税",
+      "riskCategory": "进项税",
+      "triggerSignal": "旅客运输计算抵扣金额>10万",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-095",
+      "sourceCandidateId": "XLS-199",
+      "name": "其他应收款-代收代付余额",
+      "taxArea": "已上线28项指标",
+      "riskCategory": "主体财务指标类",
+      "triggerSignal": "①截至本月，其他应收款-代收代付科目余额；\n②截至上年末，其他应收款-代收代付科目余额；",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    },
+    {
+      "id": "ER-096",
+      "sourceCandidateId": "XLS-200",
+      "name": "营业外支出发生额",
+      "taxArea": "已上线28项指标",
+      "riskCategory": "主体财务指标类",
+      "triggerSignal": "输出营业外支出发生额及对应的科目构成；",
+      "priority": "low",
+      "reportPlacement": "advisor_workpaper",
+      "countsTowardRiskScore": false,
+      "reviewOutcomeOptions": [
+        "cleared",
+        "needs_materials",
+        "risk_confirmed",
+        "not_applicable"
+      ],
+      "privacy": "sanitized_no_person_or_entity_fields"
+    }
+  ]
+}
