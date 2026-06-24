@@ -2729,6 +2729,7 @@ function buildStructuredReport(client: Client, risks: RiskResult[], aiReview?: A
     ],
     scope: [
       { label: '报告编号', value: reportDocumentId(client) },
+      { label: '报告版本', value: 'V1.0' },
       { label: '审阅期间', value: formatAnalysisPeriod(client) },
       { label: '数据来源', value: reportValue(client.dataBasis) },
       { label: '对比期间', value: reportValue(client.comparisonPeriod) },
@@ -3090,6 +3091,7 @@ function reportDocumentFooterHtml(report: Report) {
     <footer class="document-footer">
       <strong>合耀科技 HY AI 税务风控工作台</strong>
       <span>报告编号：${escapeHtml(documentId)}</span>
+      <span>报告版本：V1.0</span>
       <span>生成时间：${escapeHtml(generatedAt)}</span>
       <span>本报告仅供经营管理和税务风险复核参考，不替代税务机关认定、专项鉴证或正式法律/税务意见。</span>
     </footer>
