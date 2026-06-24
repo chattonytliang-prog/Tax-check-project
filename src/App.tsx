@@ -2309,7 +2309,7 @@ function parseClientImportText(text: string) {
 }
 
 async function parseClientImportWorkbook(buffer: ArrayBuffer) {
-  const XLSX = await import('xlsx')
+  const XLSX = await import('@e965/xlsx')
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
   const sheetName = workbook.SheetNames.find((name) => {
     const sheet = workbook.Sheets[name]
