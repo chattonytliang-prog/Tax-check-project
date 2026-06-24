@@ -40,6 +40,7 @@ import {
   type SimpleRuleCondition,
 } from './lib/ruleEngine'
 import { advancedCandidateRuleConfigs, type AdvancedCandidateRuleConfig } from './lib/advancedCandidateRuleConfigs'
+import { reportDocumentId } from './lib/reportDocumentId'
 import { reportFileName } from './lib/reportFileName'
 import { deepReportRuleTemplates } from './lib/reportRuleTemplates'
 import { publicRiskBasis, publicRiskReason } from './lib/reportTextSanitizer'
@@ -2727,6 +2728,7 @@ function buildStructuredReport(client: Client, risks: RiskResult[], aiReview?: A
       { label: '集团项目', value: groupName || '不适用' },
     ],
     scope: [
+      { label: '报告编号', value: reportDocumentId(client) },
       { label: '审阅期间', value: formatAnalysisPeriod(client) },
       { label: '数据来源', value: reportValue(client.dataBasis) },
       { label: '对比期间', value: reportValue(client.comparisonPeriod) },
@@ -3083,9 +3085,11 @@ function legacyReportHtml(report: Report) {
 
 function reportDocumentFooterHtml(report: Report) {
   const generatedAt = report.createdAt || formatDate()
+  const documentId = reportDocumentId({ clientName: report.clientName, createdAt: generatedAt })
   return `
     <footer class="document-footer">
       <strong>合耀科技 HY AI 税务风控工作台</strong>
+      <span>报告编号：${escapeHtml(documentId)}</span>
       <span>生成时间：${escapeHtml(generatedAt)}</span>
       <span>本报告仅供经营管理和税务风险复核参考，不替代税务机关认定、专项鉴证或正式法律/税务意见。</span>
     </footer>
