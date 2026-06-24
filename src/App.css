@@ -1556,6 +1556,26 @@ th {
   color: var(--orange);
 }
 
+.field-helper {
+  margin-top: -2px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.period-derived-field {
+  align-content: start;
+  padding: 10px 12px;
+  border: 1px solid rgba(12, 140, 130, 0.16);
+  border-radius: 6px;
+  background: rgba(86, 240, 238, 0.06);
+}
+
+.period-derived-field strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
 .field input,
 .field select,
 textarea {
