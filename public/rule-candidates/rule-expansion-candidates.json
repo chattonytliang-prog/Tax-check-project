@@ -4,8 +4,8 @@
   "privacy": "person_names_owner_names_entity_codes_and_entity_names_excluded",
   "currentRules": {
     "baseRules": 30,
-    "onlineCandidateRules": 28,
-    "totalCurrentRuleObjects": 58
+    "onlineCandidateRules": 40,
+    "totalCurrentRuleObjects": 70
   },
   "targetShape": {
     "autoExecutableRules": 150,
@@ -3678,5 +3678,24 @@
       "implementationPriority": "P2",
       "privacy": "sanitized_no_person_or_entity_fields"
     }
-  ]
+  ],
+  "stage1ExecutableUpgrade": {
+    "version": "2026-06-24-stage-2",
+    "addedCodes": [
+      "ON-029",
+      "ON-030",
+      "ON-031",
+      "ON-032",
+      "ON-033",
+      "ON-034",
+      "ON-035",
+      "ON-036",
+      "ON-037",
+      "ON-038",
+      "ON-039",
+      "ON-040"
+    ],
+    "addedCount": 12,
+    "principle": "only_existing_fields_used_for_first_executable_upgrade"
+  }
 }

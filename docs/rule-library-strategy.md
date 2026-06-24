@@ -12,8 +12,8 @@
 当前线上规则对象：
 
 - 基础规则 `R001-R030`：30 条。
-- 候选预警规则 `ON-001-ON-028`：28 条。
-- 合计：58 条。
+- 候选预警规则 `ON-001-ON-040`：40 条。
+- 合计：70 条。
 
 ## 风险等级建议
 
@@ -50,8 +50,11 @@
 
 - `public/rule-candidates/rule-expansion-candidates.json`
 - `public/rule-candidates/expert-review-checklist.json`
+- `public/rule-candidates/tax-warning-candidates.json`
 
 这些文件先作为规则库资产和后续导入依据，不会立刻扩大当前自动风险判定范围。
+
+其中 `tax-warning-candidates.json` 和前端内置 `candidateRules` 中的 `ON-029-ON-040` 已升级为第一批可执行新增候选规则，覆盖增值税税负、进销项倒挂、资金流/发票流/收入交叉、小微优惠边界、人员工资社保、个人非工资支付和高收入无租赁面积等场景。
 
 ## 导入原则
 
