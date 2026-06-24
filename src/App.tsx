@@ -2411,6 +2411,7 @@ function EChartPanel({
     let chart: EChartsType | null = null
     let observer: ResizeObserver | null = null
     let resize: (() => void) | null = null
+    let resizeFrame: number | null = null
     const container = chartRef.current
 
     async function mountChart() {
@@ -2430,16 +2431,28 @@ function EChartPanel({
       if (disposed) return
       chart = echartsCore.init(container)
       chart.setOption(option)
-      resize = () => chart?.resize()
+      resize = () => {
+        if (resizeFrame !== null) {
+          window.cancelAnimationFrame(resizeFrame)
+        }
+        resizeFrame = window.requestAnimationFrame(() => {
+          resizeFrame = null
+          chart?.resize()
+        })
+      }
       observer = new ResizeObserver(resize)
       observer.observe(container)
       window.addEventListener('resize', resize)
+      resize()
     }
 
     mountChart()
 
     return () => {
       disposed = true
+      if (resizeFrame !== null) {
+        window.cancelAnimationFrame(resizeFrame)
+      }
       observer?.disconnect()
       if (resize) window.removeEventListener('resize', resize)
       chart?.dispose()
@@ -2866,8 +2879,9 @@ function App() {
     series: [
       {
         type: 'pie',
-        radius: ['52%', '78%'],
-        center: ['50%', '50%'],
+        radius: ['42%', '66%'],
+        center: ['50%', '52%'],
+        avoidLabelOverlap: true,
         label: { color: '#102027', formatter: '{b}\n{c}' },
         data: dashboardLevelRows,
       },
@@ -2931,7 +2945,9 @@ function App() {
     series: [
       {
         type: 'pie',
-        radius: '72%',
+        radius: '62%',
+        center: ['50%', '52%'],
+        avoidLabelOverlap: true,
         label: { color: '#102027', formatter: '{b}: {c}' },
         data: currentRiskTaxRows,
       },

@@ -529,7 +529,7 @@ button svg,
 
 .chart-panel {
   display: grid;
-  grid-template-rows: auto minmax(220px, 1fr) auto;
+  grid-template-rows: auto auto auto;
   gap: 12px;
 }
 
@@ -546,7 +546,8 @@ button svg,
 
 .chart-canvas {
   width: 100%;
-  min-height: 230px;
+  height: clamp(240px, 28vh, 300px);
+  min-height: 0;
 }
 
 .mini-table {
