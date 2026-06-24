@@ -4,8 +4,8 @@
   "privacy": "person_names_owner_names_entity_codes_and_entity_names_excluded",
   "currentRules": {
     "baseRules": 30,
-    "onlineCandidateRules": 40,
-    "totalCurrentRuleObjects": 70
+    "onlineCandidateRules": 55,
+    "totalCurrentRuleObjects": 85
   },
   "targetShape": {
     "autoExecutableRules": 150,
@@ -3697,5 +3697,27 @@
     ],
     "addedCount": 12,
     "principle": "only_existing_fields_used_for_first_executable_upgrade"
+  },
+  "stage2ExecutableUpgrade": {
+    "version": "2026-06-24-stage-3",
+    "addedCodes": [
+      "ON-041",
+      "ON-042",
+      "ON-043",
+      "ON-044",
+      "ON-045",
+      "ON-046",
+      "ON-047",
+      "ON-048",
+      "ON-049",
+      "ON-050",
+      "ON-051",
+      "ON-052",
+      "ON-053",
+      "ON-054",
+      "ON-055"
+    ],
+    "addedCount": 15,
+    "principle": "second_batch_uses_existing_fields_and_denominator_guards"
   }
 }
