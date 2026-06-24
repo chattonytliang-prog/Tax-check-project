@@ -1852,7 +1852,7 @@ function conditionCandidateRule(config: AdvancedCandidateRuleConfig): RiskRule {
   return {
     ...config,
     trigger: (client) => evaluateCondition(toClientSnapshot(client), config.conditionJson),
-    reason: () => `${config.reason}（执行条件：${conditionSummary(config.conditionJson)}）`,
+    reason: () => publicRiskReason(config.reason),
   }
 }
 
@@ -2622,6 +2622,25 @@ function reportValue(value: string | number | undefined) {
   return text || '未填写'
 }
 
+function publicRiskReason(reason: string) {
+  return reason
+    .replace(/[（(]\s*执行条件\s*[:：][^）)]*[）)]/g, '')
+    .replace(/^基于现有字段的自动检测规则\s*[:：]\s*/, '系统检测到')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function riskReasonForReport(client: Client, risk: RiskResult) {
+  return publicRiskReason(risk.reason(client))
+}
+
+function publicRiskBasis(basis: string) {
+  if (/^基于现有字段的自动检测规则\s*[:：]/.test(basis)) {
+    return '系统基于已录入字段进行交叉校验，提示该事项需要结合合同、发票、申报表、账务明细和资金流水进一步复核。'
+  }
+  return publicRiskReason(basis)
+}
+
 function exposureEstimateForRisk(client: Client, risk: RiskResult) {
   const taxableSales = Number(client.taxableSales || client.monthlyRevenue || 0)
   const vatPayable = Number(client.vatTaxPayable || 0)
@@ -2642,7 +2661,7 @@ function exposureEstimateForRisk(client: Client, risk: RiskResult) {
 }
 
 function findingAnalysisForRisk(client: Client, risk: RiskResult) {
-  const reason = risk.reason(client)
+  const reason = riskReasonForReport(client, risk)
   return `系统规则命中原因为：${reason}。该事项不直接等同于税务机关最终认定，但说明当前数据或业务安排存在需要复核的异常信号，应结合原始凭证、申报表和业务实质进一步确认。`
 }
 
@@ -2656,11 +2675,11 @@ function buildStructuredRiskFinding(client: Client, risk: RiskResult): Structure
       taxType: risk.taxType,
       priority: riskPriority(risk),
       scenario: template.scenario,
-      currentFinding: risk.reason(client),
+      currentFinding: riskReasonForReport(client, risk),
       riskAnalysis: template.riskAnalysis,
       exposureEstimate: template.measurementMethod,
       recommendation: template.remediation,
-      basis: template.legalBasis,
+      basis: publicRiskBasis(template.legalBasis),
       legalBasis: template.legalBasis,
       remediation: template.remediation,
       materials: Array.from(new Set([...template.materials, ...risk.materials])),
@@ -2675,12 +2694,12 @@ function buildStructuredRiskFinding(client: Client, risk: RiskResult): Structure
     taxType: risk.taxType,
     priority: riskPriority(risk),
     scenario: '该事项由系统规则命中，说明当前录入数据存在需要进一步复核的异常信号。',
-    currentFinding: risk.reason(client),
+    currentFinding: riskReasonForReport(client, risk),
     riskAnalysis: findingAnalysisForRisk(client, risk),
     exposureEstimate: exposureEstimateForRisk(client, risk),
     recommendation: risk.suggestion,
-    basis: risk.basis,
-    legalBasis: risk.basis,
+    basis: publicRiskBasis(risk.basis),
+    legalBasis: publicRiskBasis(risk.basis),
     remediation: risk.suggestion,
     materials: risk.materials,
     deepTemplate: false,
@@ -2830,14 +2849,14 @@ function buildReportContent(client: Client, risks: RiskResult[]) {
   const groupedSections = groupedRiskSections(risks)
     .map(({ title, items }) => `${title}
 ${items.length ? items.map((risk, index) => `${index + 1}. 【${risk.level}风险】${riskDisplayTitle(risk)}
-触发原因：${risk.reason(client)}
+触发原因：${riskReasonForReport(client, risk)}
 整改建议：${risk.suggestion}
 需补资料：${risk.materials.join('、')}`).join('\n') : '本章节暂未命中风险。'}`)
     .join('\n\n')
   const groupName = getGroupName(client)
   const riskSummary = risks
     .slice(0, 8)
-    .map((risk, index) => `${index + 1}. 【${risk.level}风险】${riskDisplayTitle(risk)}：${risk.reason(client)}`)
+    .map((risk, index) => `${index + 1}. 【${risk.level}风险】${riskDisplayTitle(risk)}：${riskReasonForReport(client, risk)}`)
     .join('\n')
 
   return `《企业税务风险体检报告》
@@ -2883,8 +2902,8 @@ ${risks
 风险等级：${risk.level}
 整改优先级：${riskPriority(risk)}
 涉及税种：${risk.taxType}
-触发原因：${risk.reason(client)}
-政策/案例依据：${risk.basis}
+触发原因：${riskReasonForReport(client, risk)}
+政策/案例依据：${publicRiskBasis(risk.basis)}
 建议动作：${risk.suggestion}
 建议补充资料：${risk.materials.join('、')}
 `,
