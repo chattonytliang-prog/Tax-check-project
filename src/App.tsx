@@ -59,6 +59,7 @@ import {
 import './App.css'
 
 type Page = 'dashboard' | 'clients' | 'form' | 'result' | 'report' | 'reports' | 'rules' | 'admin'
+type RiskDetectionStep = 'client' | 'period' | 'confirm' | 'result'
 type TaxpayerType = '' | '小规模纳税人' | '一般纳税人' | '个体工商户'
 type ProjectScope = '单主体' | '集团项目'
 type EntityRole = '单体企业' | '集团总部' | '经营主体' | '关联主体' | '个体户/个人独资'
@@ -2666,6 +2667,7 @@ function App() {
   const [ruleDraft, setRuleDraft] = useState<ManagedRule>(emptyManagedRule)
   const [editingRuleCode, setEditingRuleCode] = useState('')
   const [selectedPeriodEntryIds, setSelectedPeriodEntryIds] = useState<string[]>([])
+  const [riskDetectionStep, setRiskDetectionStep] = useState<RiskDetectionStep>('client')
   const [reportConfirmOpen, setReportConfirmOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [ruleQuery, setRuleQuery] = useState('')
@@ -3073,6 +3075,7 @@ function App() {
   const analyzePeriodEntry = (client: Client, entry: ClientPeriodEntry) => {
     setSelectedClientId(client.id)
     setSelectedPeriodEntryIds([entry.id])
+    setRiskDetectionStep('confirm')
     setPage('result')
   }
 
@@ -3080,6 +3083,7 @@ function App() {
     if (!entries.length) return
     setSelectedClientId(client.id)
     setSelectedPeriodEntryIds([entries[0].id])
+    setRiskDetectionStep('confirm')
     setPage('result')
   }
 
@@ -3091,6 +3095,42 @@ function App() {
       return
     }
     setSelectedPeriodEntryIds(selectedClient.periodEntries.map((entry) => entry.id))
+  }
+
+  const selectClientForRiskDetection = (client: Client) => {
+    setSelectedClientId(client.id)
+    setSelectedPeriodEntryIds([])
+    setRiskDetectionStep('period')
+  }
+
+  const backToRiskClientSelection = () => {
+    setSelectedPeriodEntryIds([])
+    setRiskDetectionStep('client')
+  }
+
+  const proceedToRiskConfirmation = () => {
+    if (!selectedClient) return
+    if (!selectedClient.periodEntries.length) {
+      window.alert('当前企业还没有保存期间数据，请先到数据录入页保存一条期间数据。')
+      return
+    }
+    if (!selectedPeriodEntries.length) {
+      window.alert('请先选择需要分析的期间，可以选择单月、季度、连续多月或全年。')
+      return
+    }
+    if (!selectedPeriodsContinuous) {
+      window.alert('选择的月份不连续，不能合并检测。请改选连续月份，例如 1-3 月、4-6 月或全年。')
+      return
+    }
+    setRiskDetectionStep('confirm')
+  }
+
+  const startRiskDetection = () => {
+    if (!selectedDetectionClient) {
+      window.alert('请先确认企业和连续期间范围。')
+      return
+    }
+    setRiskDetectionStep('result')
   }
 
   const hydratePeriodDraft = (entry: ClientPeriodEntry, patchData: Partial<Client> = {}) => {
@@ -3541,32 +3581,13 @@ function App() {
   }
 
   const openClientForPeriodSelection = (client: Client) => {
-    setSelectedClientId(client.id)
-    setSelectedPeriodEntryIds([])
-    setPage('result')
-  }
-
-  const runClientRiskDetection = (client: Client) => {
-    setSelectedClientId(client.id)
-    if (!client.periodEntries.length) {
-      setSelectedPeriodEntryIds([])
-      setPage('result')
-      window.alert('当前企业还没有保存期间数据，请先到数据录入页保存一条期间数据。')
-      return
-    }
-    const months = client.periodEntries.flatMap((entry) => entry.months)
-    if (client.periodEntries.length > 1 && !areMonthsContinuous(months)) {
-      setSelectedPeriodEntryIds([])
-      setPage('result')
-      window.alert('当前企业的已录入月份不连续，不能一键检测。请先点击“期间选择”，选择连续月份后再生成检测结果。')
-      return
-    }
-    setSelectedPeriodEntryIds(client.periodEntries.map((entry) => entry.id))
+    selectClientForRiskDetection(client)
     setPage('result')
   }
 
   const openRiskDetectionPage = () => {
     setSelectedPeriodEntryIds([])
+    setRiskDetectionStep('client')
     setPage('result')
   }
 
@@ -3850,7 +3871,7 @@ function App() {
                       key={client.id}
                       className="compact-row"
                       onClick={() => {
-                        setSelectedClientId(client.id)
+                        selectClientForRiskDetection(client)
                         setPage('result')
                       }}
                     >
@@ -4101,7 +4122,7 @@ function App() {
             <header className="page-header">
               <div>
                 <p className="eyebrow">风险检测</p>
-                <h2>选择企业和期间数据</h2>
+                <h2>按企业和期间发起检测</h2>
               </div>
               <div className="header-actions">
                 <button
@@ -4113,17 +4134,33 @@ function App() {
                 >
                   <RefreshCcw /> 编辑资料
                 </button>
-                <button className="primary-button" onClick={() => createReport()} disabled={Boolean(aiReportStage)}>
+                <button className="primary-button" onClick={() => createReport()} disabled={riskDetectionStep !== 'result' || Boolean(aiReportStage)}>
                   <Sparkles /> {aiReportStage === 'reviewing' ? 'AI 正在复核数据...' : aiReportStage === 'generating' ? 'AI 正在生成报告...' : '生成报告'}
                 </button>
               </div>
             </header>
+            <div className="risk-stepper" aria-label="风险检测流程">
+              {[
+                ['client', '选择企业'],
+                ['period', '选择期间'],
+                ['confirm', '确认范围'],
+                ['result', '检测结果'],
+              ].map(([step, label], index) => (
+                <span
+                  key={step}
+                  className={riskDetectionStep === step ? 'active' : ['client', 'period', 'confirm', 'result'].indexOf(riskDetectionStep) > index ? 'done' : ''}
+                >
+                  <i>{index + 1}</i>{label}
+                </span>
+              ))}
+            </div>
+            {riskDetectionStep === 'client' && (
             <section className="panel archive-overview-panel">
               <div className="panel-title">
                 <div>
                   <p className="eyebrow">已有档案</p>
-                  <h3>从已保存期间发起检测</h3>
-                  <p className="section-helper">风险检测只基于企业档案中的期间数据。先做期间选择，或在期间连续时直接检测。</p>
+                  <h3>第一步：选择需要分析的企业</h3>
+                  <p className="section-helper">风险检测只基于企业档案中的已保存期间数据。先选择企业，再进入期间选择和检测确认。</p>
                 </div>
                 <span>{clients.length} 个企业</span>
               </div>
@@ -4158,11 +4195,8 @@ function App() {
                         <td>{client.periodEntries.length ? `${client.periodEntries.length} 期` : '未归档'}</td>
                         <td><LevelBadge level={level} /></td>
                         <td className="row-actions">
-                          <button onClick={() => openClientForPeriodSelection(client)}>
-                            期间选择
-                          </button>
-                          <button onClick={() => runClientRiskDetection(client)}>
-                            检测
+                          <button onClick={() => selectClientForRiskDetection(client)} disabled={!client.periodEntries.length}>
+                            选择企业
                           </button>
                         </td>
                       </tr>
@@ -4171,11 +4205,13 @@ function App() {
                 </table>
               </div>
             </section>
+            )}
+            {riskDetectionStep === 'period' && (
             <section className="panel period-analysis-panel">
               <div className="panel-title">
                 <div>
                   <p className="eyebrow">期间数据</p>
-                  <h3>选择连续月份生成分析</h3>
+                  <h3>第二步：选择连续期间</h3>
                   <p className="section-helper">最小单位为月份。可以选择单月、连续多月、季度或全年；不连续月份不能合并成一份报告。</p>
                 </div>
                 <span>{selectedPeriodLabel}</span>
@@ -4259,7 +4295,10 @@ function App() {
                       className="secondary-button compact-button"
                       onClick={selectAllPeriodEntriesForAnalysis}
                     >
-                      选择全部期间
+                      选择全部连续期间
+                    </button>
+                    <button type="button" className="primary-button compact-button" onClick={proceedToRiskConfirmation} disabled={!selectedPeriodEntries.length || !selectedPeriodsContinuous}>
+                      下一步确认
                     </button>
                   </div>
                   {selectedPeriodEntries.length > 0 && !selectedPeriodsContinuous && (
@@ -4275,8 +4314,63 @@ function App() {
               ) : (
                 <p className="section-helper">当前企业还没有保存期间快照。请先到数据录入页保存期间数据，再选择已有档案生成检测和报告。</p>
               )}
+              <div className="period-actions-row">
+                <button type="button" className="secondary-button compact-button" onClick={backToRiskClientSelection}>
+                  返回选择企业
+                </button>
+              </div>
             </section>
-            {selectedDetectionClient ? (
+            )}
+            {riskDetectionStep === 'confirm' && (
+              <section className="panel risk-confirm-panel">
+                <div className="panel-title">
+                  <div>
+                    <p className="eyebrow">检测前确认</p>
+                    <h3>第三步：确认企业和分析期间</h3>
+                    <p className="section-helper">确认无误后开始检测。检测结论只适用于当前企业、所选连续期间和数据来源。</p>
+                  </div>
+                  <span>{selectedPeriodsContinuous ? '期间连续' : '期间不连续'}</span>
+                </div>
+                <div className="confirm-grid">
+                  <article>
+                    <span>分析企业</span>
+                    <strong>{selectedClient.name}</strong>
+                    <small>{selectedClient.creditCode || '未填写统一社会信用代码'}</small>
+                  </article>
+                  <article>
+                    <span>分析范围</span>
+                    <strong>{selectedPeriodLabel}</strong>
+                    <small>{selectedPeriodEntries.length ? formatMonthRange(selectedPeriodMonths) : '未选择归档期间'}</small>
+                  </article>
+                  <article>
+                    <span>数据来源</span>
+                    <strong>{selectedDetectionClient?.dataBasis || selectedClient.dataBasis || '未填写'}</strong>
+                    <small>{selectedDetectionClient?.comparisonPeriod || '未设置对比期间'}</small>
+                  </article>
+                  <article>
+                    <span>检测准备</span>
+                    <strong>{currentReportIssues.length ? `${currentReportIssues.length} 项待补` : '可检测'}</strong>
+                    <small>{currentReportIssues.length ? validationSummary(currentReportIssues) : '基础检测必填项已补齐'}</small>
+                  </article>
+                </div>
+                {selectedClientPeriodWarnings.length > 0 && (
+                  <div className="period-warning-list">
+                    <strong>数据一致性提示</strong>
+                    {selectedClientPeriodWarnings.map((warning) => <p key={warning}>{warning}</p>)}
+                  </div>
+                )}
+                {currentReportIssues.length > 0 && (
+                  <p className="period-warning">当前仍有检测必填字段缺失，可以继续检测，但结果会标记为资料不足，仅供线索参考。</p>
+                )}
+                <div className="modal-actions">
+                  <button type="button" className="secondary-button" onClick={() => setRiskDetectionStep('period')}>返回选择期间</button>
+                  <button type="button" className="primary-button" disabled={!selectedDetectionClient || !selectedPeriodsContinuous} onClick={startRiskDetection}>
+                    开始检测
+                  </button>
+                </div>
+              </section>
+            )}
+            {riskDetectionStep === 'result' && selectedDetectionClient ? (
               <>
             <div className="result-summary">
               <StatCard label="综合等级" value={`${overallLevel}风险`} icon={<Gauge />} tone={overallLevel === '高' ? 'red' : overallLevel === '中' ? 'orange' : 'green'} />
@@ -4406,13 +4500,13 @@ function App() {
               )}
             </div>
               </>
-            ) : (
+            ) : riskDetectionStep === 'result' ? (
               <div className="empty-state wide">
                 <ClipboardList />
                 <h3>请选择已有档案期间</h3>
                 <p>风险检测和报告生成必须基于已保存的期间数据。请选择单月、季度、连续多月或全年后再生成结果。</p>
               </div>
-            )}
+            ) : null}
           </section>
         )}
 

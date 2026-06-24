@@ -1206,6 +1206,65 @@ th {
   flex-wrap: wrap;
 }
 
+.risk-stepper {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 10px;
+  margin: 4px 0 16px;
+}
+
+.risk-stepper span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.risk-stepper i {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(99, 119, 129, 0.12);
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.risk-stepper span.active {
+  border-color: rgba(18, 174, 234, 0.42);
+  background: rgba(18, 174, 234, 0.1);
+  color: var(--ink);
+}
+
+.risk-stepper span.active i {
+  background: var(--blue);
+  color: white;
+}
+
+.risk-stepper span.done {
+  border-color: rgba(12, 140, 130, 0.26);
+  background: rgba(86, 240, 238, 0.1);
+  color: var(--teal);
+}
+
+.risk-stepper span.done i {
+  background: var(--teal);
+  color: white;
+}
+
+.risk-confirm-panel {
+  display: grid;
+  gap: 16px;
+}
+
 .form-section {
   padding: 20px;
   scroll-margin-top: 86px;
@@ -2238,6 +2297,7 @@ textarea:focus {
 
   .stat-grid,
   .result-summary,
+  .risk-stepper,
   .form-grid,
   .rule-filter-grid,
   .check-grid,
