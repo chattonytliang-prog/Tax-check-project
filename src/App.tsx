@@ -271,6 +271,48 @@ type ManagedRule = {
   updatedAt?: string
 }
 
+type StructuredRiskFinding = {
+  id: string
+  title: string
+  level: RiskLevel
+  taxType: string
+  priority: string
+  currentFinding: string
+  riskAnalysis: string
+  exposureEstimate: string
+  recommendation: string
+  basis: string
+  materials: string[]
+}
+
+type StructuredReport = {
+  version: 'professional-v1'
+  title: string
+  clientProfile: Array<{ label: string; value: string }>
+  scope: Array<{ label: string; value: string }>
+  executiveSummary: {
+    overallLevel: RiskLevel
+    totalRisks: number
+    highRisks: number
+    mediumRisks: number
+    lowRisks: number
+    conclusion: string
+  }
+  dataQuality: {
+    score: number
+    label: string
+    note: string
+    missingFields: string[]
+    suggestedMaterials: string[]
+  }
+  taxSummaries: string[]
+  keyFindings: StructuredRiskFinding[]
+  detailedFindings: StructuredRiskFinding[]
+  actionPlan: Array<{ priority: string; item: string; ownerHint: string }>
+  expertReviewItems: string[]
+  disclaimers: string[]
+}
+
 type Report = {
   id: string
   clientId: string
@@ -279,6 +321,7 @@ type Report = {
   createdAt: string
   risks: RiskResult[]
   content: string
+  structured?: StructuredReport
   aiReview?: AiReview
   aiGenerated?: boolean
   aiModel?: string
@@ -2557,6 +2600,194 @@ function fieldLabel(field: string) {
   return conditionFields.find((item) => item.value === field)?.label || clientFieldLabels[field] || field
 }
 
+function plainRiskLevel(level: RiskLevel) {
+  const rank = riskRank(level)
+  if (rank >= 3) return '高'
+  if (rank === 2) return '中'
+  return '低'
+}
+
+function riskCountByRank(risks: RiskResult[], rank: number) {
+  return risks.filter((risk) => riskRank(risk.level) === rank).length
+}
+
+function reportValue(value: string | number | undefined) {
+  const text = String(value ?? '').trim()
+  return text || '未填写'
+}
+
+function exposureEstimateForRisk(client: Client, risk: RiskResult) {
+  const taxableSales = Number(client.taxableSales || client.monthlyRevenue || 0)
+  const vatPayable = Number(client.vatTaxPayable || 0)
+  const taxableIncome = Number(client.taxableIncome || client.monthlyProfit || 0)
+  const payroll = Number(client.payrollTotal || 0)
+  const taxType = risk.taxType || ''
+
+  if (taxType.includes('增值税') && taxableSales > 0) {
+    return `可先以应税销售额 ${money(taxableSales)}、已填增值税税额 ${money(vatPayable)} 为基础复核税负率、开票收入和申报收入差异；最终风险敞口需结合申报表、发票明细和适用税率测算。`
+  }
+  if (taxType.includes('企业所得税') && taxableIncome > 0) {
+    return `可先以应纳税所得额或利润口径 ${money(taxableIncome)} 为基础复核纳税调增影响；最终风险敞口需结合汇算清缴申报表、扣除凭证和会计明细测算。`
+  }
+  if ((taxType.includes('个人所得税') || taxType.includes('社保')) && payroll > 0) {
+    return `可先以工资薪金总额 ${money(payroll)}、个税申报人数和社保人数为基础复核扣缴风险；最终影响需结合个税明细、社保记录和人员台账测算。`
+  }
+  return '当前录入数据不足以直接量化税额影响，建议在补充申报表、发票明细、合同、付款流水和会计明细后进行专项测算。'
+}
+
+function findingAnalysisForRisk(client: Client, risk: RiskResult) {
+  const reason = risk.reason(client)
+  return `系统规则命中原因为：${reason}。该事项不直接等同于税务机关最终认定，但说明当前数据或业务安排存在需要复核的异常信号，应结合原始凭证、申报表和业务实质进一步确认。`
+}
+
+function buildStructuredRiskFinding(client: Client, risk: RiskResult): StructuredRiskFinding {
+  return {
+    id: risk.code,
+    title: riskDisplayTitle(risk),
+    level: risk.level,
+    taxType: risk.taxType,
+    priority: riskPriority(risk),
+    currentFinding: risk.reason(client),
+    riskAnalysis: findingAnalysisForRisk(client, risk),
+    exposureEstimate: exposureEstimateForRisk(client, risk),
+    recommendation: risk.suggestion,
+    basis: risk.basis,
+    materials: risk.materials,
+  }
+}
+
+function buildStructuredReport(client: Client, risks: RiskResult[], aiReview?: AiReview): StructuredReport {
+  const level = getOverallLevel(risks)
+  const highRisks = riskCountByRank(risks, 3)
+  const mediumRisks = riskCountByRank(risks, 2)
+  const lowRisks = Math.max(risks.length - highRisks - mediumRisks, 0)
+  const completeness = getDataCompleteness(client, risks)
+  const missingFields = validateClientForReport(client).map((issue) => issue.label)
+  const findings = risks.map((risk) => buildStructuredRiskFinding(client, risk))
+  const groupName = getGroupName(client)
+  const suggestedMaterials = Array.from(new Set([
+    ...completeness.suggestedMaterials,
+    ...risks.flatMap((risk) => risk.materials),
+  ])).slice(0, 12)
+  const expertReviewItems = Array.from(new Set([
+    ...(aiReview?.dataQualityWarnings || []),
+    ...(aiReview?.nearThresholdWarnings || []),
+    ...(aiReview?.riskReviewNotes || []),
+    ...suggestedMaterials.map((item) => `复核资料：${item}`),
+  ])).slice(0, 10)
+
+  return {
+    version: 'professional-v1',
+    title: `${client.name} 中国税务健康检查报告`,
+    clientProfile: [
+      { label: '企业名称', value: reportValue(client.name) },
+      { label: '统一社会信用代码', value: reportValue(client.creditCode) },
+      { label: '所属地区', value: reportValue(client.region) },
+      { label: '所属行业', value: reportValue(client.industry) },
+      { label: '纳税人类型', value: reportValue(client.taxpayerType) },
+      { label: '项目口径', value: reportValue(getProjectScope(client)) },
+      { label: '主体角色', value: reportValue(getEntityRole(client)) },
+      { label: '集团项目', value: groupName || '不适用' },
+    ],
+    scope: [
+      { label: '审阅期间', value: formatAnalysisPeriod(client) },
+      { label: '数据来源', value: reportValue(client.dataBasis) },
+      { label: '对比期间', value: reportValue(client.comparisonPeriod) },
+      { label: '生成时间', value: formatDate() },
+      { label: '工作方法', value: '基于企业录入数据、已保存期间快照和系统规则库进行自动检测，并由 AI 仅作表达润色和数据复核提示。' },
+      { label: '工作限制', value: '本次检查未替代原始凭证穿行测试、税务机关沟通、专项鉴证或法律意见。' },
+    ],
+    executiveSummary: {
+      overallLevel: level,
+      totalRisks: risks.length,
+      highRisks,
+      mediumRisks,
+      lowRisks,
+      conclusion: risks.length
+        ? `本次共识别 ${risks.length} 项税务风险提示，其中高风险 ${highRisks} 项、中风险 ${mediumRisks} 项、低风险 ${lowRisks} 项，综合风险等级为${plainRiskLevel(level)}。建议优先处理高风险事项，并对中风险事项安排资料复核。`
+        : '本次在已录入数据和当前规则覆盖范围内未识别明显风险事项，但仍建议补充原始凭证、申报表和发票明细进行人工复核。',
+    },
+    dataQuality: {
+      score: completeness.score,
+      label: completeness.label,
+      note: completeness.note,
+      missingFields,
+      suggestedMaterials,
+    },
+    taxSummaries: taxTypeSummary(risks),
+    keyFindings: findings.filter((finding) => riskRank(finding.level) >= 2).slice(0, 8),
+    detailedFindings: findings,
+    actionPlan: findings.slice(0, 12).map((finding) => ({
+      priority: finding.priority,
+      item: finding.title,
+      ownerHint: riskRank(finding.level) >= 3 ? '建议由财务负责人牵头，必要时引入外部税务顾问复核。' : '建议由财税经办人员补充资料后复核。',
+    })),
+    expertReviewItems,
+    disclaimers: [
+      '本报告基于企业提供资料、系统录入数据及规则库进行风险提示，不构成税务机关认定、税务鉴证结论或法律意见。',
+      'AI 仅用于数据复核提示和报告表达润色，不得新增、删除或覆盖规则引擎已经命中的风险结论。',
+      '若审阅期间、数据来源、申报口径或原始凭证发生变化，应重新检测并生成报告。',
+      '涉及具体补税、滞纳金、罚款或整改方案的事项，应结合完整账套、申报表、发票、合同、付款流水及当地税务实践进一步确认。',
+    ],
+  }
+}
+
+function buildProfessionalReportContent(report: StructuredReport) {
+  const profile = report.clientProfile.map((item) => `${item.label}：${item.value}`).join('\n')
+  const scope = report.scope.map((item) => `${item.label}：${item.value}`).join('\n')
+  const keyFindings = report.keyFindings.length
+    ? report.keyFindings.map((item, index) => `${index + 1}. 【${plainRiskLevel(item.level)}风险】${item.title}：${item.currentFinding}`).join('\n')
+    : '当前未形成需要在摘要中重点列示的风险事项。'
+  const details = report.detailedFindings.length
+    ? report.detailedFindings.map((item, index) => `${index + 1}. ${item.title}
+风险等级：${plainRiskLevel(item.level)}风险
+涉及税种：${item.taxType}
+整改优先级：${item.priority}
+事项简述：${item.currentFinding}
+潜在税务风险分析：${item.riskAnalysis}
+税额影响匡算：${item.exposureEstimate}
+政策/规则依据：${item.basis}
+优化建议：${item.recommendation}
+建议补充资料：${item.materials.join('、') || '暂无'}
+`).join('\n')
+    : '当前未命中自动风险事项。'
+
+  return `《${report.title}》
+
+一、项目背景及工作范围
+${profile}
+
+${scope}
+
+二、报告摘要：我们的观点
+${report.executiveSummary.conclusion}
+
+资料完整性：${report.dataQuality.score}%（${report.dataQuality.label}）
+${report.dataQuality.note}
+
+三、重要事项汇总
+${keyFindings}
+
+四、分税种风险摘要
+${report.taxSummaries.length ? report.taxSummaries.join('\n') : '当前未形成分税种风险提示。'}
+
+五、重要事项章节
+${details}
+
+六、专家核查清单
+${report.expertReviewItems.length ? report.expertReviewItems.map((item, index) => `${index + 1}. ${item}`).join('\n') : '当前无额外专家核查提示。'}
+
+七、整改优先级
+${report.actionPlan.length ? report.actionPlan.map((item, index) => `${index + 1}. ${item.priority}：${item.item}。${item.ownerHint}`).join('\n') : '当前无需要列入整改清单的自动风险事项。'}
+
+八、资料缺口及建议补充资料
+缺失字段：${report.dataQuality.missingFields.length ? report.dataQuality.missingFields.join('、') : '无'}
+建议补充资料：${report.dataQuality.suggestedMaterials.length ? report.dataQuality.suggestedMaterials.join('、') : '暂无'}
+
+九、责任边界及免责声明
+${report.disclaimers.map((item, index) => `${index + 1}. ${item}`).join('\n')}`
+}
+
 function buildReportContent(client: Client, risks: RiskResult[]) {
   const level = getOverallLevel(risks)
   const highCount = risks.filter((r) => r.level === '高').length
@@ -3858,6 +4089,7 @@ function App() {
     const reportClient = deriveClientMetrics({ ...(selectedDetectionClient || selectedClient), periodEntries: [] })
     const startedAt = Date.now()
     const risks = detectRisks(reportClient, managedRules)
+    const structuredReport = buildStructuredReport(reportClient, risks)
     const baseReport: Report = {
       id: crypto.randomUUID(),
       clientId: reportClient.id,
@@ -3865,7 +4097,8 @@ function App() {
       riskLevel: getOverallLevel(risks),
       createdAt: formatDate(),
       risks,
-      content: buildReportContent(reportClient, risks),
+      content: buildProfessionalReportContent(structuredReport),
+      structured: structuredReport,
     }
     setPage('report')
 
@@ -3893,12 +4126,15 @@ function App() {
         client: reportClient,
         risks: risksForAi,
         content: baseReport.content,
+        structuredReport: buildStructuredReport(reportClient, risks, reviewResponse.review),
         aiReview: reviewResponse.review,
       })
+      const reviewedStructuredReport = buildStructuredReport(reportClient, risks, reviewResponse.review)
 
       report = {
         ...baseReport,
         content: sanitizePublicReportContent(reportResponse.content),
+        structured: reviewedStructuredReport,
         aiReview: reviewResponse.review,
         aiGenerated: true,
         aiModel: reportResponse.model || reviewResponse.model,
@@ -6285,6 +6521,160 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
   )
 }
 
+function StructuredReportPreview({ report }: { report: StructuredReport }) {
+  return (
+    <div className="structured-report">
+      <section className="report-cover">
+        <p className="eyebrow">中国税务健康检查报告</p>
+        <h1>{report.title}</h1>
+        <div className="report-cover-meta">
+          {report.scope.slice(0, 4).map((item) => (
+            <span key={item.label}>{item.label}：{item.value}</span>
+          ))}
+        </div>
+      </section>
+
+      <section className="report-section">
+        <div className="report-section-title">
+          <span>01</span>
+          <h3>项目背景及工作范围</h3>
+        </div>
+        <div className="report-fact-grid">
+          {report.clientProfile.map((item) => (
+            <article key={item.label}>
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+            </article>
+          ))}
+        </div>
+        <div className="report-scope-list">
+          {report.scope.map((item) => (
+            <p key={item.label}><strong>{item.label}：</strong>{item.value}</p>
+          ))}
+        </div>
+      </section>
+
+      <section className="report-section">
+        <div className="report-section-title">
+          <span>02</span>
+          <h3>报告摘要：我们的观点</h3>
+        </div>
+        <div className="executive-summary">
+          <div><span>综合风险等级</span><strong>{plainRiskLevel(report.executiveSummary.overallLevel)}风险</strong></div>
+          <div><span>命中风险事项</span><strong>{report.executiveSummary.totalRisks} 项</strong></div>
+          <div><span>高 / 中 / 低</span><strong>{report.executiveSummary.highRisks} / {report.executiveSummary.mediumRisks} / {report.executiveSummary.lowRisks}</strong></div>
+          <div><span>资料完整性</span><strong>{report.dataQuality.score}%</strong></div>
+        </div>
+        <p className="report-lead">{report.executiveSummary.conclusion}</p>
+        <p className="report-note">{report.dataQuality.note}</p>
+      </section>
+
+      <section className="report-section">
+        <div className="report-section-title">
+          <span>03</span>
+          <h3>重要事项汇总</h3>
+        </div>
+        {report.keyFindings.length ? (
+          <div className="finding-summary-list">
+            {report.keyFindings.map((finding, index) => (
+              <article key={finding.id}>
+                <span>{index + 1}</span>
+                <div>
+                  <strong>{finding.title}</strong>
+                  <p>{finding.currentFinding}</p>
+                </div>
+                <LevelBadge level={finding.level} />
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="report-note">当前未形成需要在摘要中重点列示的风险事项。</p>
+        )}
+      </section>
+
+      <section className="report-section">
+        <div className="report-section-title">
+          <span>04</span>
+          <h3>分税种风险摘要</h3>
+        </div>
+        <div className="tax-summary-list">
+          {report.taxSummaries.length ? report.taxSummaries.map((item) => <p key={item}>{item}</p>) : <p>当前未形成分税种风险提示。</p>}
+        </div>
+      </section>
+
+      <section className="report-section">
+        <div className="report-section-title">
+          <span>05</span>
+          <h3>重要事项章节</h3>
+        </div>
+        <div className="detailed-finding-list">
+          {report.detailedFindings.length ? report.detailedFindings.map((finding, index) => (
+            <article key={finding.id} className="detailed-finding">
+              <div className="finding-heading">
+                <div>
+                  <span>事项 {index + 1}</span>
+                  <h4>{finding.title}</h4>
+                </div>
+                <LevelBadge level={finding.level} />
+              </div>
+              <div className="finding-meta">
+                <span>涉及税种：{finding.taxType}</span>
+                <span>整改优先级：{finding.priority}</span>
+              </div>
+              <h5>事项简述及当前发现</h5>
+              <p>{finding.currentFinding}</p>
+              <h5>潜在税务风险分析</h5>
+              <p>{finding.riskAnalysis}</p>
+              <h5>税额影响匡算</h5>
+              <p>{finding.exposureEstimate}</p>
+              <h5>优化建议</h5>
+              <p>{finding.recommendation}</p>
+              <h5>政策/规则依据</h5>
+              <p>{finding.basis}</p>
+              <div className="chips">{finding.materials.map((item) => <span key={item}>{item}</span>)}</div>
+            </article>
+          )) : <p className="report-note">当前未命中自动风险事项。</p>}
+        </div>
+      </section>
+
+      <section className="report-section">
+        <div className="report-section-title">
+          <span>06</span>
+          <h3>专家核查清单与资料缺口</h3>
+        </div>
+        <div className="report-two-col">
+          <article>
+            <h4>建议核查事项</h4>
+            {report.expertReviewItems.length ? (
+              <ol>{report.expertReviewItems.map((item) => <li key={item}>{item}</li>)}</ol>
+            ) : (
+              <p>当前无额外专家核查提示。</p>
+            )}
+          </article>
+          <article>
+            <h4>建议补充资料</h4>
+            {report.dataQuality.suggestedMaterials.length ? (
+              <div className="chips">{report.dataQuality.suggestedMaterials.map((item) => <span key={item}>{item}</span>)}</div>
+            ) : (
+              <p>暂无明确资料缺口。</p>
+            )}
+          </article>
+        </div>
+      </section>
+
+      <section className="report-section">
+        <div className="report-section-title">
+          <span>07</span>
+          <h3>责任边界及免责声明</h3>
+        </div>
+        <ol className="disclaimer-list">
+          {report.disclaimers.map((item) => <li key={item}>{item}</li>)}
+        </ol>
+      </section>
+    </div>
+  )
+}
+
 function ReportPage({
   report,
   client,
@@ -6300,7 +6690,9 @@ function ReportPage({
   aiStage: 'reviewing' | 'generating' | null
   onUpdate: (content: string) => void
 }) {
-  const draft = sanitizePublicReportContent(report?.content || buildReportContent(client, risks))
+  const structured = report?.structured || buildStructuredReport(client, risks, report?.aiReview)
+  const fallbackContent = report?.content || buildProfessionalReportContent(structured)
+  const draft = sanitizePublicReportContent(fallbackContent || buildReportContent(client, risks))
   const aiMessage = aiStage === 'reviewing'
     ? 'AI 正在复核数据...'
     : aiStage === 'generating'
@@ -6404,14 +6796,20 @@ function ReportPage({
               </div>
             )}
           </section>
-          <div className="report-editor">
+          <div className="professional-report-layout">
             <aside>
               <h3>报告目录</h3>
-              {['企业基本情况', '综合风险结论', '资料完整性说明', '分税种风险摘要', '风险明细', '整改优先级', '免责声明'].map((item) => (
+              {['项目背景及工作范围', '报告摘要：我们的观点', '重要事项汇总', '分税种风险摘要', '重要事项章节', '专家核查清单', '责任边界'].map((item) => (
                 <span key={item}>{item}</span>
               ))}
             </aside>
-            <textarea value={draft} onChange={(event) => onUpdate(event.target.value)} />
+            <div className="professional-report-main">
+              <StructuredReportPreview report={structured} />
+              <details className="report-plain-editor">
+                <summary>查看 / 微调纯文本版本</summary>
+                <textarea value={draft} onChange={(event) => onUpdate(event.target.value)} />
+              </details>
+            </div>
           </div>
         </div>
       )}

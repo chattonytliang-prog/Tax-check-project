@@ -66,7 +66,7 @@ function removeInternalReportArtifacts(content) {
     .trim()
 }
 
-function buildPrompt(client, risks, content, aiReview, establishmentFacts) {
+function buildPrompt(client, risks, content, aiReview, establishmentFacts, structuredReport) {
   return `请基于以下企业税务风险体检资料，重写一份专业、清晰、适合企业老板和财务负责人阅读的税务风险体检报告。
 
 要求：
@@ -95,6 +95,9 @@ ${JSON.stringify(risks.map(compactRisk), null, 2)}
 AI 数据复核：
 ${JSON.stringify(aiReview || {}, null, 2)}
 
+Structured professional report object. Follow this structure first; polish wording only. Do not add, remove, or change findings, risk levels, recommendations, scope, or disclaimers:
+${JSON.stringify(structuredReport || {}, null, 2)}
+
 原始报告：
 ${content || ''}`
 }
@@ -109,7 +112,7 @@ export async function onRequestPost({ request, env }) {
     const auth = await requireUser(request, db)
     if (auth.response) return auth.response
 
-    const { client, risks = [], content = '', aiReview = null } = await readJson(request)
+    const { client, risks = [], content = '', aiReview = null, structuredReport = null } = await readJson(request)
     if (!client?.id || !client?.name) {
       return badRequest('Client id and name are required')
     }
@@ -139,7 +142,7 @@ export async function onRequestPost({ request, env }) {
           },
           {
             role: 'user',
-            content: buildPrompt(client, risks, content, aiReview, establishmentFacts),
+            content: buildPrompt(client, risks, content, aiReview, establishmentFacts, structuredReport),
           },
         ],
         temperature: 0.2,
