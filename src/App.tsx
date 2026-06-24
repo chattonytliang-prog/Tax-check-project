@@ -39,6 +39,7 @@ import {
   type SimpleRuleCondition,
 } from './lib/ruleEngine'
 import { advancedCandidateRuleConfigs, type AdvancedCandidateRuleConfig } from './lib/advancedCandidateRuleConfigs'
+import { deepReportRuleTemplates } from './lib/reportRuleTemplates'
 import {
   areMonthsContinuous,
   createPeriodEntry,
@@ -277,12 +278,16 @@ type StructuredRiskFinding = {
   level: RiskLevel
   taxType: string
   priority: string
+  scenario: string
   currentFinding: string
   riskAnalysis: string
   exposureEstimate: string
   recommendation: string
   basis: string
+  legalBasis: string
+  remediation: string
   materials: string[]
+  deepTemplate: boolean
 }
 
 type StructuredReport = {
@@ -2641,18 +2646,43 @@ function findingAnalysisForRisk(client: Client, risk: RiskResult) {
 }
 
 function buildStructuredRiskFinding(client: Client, risk: RiskResult): StructuredRiskFinding {
+  const template = deepReportRuleTemplates[risk.code]
+  if (template) {
+    return {
+      id: risk.code,
+      title: riskDisplayTitle(risk),
+      level: risk.level,
+      taxType: risk.taxType,
+      priority: riskPriority(risk),
+      scenario: template.scenario,
+      currentFinding: risk.reason(client),
+      riskAnalysis: template.riskAnalysis,
+      exposureEstimate: template.measurementMethod,
+      recommendation: template.remediation,
+      basis: template.legalBasis,
+      legalBasis: template.legalBasis,
+      remediation: template.remediation,
+      materials: Array.from(new Set([...template.materials, ...risk.materials])),
+      deepTemplate: true,
+    }
+  }
+
   return {
     id: risk.code,
     title: riskDisplayTitle(risk),
     level: risk.level,
     taxType: risk.taxType,
     priority: riskPriority(risk),
+    scenario: '该事项由系统规则命中，说明当前录入数据存在需要进一步复核的异常信号。',
     currentFinding: risk.reason(client),
     riskAnalysis: findingAnalysisForRisk(client, risk),
     exposureEstimate: exposureEstimateForRisk(client, risk),
     recommendation: risk.suggestion,
     basis: risk.basis,
+    legalBasis: risk.basis,
+    remediation: risk.suggestion,
     materials: risk.materials,
+    deepTemplate: false,
   }
 }
 
@@ -2743,11 +2773,12 @@ function buildProfessionalReportContent(report: StructuredReport) {
 风险等级：${plainRiskLevel(item.level)}风险
 涉及税种：${item.taxType}
 整改优先级：${item.priority}
-事项简述：${item.currentFinding}
+事项背景：${item.scenario}
+当前发现：${item.currentFinding}
 潜在税务风险分析：${item.riskAnalysis}
-税额影响匡算：${item.exposureEstimate}
-政策/规则依据：${item.basis}
-优化建议：${item.recommendation}
+测算逻辑：${item.exposureEstimate}
+政策/规则依据：${item.legalBasis}
+优化建议：${item.remediation}
 建议补充资料：${item.materials.join('、') || '暂无'}
 `).join('\n')
     : '当前未命中自动风险事项。'
@@ -6620,17 +6651,20 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
               <div className="finding-meta">
                 <span>涉及税种：{finding.taxType}</span>
                 <span>整改优先级：{finding.priority}</span>
+                {finding.deepTemplate && <span>顾问级深度模板</span>}
               </div>
-              <h5>事项简述及当前发现</h5>
+              <h5>事项背景</h5>
+              <p>{finding.scenario}</p>
+              <h5>当前发现</h5>
               <p>{finding.currentFinding}</p>
               <h5>潜在税务风险分析</h5>
               <p>{finding.riskAnalysis}</p>
-              <h5>税额影响匡算</h5>
+              <h5>测算逻辑</h5>
               <p>{finding.exposureEstimate}</p>
               <h5>优化建议</h5>
-              <p>{finding.recommendation}</p>
+              <p>{finding.remediation}</p>
               <h5>政策/规则依据</h5>
-              <p>{finding.basis}</p>
+              <p>{finding.legalBasis}</p>
               <div className="chips">{finding.materials.map((item) => <span key={item}>{item}</span>)}</div>
             </article>
           )) : <p className="report-note">当前未命中自动风险事项。</p>}
