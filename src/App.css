@@ -500,7 +500,7 @@ button svg,
 
 .analytics-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(300px, 0.8fr);
+  grid-template-columns: repeat(2, minmax(320px, 1fr));
   gap: 16px;
   margin: 16px 0;
 }
@@ -570,8 +570,10 @@ button svg,
 .three-panel {
   position: relative;
   display: grid;
-  grid-template-rows: auto minmax(220px, 1fr) auto;
-  gap: 12px;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 1.2fr) minmax(150px, auto);
+  gap: 20px;
+  align-items: center;
   overflow: hidden;
   color: white;
   background:
@@ -582,9 +584,11 @@ button svg,
 
 .three-panel h3 {
   margin: 0;
+  font-size: 26px;
 }
 
 .three-panel p {
+  max-width: 420px;
   color: #d7f6f6;
   line-height: 1.7;
   margin: 8px 0 0;
@@ -592,7 +596,8 @@ button svg,
 
 .risk-orbit {
   width: 100%;
-  min-height: 230px;
+  height: clamp(260px, 32vh, 340px);
+  min-height: 0;
 }
 
 .risk-orbit canvas {
@@ -602,6 +607,7 @@ button svg,
 .orbit-legend {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 10px;
   color: #d7f6f6;
   font-size: 13px;
@@ -2231,6 +2237,18 @@ textarea:focus {
   .login-aside {
     min-height: auto;
   }
+
+  .three-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .three-panel p {
+    max-width: none;
+  }
+
+  .orbit-legend {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 720px) {
@@ -2268,5 +2286,14 @@ textarea:focus {
 
   .table-panel {
     overflow-x: auto;
+  }
+
+  .chart-panel,
+  .three-panel {
+    min-height: auto;
+  }
+
+  .risk-orbit {
+    height: 260px;
   }
 }
