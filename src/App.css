@@ -571,6 +571,44 @@ button svg,
   max-width: 34em;
 }
 
+.boss-delivery-checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.boss-delivery-check {
+  border: 1px solid rgba(13, 94, 112, 0.13);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #f8fbfb;
+}
+
+.boss-delivery-check span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.boss-delivery-check strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.boss-delivery-check.ready {
+  border-color: rgba(18, 126, 98, 0.22);
+  background: #f1faf6;
+}
+
+.boss-delivery-check.attention {
+  border-color: rgba(143, 61, 66, 0.18);
+  background: #fbf7f6;
+}
+
 .boss-actions {
   display: flex;
   flex-wrap: wrap;

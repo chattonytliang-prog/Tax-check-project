@@ -4078,8 +4078,30 @@ function App() {
           topRisks.length > 0 ? `优先复核 ${topRisks.length} 个重点风险事项` : '将低风险初筛结果归档',
           reports.length > 0 ? '查看最新报告并确认后续跟进节奏' : '生成第一份税务健康报告',
         ]
+    const deliveryChecks = [
+      {
+        label: '期间资料',
+        value: bossStats.missingPeriodClients > 0 ? `${bossStats.missingPeriodClients} 家待补` : bossStats.analysable > 0 ? '已具备' : '待导入',
+        tone: bossStats.missingPeriodClients > 0 || bossStats.analysable === 0 ? 'attention' : 'ready',
+      },
+      {
+        label: '重点风险',
+        value: topRisks.length > 0 ? `${topRisks.length} 项待复核` : '无高优先级',
+        tone: topRisks.length > 0 ? 'attention' : 'ready',
+      },
+      {
+        label: '资料缺口',
+        value: missingDataClients > 0 ? `${missingDataClients} 家待补` : '已补齐',
+        tone: missingDataClients > 0 ? 'attention' : 'ready',
+      },
+      {
+        label: '老板报告',
+        value: reports.length > 0 ? '可查看' : '待生成',
+        tone: reports.length > 0 ? 'ready' : 'attention',
+      },
+    ]
 
-    return { level, conclusion, topRisks, actions, missingDataClients, missingFields }
+    return { level, conclusion, topRisks, actions, missingDataClients, missingFields, deliveryChecks }
   }, [bossPeriodActive, bossPeriodClientRows, bossPeriodLabel, bossStats.analysable, bossStats.high, bossStats.medium, bossStats.missingPeriodClients, clients.length, managedRules, reports.length])
   const dashboardLevelRows = useMemo<ChartDatum[]>(() => {
     const clientStats = clients.map((client) => detectRisks(client, managedRules))
@@ -5140,6 +5162,14 @@ function App() {
                 <span>当前税务健康等级</span>
                 <strong>{plainRiskLevel(bossDashboard.level)}风险</strong>
                 <p>{bossDashboard.conclusion}</p>
+                <div className="boss-delivery-checks" aria-label="试点交付状态">
+                  {bossDashboard.deliveryChecks.map((item) => (
+                    <div className={`boss-delivery-check ${item.tone}`} key={item.label}>
+                      <span>{item.label}</span>
+                      <strong>{item.value}</strong>
+                    </div>
+                  ))}
+                </div>
                 <div className="boss-actions">
                   <button className="primary-button boss-period-report-action" onClick={openBossPeriodReportFlow}>
                     <FileText /> {bossPeriodActive ? '生成当前期间报告' : reports.length ? '查看老板报告' : '生成健康报告'}
