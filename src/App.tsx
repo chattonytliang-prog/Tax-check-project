@@ -43,6 +43,7 @@ import { advancedCandidateRuleConfigs, type AdvancedCandidateRuleConfig } from '
 import { reportDeliveryChecklist } from './lib/reportDeliveryChecklist'
 import { reportDocumentId } from './lib/reportDocumentId'
 import { reportFileName } from './lib/reportFileName'
+import { reportFollowUpCadence } from './lib/reportFollowUpCadence'
 import { reportReviewAction } from './lib/reportReviewAction'
 import { deepReportRuleTemplates } from './lib/reportRuleTemplates'
 import { reportScopeSummary } from './lib/reportScopeSummary'
@@ -322,6 +323,7 @@ type StructuredReport = {
   detailedFindings: StructuredRiskFinding[]
   actionPlan: Array<{ priority: string; item: string; ownerHint: string }>
   expertReviewItems: string[]
+  followUpCadence: string[]
   deliveryChecklist: string[]
   disclaimers: string[]
 }
@@ -2777,6 +2779,7 @@ function buildStructuredReport(client: Client, risks: RiskResult[], aiReview?: A
       ownerHint: riskRank(finding.level) >= 3 ? '建议由财务负责人牵头，必要时引入外部税务顾问复核。' : '建议由财税经办人员补充资料后复核。',
     })),
     expertReviewItems,
+    followUpCadence: reportFollowUpCadence({ highRisks, mediumRisks, totalRisks: risks.length }),
     deliveryChecklist: reportDeliveryChecklist({ hasRisks: risks.length > 0, suggestedMaterials }),
     disclaimers: [
       '本报告基于企业提供资料、系统录入数据及规则库进行风险提示，不构成税务机关认定、税务鉴证结论或法律意见。',
@@ -2836,14 +2839,17 @@ ${report.expertReviewItems.length ? report.expertReviewItems.map((item, index) =
 七、整改优先级
 ${report.actionPlan.length ? report.actionPlan.map((item, index) => `${index + 1}. ${item.priority}：${item.item}。${item.ownerHint}`).join('\n') : '当前无需要列入整改清单的自动风险事项。'}
 
-八、交付资料清单
+八、后续跟进节奏
+${report.followUpCadence.map((item, index) => `${index + 1}. ${item}`).join('\n')}
+
+九、交付资料清单
 ${report.deliveryChecklist.map((item, index) => `${index + 1}. ${item}`).join('\n')}
 
-九、资料缺口及建议补充资料
+十、资料缺口及建议补充资料
 缺失字段：${report.dataQuality.missingFields.length ? report.dataQuality.missingFields.join('、') : '无'}
 建议补充资料：${report.dataQuality.suggestedMaterials.length ? report.dataQuality.suggestedMaterials.join('、') : '暂无'}
 
-十、责任边界及免责声明
+十一、责任边界及免责声明
 ${report.disclaimers.map((item, index) => `${index + 1}. ${item}`).join('\n')}`
 }
 
@@ -3092,12 +3098,17 @@ function structuredReportHtml(report: StructuredReport) {
     </section>
 
     <section>
-      <h2>八、交付资料清单</h2>
+      <h2>八、后续跟进节奏</h2>
+      ${exportList(report.followUpCadence, '暂无后续跟进建议。', true)}
+    </section>
+
+    <section>
+      <h2>九、交付资料清单</h2>
       ${exportList(report.deliveryChecklist, '暂无交付资料清单。', true)}
     </section>
 
     <section>
-      <h2>九、责任边界及免责声明</h2>
+      <h2>十、责任边界及免责声明</h2>
       ${exportList(report.disclaimers, '无。', true)}
     </section>
   `
@@ -7078,6 +7089,16 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
       <section className="report-section">
         <div className="report-section-title">
           <span>07</span>
+          <h3>后续跟进节奏</h3>
+        </div>
+        <ol className="disclaimer-list">
+          {report.followUpCadence.map((item) => <li key={item}>{item}</li>)}
+        </ol>
+      </section>
+
+      <section className="report-section">
+        <div className="report-section-title">
+          <span>08</span>
           <h3>交付资料清单</h3>
         </div>
         <ol className="disclaimer-list">
@@ -7087,7 +7108,7 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
 
       <section className="report-section">
         <div className="report-section-title">
-          <span>08</span>
+          <span>09</span>
           <h3>责任边界及免责声明</h3>
         </div>
         <ol className="disclaimer-list">
