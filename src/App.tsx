@@ -3943,7 +3943,18 @@ function App() {
       .sort((a, b) => riskRank(b.risk.level) - riskRank(a.risk.level))
       .slice(0, 3)
     const level: RiskLevel = stats.high > 0 ? '高' : stats.medium > 0 ? '中' : '低'
-    const missingDataClients = clients.filter((client) => validateClientForReport(client).length > 0).length
+    const missingFieldTotals = new Map<string, number>()
+    let missingDataClients = 0
+    clients.forEach((client) => {
+      const issues = validateClientForReport(client)
+      if (issues.length > 0) missingDataClients += 1
+      issues.forEach((issue) => {
+        missingFieldTotals.set(issue.label, (missingFieldTotals.get(issue.label) || 0) + 1)
+      })
+    })
+    const missingFields = Array.from(missingFieldTotals, ([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'zh-Hans-CN'))
+      .slice(0, 5)
     const conclusion = clients.length === 0
       ? '当前还没有企业档案。建议先由财务录入企业和最近期间数据，再生成老板可读的税务健康结论。'
       : stats.high > 0
@@ -3959,7 +3970,7 @@ function App() {
           reports.length > 0 ? '查看最新报告并确认后续跟进节奏' : '生成第一份税务健康报告',
         ]
 
-    return { level, conclusion, topRisks, actions, missingDataClients }
+    return { level, conclusion, topRisks, actions, missingDataClients, missingFields }
   }, [clientRows, clients, reports.length, stats.high, stats.medium])
   const dashboardLevelRows = useMemo<ChartDatum[]>(() => {
     const clientStats = clients.map((client) => detectRisks(client, managedRules))
@@ -4862,36 +4873,42 @@ function App() {
             {authUser.actor && <span>管理员代入：{authUser.actor.username}</span>}
           </div>
         )}
-        <nav>
-          <button className={page === 'dashboard' ? 'active' : ''} onClick={() => setPage('dashboard')}>
-            <LayoutDashboard /> 首页
-          </button>
-          <button className={page === 'clients' ? 'active' : ''} onClick={() => setPage('clients')}>
-            <Building2 /> 企业档案
-          </button>
-          <button
-            className={page === 'form' ? 'active' : ''}
-            onClick={() => {
-              setEditingClient(blankDraftClient())
-              setPage('form')
-            }}
-          >
-            <Plus /> 数据录入
-          </button>
-          <button className={page === 'result' ? 'active' : ''} onClick={openRiskDetectionPage}>
-            <Gauge /> 风险检测
-          </button>
-          <button className={page === 'reports' || page === 'report' ? 'active' : ''} onClick={() => setPage('reports')}>
-            <FileText /> 报告
-          </button>
-          <button className={page === 'rules' ? 'active' : ''} onClick={() => setPage('rules')}>
-            <Settings2 /> 规则库
-          </button>
-          {canUseAdmin && (
-            <button className={page === 'admin' ? 'active' : ''} onClick={() => setPage('admin')}>
-              <UserCog /> 管理员
+        <nav className="sidebar-nav">
+          <div className="nav-group">
+            <span className="nav-group-label">老板驾驶舱</span>
+            <button className={page === 'dashboard' ? 'active' : ''} onClick={() => setPage('dashboard')}>
+              <LayoutDashboard /> 税务健康总览
             </button>
-          )}
+          </div>
+          <div className="nav-group">
+            <span className="nav-group-label">财务工作区</span>
+            <button className={page === 'clients' ? 'active' : ''} onClick={() => setPage('clients')}>
+              <Building2 /> 企业档案
+            </button>
+            <button
+              className={page === 'form' ? 'active' : ''}
+              onClick={() => {
+                setEditingClient(blankDraftClient())
+                setPage('form')
+              }}
+            >
+              <Plus /> 数据录入
+            </button>
+            <button className={page === 'result' ? 'active' : ''} onClick={openRiskDetectionPage}>
+              <Gauge /> 风险检测
+            </button>
+            <button className={page === 'reports' || page === 'report' ? 'active' : ''} onClick={() => setPage('reports')}>
+              <FileText /> 报告
+            </button>
+            <button className={page === 'rules' ? 'active' : ''} onClick={() => setPage('rules')}>
+              <Settings2 /> 规则库
+            </button>
+            {canUseAdmin && (
+              <button className={page === 'admin' ? 'active' : ''} onClick={() => setPage('admin')}>
+                <UserCog /> 管理员
+              </button>
+            )}
+          </div>
         </nav>
         {authUser?.actor && (
           <button className="ghost-button logout" onClick={stopImpersonation}>
@@ -4955,6 +4972,22 @@ function App() {
                     </article>
                   )) : (
                     <p className="section-helper">当前没有需要老板立即关注的中高风险事项。</p>
+                  )}
+                </div>
+              </div>
+              <div className="boss-panel">
+                <div className="panel-title">
+                  <h3>缺什么资料</h3>
+                  <span>{bossDashboard.missingDataClients} 家待补</span>
+                </div>
+                <div className="boss-gap-list">
+                  {bossDashboard.missingFields.length ? bossDashboard.missingFields.map((item) => (
+                    <article key={item.label}>
+                      <strong>{item.label}</strong>
+                      <span>{item.count} 家企业</span>
+                    </article>
+                  )) : (
+                    <p className="section-helper">当前基础检测资料已补齐，可先归档本次初筛结果。</p>
                   )}
                 </div>
               </div>

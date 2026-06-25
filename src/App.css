@@ -252,6 +252,24 @@ button svg,
   gap: 8px;
 }
 
+.nav-group {
+  display: grid;
+  gap: 6px;
+}
+
+.nav-group + .nav-group {
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(86, 240, 238, 0.14);
+}
+
+.nav-group-label {
+  padding: 0 12px 2px;
+  color: #9cf4f1;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .sidebar nav button,
 .logout {
   border: 0;
@@ -451,7 +469,7 @@ button svg,
 
 .boss-dashboard {
   display: grid;
-  grid-template-columns: minmax(280px, 1.15fr) minmax(260px, 0.9fr) minmax(240px, 0.75fr);
+  grid-template-columns: minmax(280px, 1.2fr) repeat(3, minmax(220px, 0.85fr));
   gap: 16px;
   margin-bottom: 18px;
 }
@@ -499,12 +517,14 @@ button svg,
 }
 
 .boss-risk-list,
+.boss-gap-list,
 .boss-action-list {
   display: grid;
   gap: 10px;
 }
 
-.boss-risk-list article {
+.boss-risk-list article,
+.boss-gap-list article {
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -517,6 +537,20 @@ button svg,
 
 .boss-risk-list strong {
   display: block;
+}
+
+.boss-gap-list strong {
+  color: var(--ink);
+}
+
+.boss-gap-list span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: var(--orange);
+  background: rgba(183, 106, 32, 0.1);
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .boss-risk-list p {
