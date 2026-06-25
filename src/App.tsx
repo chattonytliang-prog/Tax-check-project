@@ -42,6 +42,7 @@ import {
 import { advancedCandidateRuleConfigs, type AdvancedCandidateRuleConfig } from './lib/advancedCandidateRuleConfigs'
 import { reportDocumentId } from './lib/reportDocumentId'
 import { reportFileName } from './lib/reportFileName'
+import { reportReviewAction } from './lib/reportReviewAction'
 import { deepReportRuleTemplates } from './lib/reportRuleTemplates'
 import { reportScopeSummary } from './lib/reportScopeSummary'
 import { publicRiskBasis, publicRiskReason } from './lib/reportTextSanitizer'
@@ -2743,6 +2744,7 @@ function buildStructuredReport(client: Client, risks: RiskResult[], aiReview?: A
           comparisonPeriod: client.comparisonPeriod,
         }),
       },
+      { label: '复核建议', value: reportReviewAction({ totalRisks: risks.length, highRisks, mediumRisks }) },
       { label: '生成时间', value: formatDate() },
       { label: '工作方法', value: '基于企业录入数据、已保存期间快照和系统规则库进行自动检测，并由 AI 仅作表达润色和数据复核提示。' },
       { label: '工作限制', value: '本次检查未替代原始凭证穿行测试、税务机关沟通、专项鉴证或法律意见。' },
