@@ -1568,6 +1568,14 @@ th {
   overflow-wrap: anywhere;
 }
 
+.import-summary-panel .import-summary-warning {
+  color: #ffd6a8;
+}
+
+.import-summary-panel .import-summary-ok {
+  color: #9df4c7;
+}
+
 .import-summary-panel small {
   display: block;
   margin-top: 8px;

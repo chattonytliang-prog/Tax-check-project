@@ -6429,7 +6429,13 @@ function App() {
 
 function ClientForm({ client, clients, onChange }: { client: Client; clients: Client[]; onChange: (client: Client) => void }) {
   const [numberDrafts, setNumberDrafts] = useState<Record<string, string>>({})
-  const [importSummary, setImportSummary] = useState<{ fileName: string; labels: string[]; sourceType: string } | null>(null)
+  const [importSummary, setImportSummary] = useState<{
+    fileName: string
+    labels: string[]
+    sourceType: string
+    missingSaveLabels: string[]
+    missingReportLabels: string[]
+  } | null>(null)
   const patch = <K extends keyof Client>(key: K, value: Client[K]) => {
     onChange(applyAutoDerivedMetrics(client, { ...client, [key]: value }))
   }
@@ -6633,8 +6639,17 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         window.alert('未识别到可填充字段。请确认表头或字段名使用系统字段名、中文字段名，或采用“字段名 / 值”两列格式。')
         return
       }
-      onChange(deriveClientMetrics({ ...client, ...patchData }))
-      setImportSummary({ fileName: file.name, labels: importedLabels, sourceType })
+      const importedClient = deriveClientMetrics({ ...client, ...patchData })
+      const importedSaveMissing = validateClientForSave(importedClient).map((issue) => issue.label).slice(0, 6)
+      const importedReportMissing = validateClientForReport(importedClient).map((issue) => issue.label).slice(0, 6)
+      onChange(importedClient)
+      setImportSummary({
+        fileName: file.name,
+        labels: importedLabels,
+        sourceType,
+        missingSaveLabels: importedSaveMissing,
+        missingReportLabels: importedReportMissing,
+      })
       window.alert(`已从表格预填 ${importedLabels.length} 个字段，保存期间数据前请核对：${importedLabels.slice(0, 12).join('、')}${importedLabels.length > 12 ? '等' : ''}`)
     } catch (error) {
       console.warn('Failed to import client file.', error)
@@ -6868,6 +6883,12 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
               <strong>已识别并预填 {importSummary.labels.length} 个字段</strong>
               <p>{importSummary.sourceType}：{importSummary.fileName}</p>
               <p>字段映射：{importSummary.labels.slice(0, 12).join('、')}{importSummary.labels.length > 12 ? '等' : ''}</p>
+              <p className={importSummary.missingSaveLabels.length ? 'import-summary-warning' : 'import-summary-ok'}>
+                建档必填：{importSummary.missingSaveLabels.length ? `还缺 ${importSummary.missingSaveLabels.join('、')}` : '已补齐'}
+              </p>
+              <p className={importSummary.missingReportLabels.length ? 'import-summary-warning' : 'import-summary-ok'}>
+                检测必填：{importSummary.missingReportLabels.length ? `还缺 ${importSummary.missingReportLabels.join('、')}` : '已补齐'}
+              </p>
               <small>保存期间数据前，请核对预填金额、期间和纳税人类型；当前仅解析本地文件，不连接真实 ERP。</small>
             </div>
           )}
