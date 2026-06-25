@@ -1693,6 +1693,33 @@ th {
   margin-top: 14px;
 }
 
+.import-guide-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.import-guide-strip span,
+.import-guide-strip strong {
+  min-width: 0;
+  max-width: 100%;
+  padding: 7px 10px;
+  border: 1px solid rgba(188, 239, 237, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #bcefed;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.import-guide-strip strong {
+  border-color: rgba(255, 214, 168, 0.32);
+  background: rgba(255, 214, 168, 0.1);
+  color: #ffe7c7;
+}
+
 .import-summary-panel {
   margin-top: 12px;
   padding: 12px 14px;

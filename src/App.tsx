@@ -6996,6 +6996,11 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
               </button>
             )}
           </div>
+          <div className="import-guide-strip" aria-label="导入字段映射说明">
+            <span>支持 Excel、CSV、TSV、JSON 和常见 ERP 导出表</span>
+            <span>可识别中文表头，或“字段名 / 值”两列格式</span>
+            <strong>导入只做预填，保存前仍需人工核对</strong>
+          </div>
           {importSummary && (
             <div className="import-summary-panel">
               <strong>已识别并预填 {importSummary.labels.length} 个字段</strong>
