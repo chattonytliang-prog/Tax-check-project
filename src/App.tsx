@@ -5142,34 +5142,36 @@ function App() {
                   )}
                 </div>
               </div>
-              <div className="boss-panel">
-                <div className="panel-title">
-                  <h3>缺什么资料</h3>
-                  <span>{bossDashboard.missingDataClients} 家待补</span>
+              <div className="boss-side-column">
+                <div className="boss-panel">
+                  <div className="panel-title">
+                    <h3>缺什么资料</h3>
+                    <span>{bossDashboard.missingDataClients} 家待补</span>
+                  </div>
+                  <div className="boss-gap-list">
+                    {bossDashboard.missingFields.length ? bossDashboard.missingFields.map((item) => (
+                      <article key={item.label}>
+                        <div>
+                          <strong>{item.label}</strong>
+                          <p>来源：{item.sources.join('、')}</p>
+                          <p>涉及：{item.examples.join('；')}</p>
+                          <p>影响：{item.blockedRules.length ? item.blockedRules.join('；') : '报告完整性和复核准确度'}</p>
+                        </div>
+                        <span>{item.count} 家企业</span>
+                      </article>
+                    )) : (
+                      <p className="section-helper">当前基础检测资料已补齐，可先归档本次初筛结果。</p>
+                    )}
+                  </div>
                 </div>
-                <div className="boss-gap-list">
-                  {bossDashboard.missingFields.length ? bossDashboard.missingFields.map((item) => (
-                    <article key={item.label}>
-                      <div>
-                        <strong>{item.label}</strong>
-                        <p>来源：{item.sources.join('、')}</p>
-                        <p>涉及：{item.examples.join('；')}</p>
-                        <p>影响：{item.blockedRules.length ? item.blockedRules.join('；') : '报告完整性和复核准确度'}</p>
-                      </div>
-                      <span>{item.count} 家企业</span>
-                    </article>
-                  )) : (
-                    <p className="section-helper">当前基础检测资料已补齐，可先归档本次初筛结果。</p>
-                  )}
+                <div className="boss-panel">
+                  <div className="panel-title">
+                    <h3>下一步动作</h3>
+                  </div>
+                  <ol className="boss-action-list">
+                    {bossDashboard.actions.map((item) => <li key={item}>{item}</li>)}
+                  </ol>
                 </div>
-              </div>
-              <div className="boss-panel">
-                <div className="panel-title">
-                  <h3>下一步动作</h3>
-                </div>
-                <ol className="boss-action-list">
-                  {bossDashboard.actions.map((item) => <li key={item}>{item}</li>)}
-                </ol>
               </div>
             </section>
             <div className="stat-grid">

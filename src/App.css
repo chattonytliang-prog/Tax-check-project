@@ -472,11 +472,12 @@ button svg,
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 16px;
-  padding: 16px 18px;
-  border: 1px solid var(--line);
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(10, 78, 96, 0.14);
   border-radius: 8px;
-  background: var(--surface);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(242, 248, 248, 0.92));
+  box-shadow: 0 8px 24px rgba(6, 37, 48, 0.06);
 }
 
 .boss-period-filter h3 {
@@ -517,51 +518,80 @@ button svg,
 
 .boss-dashboard {
   display: grid;
-  grid-template-columns: minmax(280px, 1.2fr) repeat(3, minmax(220px, 0.85fr));
-  gap: 16px;
+  grid-template-columns: minmax(280px, 0.95fr) minmax(420px, 1.35fr) minmax(300px, 0.9fr);
+  grid-template-rows: auto 1fr;
+  gap: 14px;
   margin-bottom: 18px;
+  align-items: stretch;
 }
 
 .boss-summary,
 .boss-panel {
-  border: 1px solid var(--line);
+  border: 1px solid rgba(13, 94, 112, 0.13);
   border-radius: 8px;
-  background: var(--surface);
-  box-shadow: 0 8px 30px rgba(5, 26, 34, 0.08);
-  backdrop-filter: blur(18px);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 14px 36px rgba(7, 38, 49, 0.08);
 }
 
 .boss-summary {
-  padding: 24px;
+  position: relative;
+  grid-row: 1;
+  align-self: start;
+  overflow: hidden;
+  padding: 24px 24px 22px;
   display: grid;
-  align-content: space-between;
-  gap: 18px;
+  align-content: start;
+  gap: 16px;
+}
+
+.boss-summary::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 5px;
+  background: var(--teal);
 }
 
 .boss-summary span {
   color: var(--muted);
   font-weight: 800;
+  font-size: 14px;
 }
 
 .boss-summary strong {
-  font-size: 42px;
+  font-size: clamp(42px, 4vw, 64px);
   line-height: 1;
+  letter-spacing: 0;
 }
 
 .boss-summary p {
   margin: 0;
   color: var(--ink);
-  line-height: 1.8;
+  line-height: 1.85;
+  max-width: 34em;
 }
 
 .boss-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  margin-top: 10px;
 }
 
 .boss-panel {
-  padding: 18px;
+  padding: 16px;
+}
+
+.boss-dashboard > .boss-panel:nth-of-type(2) {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.boss-side-column {
+  grid-column: 3;
+  display: grid;
+  align-content: start;
+  gap: 14px;
 }
 
 .boss-risk-list,
@@ -576,15 +606,16 @@ button svg,
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  align-items: center;
-  border: 1px solid var(--line);
+  align-items: flex-start;
+  border: 1px solid rgba(13, 94, 112, 0.13);
   border-radius: 8px;
   padding: 12px;
-  background: var(--surface-2);
+  background: #f7fbfb;
 }
 
 .boss-risk-list article {
-  align-items: flex-start;
+  padding: 14px;
+  background: linear-gradient(180deg, #f7fbfb, #eef8f8);
 }
 
 .boss-risk-list article > div {
@@ -593,6 +624,9 @@ button svg,
 
 .boss-risk-list strong {
   display: block;
+  color: #a82a31;
+  font-size: 17px;
+  line-height: 1.35;
 }
 
 .boss-gap-list strong {
@@ -625,6 +659,7 @@ button svg,
   margin: 4px 0 0;
   color: var(--muted);
   font-size: 13px;
+  line-height: 1.55;
 }
 
 .boss-risk-list .boss-risk-evidence {
@@ -636,11 +671,16 @@ button svg,
   margin: 0;
   padding-left: 22px;
   color: var(--ink);
-  line-height: 1.7;
+  line-height: 1.85;
+  font-size: 15px;
 }
 
 .level-high .boss-summary {
-  border-color: rgba(182, 49, 54, 0.26);
+  border-color: rgba(182, 49, 54, 0.28);
+}
+
+.level-high .boss-summary::before {
+  background: linear-gradient(90deg, #b63136, #d78348);
 }
 
 .level-high .boss-summary strong {
@@ -651,8 +691,16 @@ button svg,
   border-color: rgba(183, 106, 32, 0.28);
 }
 
+.level-medium .boss-summary::before {
+  background: linear-gradient(90deg, #b76a20, #d9ad54);
+}
+
 .level-medium .boss-summary strong {
   color: var(--orange);
+}
+
+.level-low .boss-summary::before {
+  background: linear-gradient(90deg, #007c83, #2e9b72);
 }
 
 .level-low .boss-summary strong {
@@ -2898,6 +2946,13 @@ textarea:focus {
 
   .orbit-legend {
     justify-content: flex-start;
+  }
+
+  .boss-summary,
+  .boss-dashboard > .boss-panel:nth-of-type(2),
+  .boss-side-column {
+    grid-column: auto;
+    grid-row: auto;
   }
 }
 
