@@ -47,6 +47,7 @@ import { reportFileName } from './lib/reportFileName'
 import { reportFollowUpCadence } from './lib/reportFollowUpCadence'
 import { reportReviewAction } from './lib/reportReviewAction'
 import { deepReportRuleTemplates } from './lib/reportRuleTemplates'
+import { reportSignOffBlock } from './lib/reportSignOffBlock'
 import { reportScopeSummary } from './lib/reportScopeSummary'
 import { publicRiskBasis, publicRiskReason } from './lib/reportTextSanitizer'
 import {
@@ -327,6 +328,7 @@ type StructuredReport = {
   followUpCadence: string[]
   deliveryChecklist: string[]
   clientAcknowledgement: string[]
+  signOffBlock: Array<{ label: string; value: string }>
   disclaimers: string[]
 }
 
@@ -2787,6 +2789,7 @@ function buildStructuredReport(client: Client, risks: RiskResult[], aiReview?: A
       periodLabel: formatAnalysisPeriod(client),
       dataBasis: client.dataBasis,
     }),
+    signOffBlock: reportSignOffBlock(),
     disclaimers: [
       '本报告基于企业提供资料、系统录入数据及规则库进行风险提示，不构成税务机关认定、税务鉴证结论或法律意见。',
       'AI 仅用于数据复核提示和报告表达润色，不得新增、删除或覆盖规则引擎已经命中的风险结论。',
@@ -2854,11 +2857,14 @@ ${report.deliveryChecklist.map((item, index) => `${index + 1}. ${item}`).join('\
 十、客户确认事项
 ${report.clientAcknowledgement.map((item, index) => `${index + 1}. ${item}`).join('\n')}
 
-十一、资料缺口及建议补充资料
+十一、报告签收栏
+${report.signOffBlock.map((item) => `${item.label}：${item.value}`).join('\n')}
+
+十二、资料缺口及建议补充资料
 缺失字段：${report.dataQuality.missingFields.length ? report.dataQuality.missingFields.join('、') : '无'}
 建议补充资料：${report.dataQuality.suggestedMaterials.length ? report.dataQuality.suggestedMaterials.join('、') : '暂无'}
 
-十二、责任边界及免责声明
+十三、责任边界及免责声明
 ${report.disclaimers.map((item, index) => `${index + 1}. ${item}`).join('\n')}`
 }
 
@@ -3122,7 +3128,12 @@ function structuredReportHtml(report: StructuredReport) {
     </section>
 
     <section>
-      <h2>十一、责任边界及免责声明</h2>
+      <h2>十一、报告签收栏</h2>
+      <table class="fact-table">${exportRows(report.signOffBlock)}</table>
+    </section>
+
+    <section>
+      <h2>十二、责任边界及免责声明</h2>
       ${exportList(report.disclaimers, '无。', true)}
     </section>
   `
@@ -7133,6 +7144,18 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
       <section className="report-section">
         <div className="report-section-title">
           <span>10</span>
+          <h3>报告签收栏</h3>
+        </div>
+        <div className="report-scope-list">
+          {report.signOffBlock.map((item) => (
+            <p key={item.label}><strong>{item.label}：</strong>{item.value}</p>
+          ))}
+        </div>
+      </section>
+
+      <section className="report-section">
+        <div className="report-section-title">
+          <span>11</span>
           <h3>责任边界及免责声明</h3>
         </div>
         <ol className="disclaimer-list">
