@@ -5138,6 +5138,24 @@ function App() {
                 </button>
               </div>
             </section>
+            <section className="boss-period-brief" aria-label="本次检查口径">
+              <div>
+                <span>检查范围</span>
+                <strong>{bossPeriodLabel}</strong>
+              </div>
+              <div>
+                <span>可分析企业</span>
+                <strong>{bossStats.analysable} 家</strong>
+              </div>
+              <div>
+                <span>资料缺口</span>
+                <strong>{bossStats.missingPeriodClients + bossDashboard.missingDataClients} 家待补</strong>
+              </div>
+              <div>
+                <span>风险命中</span>
+                <strong>{bossStats.detections} 项</strong>
+              </div>
+            </section>
             <div className="analytics-grid executive-analytics">
               <EChartPanel
                 title="企业风险等级分布"
