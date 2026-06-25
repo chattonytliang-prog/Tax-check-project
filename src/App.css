@@ -449,6 +449,109 @@ button svg,
   justify-content: center;
 }
 
+.boss-dashboard {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.15fr) minmax(260px, 0.9fr) minmax(240px, 0.75fr);
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.boss-summary,
+.boss-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 8px 30px rgba(5, 26, 34, 0.08);
+  backdrop-filter: blur(18px);
+}
+
+.boss-summary {
+  padding: 24px;
+  display: grid;
+  align-content: space-between;
+  gap: 18px;
+}
+
+.boss-summary span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.boss-summary strong {
+  font-size: 42px;
+  line-height: 1;
+}
+
+.boss-summary p {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.8;
+}
+
+.boss-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.boss-panel {
+  padding: 18px;
+}
+
+.boss-risk-list,
+.boss-action-list {
+  display: grid;
+  gap: 10px;
+}
+
+.boss-risk-list article {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface-2);
+}
+
+.boss-risk-list strong {
+  display: block;
+}
+
+.boss-risk-list p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.boss-action-list {
+  margin: 0;
+  padding-left: 22px;
+  color: var(--ink);
+  line-height: 1.7;
+}
+
+.level-high .boss-summary {
+  border-color: rgba(182, 49, 54, 0.26);
+}
+
+.level-high .boss-summary strong {
+  color: var(--red);
+}
+
+.level-medium .boss-summary {
+  border-color: rgba(183, 106, 32, 0.28);
+}
+
+.level-medium .boss-summary strong {
+  color: var(--orange);
+}
+
+.level-low .boss-summary strong {
+  color: var(--teal);
+}
+
 .stat-grid,
 .result-summary {
   display: grid;
@@ -2576,6 +2679,7 @@ textarea:focus {
   .readiness-panel,
   .intake-overview,
   .intake-requirement-panel,
+  .boss-dashboard,
   .analytics-grid,
   .group-summary-grid,
   .report-editor {
@@ -2669,6 +2773,7 @@ textarea:focus {
 
   .stat-grid,
   .result-summary,
+  .boss-dashboard,
   .form-grid,
   .rule-filter-grid,
   .check-grid,

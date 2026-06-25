@@ -3937,6 +3937,30 @@ function App() {
       groups: buildGroupSummaries(clients, managedRules).length,
     }
   }, [clients, managedRules])
+  const bossDashboard = useMemo(() => {
+    const allRisks = clientRows.flatMap(({ client, risks }) => risks.map((risk) => ({ client, risk })))
+    const topRisks = allRisks
+      .sort((a, b) => riskRank(b.risk.level) - riskRank(a.risk.level))
+      .slice(0, 3)
+    const level: RiskLevel = stats.high > 0 ? '高' : stats.medium > 0 ? '中' : '低'
+    const missingDataClients = clients.filter((client) => validateClientForReport(client).length > 0).length
+    const conclusion = clients.length === 0
+      ? '当前还没有企业档案。建议先由财务录入企业和最近期间数据，再生成老板可读的税务健康结论。'
+      : stats.high > 0
+        ? `当前有 ${stats.high} 家企业处于高风险状态，建议老板先安排财务负责人和税务顾问处理重点事项。`
+        : stats.medium > 0
+          ? `当前有 ${stats.medium} 家企业存在中风险提示，建议先补齐资料并安排顾问复核。`
+          : '当前未发现高/中风险企业，可先归档本次初筛结果，并在下一期数据更新后复查。'
+    const actions = clients.length === 0
+      ? ['安排财务录入第一家企业档案', '载入测试案例查看完整流程', '生成一份老板版报告样例']
+      : [
+          missingDataClients > 0 ? `安排财务补齐 ${missingDataClients} 家企业的关键资料` : '要求财务保留本次检查底稿',
+          topRisks.length > 0 ? `优先复核 ${topRisks.length} 个重点风险事项` : '将低风险初筛结果归档',
+          reports.length > 0 ? '查看最新报告并确认后续跟进节奏' : '生成第一份税务健康报告',
+        ]
+
+    return { level, conclusion, topRisks, actions, missingDataClients }
+  }, [clientRows, clients, reports.length, stats.high, stats.medium])
   const dashboardLevelRows = useMemo<ChartDatum[]>(() => {
     const clientStats = clients.map((client) => detectRisks(client, managedRules))
     return [
@@ -4884,19 +4908,65 @@ function App() {
           <section className="page">
             <header className="page-header">
               <div>
-                <p className="eyebrow">今日工作台</p>
-                <h2>税务风险体检总览</h2>
+                <p className="eyebrow">老板驾驶舱</p>
+                <h2>税务健康总览</h2>
               </div>
-              <button
-                className="primary-button"
-                onClick={() => {
-                  setEditingClient(blankDraftClient())
-                  setPage('form')
-                }}
-              >
-                <Plus /> 录入期间数据
-              </button>
+              <div className="header-actions">
+                <button className="secondary-button" onClick={() => setPage('reports')}>
+                  <FileText /> 查看报告
+                </button>
+                <button
+                  className="primary-button"
+                  onClick={() => {
+                    setEditingClient(blankDraftClient())
+                    setPage('form')
+                  }}
+                >
+                  <Plus /> 交给财务录入
+                </button>
+              </div>
             </header>
+            <section className={`boss-dashboard level-${bossDashboard.level === '高' ? 'high' : bossDashboard.level === '中' ? 'medium' : 'low'}`}>
+              <div className="boss-summary">
+                <span>当前税务健康等级</span>
+                <strong>{plainRiskLevel(bossDashboard.level)}风险</strong>
+                <p>{bossDashboard.conclusion}</p>
+                <div className="boss-actions">
+                  <button className="primary-button" onClick={() => setPage(reports.length ? 'reports' : 'result')}>
+                    <FileText /> {reports.length ? '查看老板报告' : '生成健康报告'}
+                  </button>
+                  <button className="secondary-button" onClick={() => setPage('clients')}>
+                    <Building2 /> 进入财务工作区
+                  </button>
+                </div>
+              </div>
+              <div className="boss-panel">
+                <div className="panel-title">
+                  <h3>老板优先看</h3>
+                </div>
+                <div className="boss-risk-list">
+                  {bossDashboard.topRisks.length ? bossDashboard.topRisks.map(({ client, risk }) => (
+                    <article key={`${client.id}-${risk.code}`}>
+                      <div>
+                        <strong>{riskDisplayTitle(risk)}</strong>
+                        <p>{client.name} / {risk.taxType}</p>
+                      </div>
+                      <LevelBadge level={risk.level} />
+                    </article>
+                  )) : (
+                    <p className="section-helper">当前没有需要老板立即关注的中高风险事项。</p>
+                  )}
+                </div>
+              </div>
+              <div className="boss-panel">
+                <div className="panel-title">
+                  <h3>下一步动作</h3>
+                </div>
+                <ol className="boss-action-list">
+                  {bossDashboard.actions.map((item) => <li key={item}>{item}</li>)}
+                </ol>
+              </div>
+            </section>
             <div className="stat-grid">
               <StatCard label="企业档案" value={clients.length} icon={<Building2 />} />
               <StatCard label="集团项目" value={stats.groups} icon={<ClipboardList />} tone="green" />
