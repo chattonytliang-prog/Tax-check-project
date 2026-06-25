@@ -3471,6 +3471,13 @@ type ChartDatum = {
   value: number
 }
 
+function compactChartRows(rows: ChartDatum[], visibleCount: number): ChartDatum[] {
+  if (rows.length <= visibleCount) return rows
+  const visibleRows = rows.slice(0, visibleCount)
+  const otherValue = rows.slice(visibleCount).reduce((total, row) => total + row.value, 0)
+  return otherValue > 0 ? [...visibleRows, { name: '其他', value: otherValue }] : visibleRows
+}
+
 function EChartPanel({
   title,
   subtitle,
@@ -4091,6 +4098,7 @@ function App() {
     const rows = Array.from(totals, ([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
     return rows.length ? rows : [{ name: '暂无风险事项', value: 0 }]
   }, [clients, managedRules])
+  const dashboardTaxDisplayRows = useMemo(() => compactChartRows(dashboardTaxRows, 5), [dashboardTaxRows])
   const dashboardLevelOption = useMemo<EChartsOption>(() => ({
     color: ['#8f3d42', '#b88a46', '#2b8a78'],
     tooltip: { trigger: 'item' },
@@ -4109,10 +4117,10 @@ function App() {
     color: ['#1689a6'],
     tooltip: { trigger: 'axis' },
     grid: { left: 24, right: 16, top: 18, bottom: 32, containLabel: true },
-    xAxis: { type: 'category', data: dashboardTaxRows.map((row) => row.name), axisLabel: { color: '#637781' } },
+    xAxis: { type: 'category', data: dashboardTaxDisplayRows.map((row) => row.name), axisLabel: { color: '#637781' } },
     yAxis: { type: 'value', minInterval: 1, axisLabel: { color: '#637781' }, splitLine: { lineStyle: { color: 'rgba(31, 71, 82, 0.12)' } } },
-    series: [{ type: 'bar', data: dashboardTaxRows.map((row) => row.value), barMaxWidth: 34, itemStyle: { borderRadius: [6, 6, 0, 0], color: '#1689a6' } }],
-  }), [dashboardTaxRows])
+    series: [{ type: 'bar', data: dashboardTaxDisplayRows.map((row) => row.value), barMaxWidth: 34, itemStyle: { borderRadius: [6, 6, 0, 0], color: '#1689a6' } }],
+  }), [dashboardTaxDisplayRows])
   const currentRiskLevelRows = useMemo<ChartDatum[]>(() => [
     { name: '高风险', value: currentRisks.filter((risk) => risk.level === '高').length },
     { name: '中风险', value: currentRisks.filter((risk) => risk.level === '中').length },
@@ -5119,7 +5127,7 @@ function App() {
                 title="税种风险命中分布"
                 subtitle="汇总所有企业当前命中的风险事项"
                 option={dashboardTaxOption}
-                rows={dashboardTaxRows}
+                rows={dashboardTaxDisplayRows}
               />
               <RiskOrbit
                 high={stats.high}
