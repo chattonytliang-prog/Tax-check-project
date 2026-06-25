@@ -2321,6 +2321,22 @@ const clientFieldLabels = Object.entries(importFieldAliases).reduce<Record<strin
   return labels
 }, {})
 
+type ImportMappingPreview = {
+  source: string
+  field: keyof Client
+  label: string
+}
+
+type ParsedClientImport = {
+  patch: Partial<Client>
+  mappings: ImportMappingPreview[]
+  unmappedHeaders: string[]
+}
+
+function emptyParsedClientImport(): ParsedClientImport {
+  return { patch: {}, mappings: [], unmappedHeaders: [] }
+}
+
 function normalizeImportKey(key: string) {
   return key.replace(/[：:\s（）()_/-]/g, '').trim()
 }
@@ -2342,42 +2358,78 @@ function parseDelimitedRows(text: string) {
     .map((line) => line.split(/,|\t/).map((cell) => cell.trim()))
 }
 
-function parseClientImportRows(rows: string[][]) {
+function parseClientImportRows(rows: string[][]): ParsedClientImport {
   const patch: Partial<Client> = {}
-  if (!rows.length) return patch
+  const mappings: ImportMappingPreview[] = []
+  const unmappedHeaders: string[] = []
+  if (!rows.length) return emptyParsedClientImport()
+
+  const mapValue = (source: string, value: string) => {
+    const normalizedSource = source.trim()
+    if (!normalizedSource) return
+    const field = resolveImportField(normalizedSource)
+    if (field) {
+      patch[field] = value as never
+      mappings.push({ source: normalizedSource, field, label: fieldLabel(String(field)) })
+    } else {
+      unmappedHeaders.push(normalizedSource)
+    }
+  }
 
   const firstRowLooksLikeHeader = rows[0].length > 2
   if (firstRowLooksLikeHeader && rows[1]) {
     rows[0].forEach((header, index) => {
-      const field = resolveImportField(header)
-      if (field) patch[field] = rows[1][index] as never
+      mapValue(header, rows[1][index])
     })
   } else {
     rows.forEach(([key, value]) => {
-      const field = resolveImportField(key)
-      if (field) patch[field] = value as never
+      mapValue(key, value)
     })
   }
 
-  return patch
+  return {
+    patch,
+    mappings,
+    unmappedHeaders: Array.from(new Set(unmappedHeaders)).slice(0, 12),
+  }
 }
 
-function parseClientImportText(text: string) {
+function parseClientImportObject(raw: Record<string, unknown>): ParsedClientImport {
+  const patch: Partial<Client> = {}
+  const mappings: ImportMappingPreview[] = []
+  const unmappedHeaders: string[] = []
+  Object.entries(raw).forEach(([source, value]) => {
+    const field = resolveImportField(source)
+    if (field) {
+      patch[field] = value as never
+      mappings.push({ source, field, label: fieldLabel(String(field)) })
+    } else {
+      unmappedHeaders.push(source)
+    }
+  })
+  return {
+    patch,
+    mappings,
+    unmappedHeaders: Array.from(new Set(unmappedHeaders)).slice(0, 12),
+  }
+}
+
+function parseClientImportText(text: string): ParsedClientImport {
   const trimmed = text.trim()
-  if (!trimmed) return {}
-  if (trimmed.startsWith('{')) return JSON.parse(trimmed) as Partial<Client>
+  if (!trimmed) return emptyParsedClientImport()
+  if (trimmed.startsWith('{')) return parseClientImportObject(JSON.parse(trimmed) as Record<string, unknown>)
 
   return parseClientImportRows(parseDelimitedRows(trimmed))
 }
 
-async function parseClientImportWorkbook(buffer: ArrayBuffer) {
+async function parseClientImportWorkbook(buffer: ArrayBuffer): Promise<ParsedClientImport> {
   const XLSX = await import('@e965/xlsx')
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
   const sheetName = workbook.SheetNames.find((name) => {
     const sheet = workbook.Sheets[name]
     return sheet && XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false }).length > 0
   })
-  if (!sheetName) return {}
+  if (!sheetName) return emptyParsedClientImport()
 
   const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean | Date | null>>(workbook.Sheets[sheetName], {
     header: 1,
@@ -6547,6 +6599,8 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
   const [importSummary, setImportSummary] = useState<{
     fileName: string
     labels: string[]
+    mappings: ImportMappingPreview[]
+    unmappedHeaders: string[]
     sourceType: string
     missingSaveLabels: string[]
     missingReportLabels: string[]
@@ -6744,10 +6798,10 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
     try {
       const isExcelFile = /\.(xlsx|xls)$/i.test(file.name)
       const sourceType = isExcelFile ? 'Excel/ERP 导出文件' : /\.json$/i.test(file.name) ? 'JSON 数据文件' : 'CSV/TSV/ERP 导出文件'
-      const parsedPatch = isExcelFile
+      const parsedImport = isExcelFile
         ? await parseClientImportWorkbook(await file.arrayBuffer())
         : parseClientImportText(await file.text())
-      const patchData = coerceImportedClientPatch(parsedPatch)
+      const patchData = coerceImportedClientPatch(parsedImport.patch)
       const importedLabels = Object.keys(patchData).map(fieldLabel)
       if (!importedLabels.length) {
         setImportSummary(null)
@@ -6761,6 +6815,8 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
       setImportSummary({
         fileName: file.name,
         labels: importedLabels,
+        mappings: parsedImport.mappings.filter((item) => Object.prototype.hasOwnProperty.call(patchData, item.field)),
+        unmappedHeaders: parsedImport.unmappedHeaders,
         sourceType,
         missingSaveLabels: importedSaveMissing,
         missingReportLabels: importedReportMissing,
@@ -7006,6 +7062,17 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
               <strong>已识别并预填 {importSummary.labels.length} 个字段</strong>
               <p>{importSummary.sourceType}：{importSummary.fileName}</p>
               <p>字段映射：{importSummary.labels.slice(0, 12).join('、')}{importSummary.labels.length > 12 ? '等' : ''}</p>
+              <div className="import-mapping-preview" aria-label="导入字段映射预览">
+                {importSummary.mappings.slice(0, 8).map((item) => (
+                  <span key={`${item.source}-${String(item.field)}`}>{item.source} -&gt; {item.label}</span>
+                ))}
+                {importSummary.mappings.length > 8 && <small>+{importSummary.mappings.length - 8} 个已映射字段</small>}
+              </div>
+              {importSummary.unmappedHeaders.length > 0 && (
+                <p className="import-summary-warning">
+                  未识别表头：{importSummary.unmappedHeaders.join('、')}。这些列未预填，请核对模板字段或改成“字段名 / 值”两列格式。
+                </p>
+              )}
               <div className="import-confirm-strip" aria-label="导入预填确认流程">
                 <span>1. 已解析本地文件</span>
                 <span>2. 已预填表单字段</span>

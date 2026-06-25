@@ -1750,6 +1750,28 @@ th {
   margin-top: 10px;
 }
 
+.import-mapping-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.import-mapping-preview span,
+.import-mapping-preview small {
+  min-width: 0;
+  max-width: 100%;
+  padding: 7px 9px;
+  border: 1px solid rgba(86, 240, 238, 0.18);
+  border-radius: 6px;
+  background: rgba(86, 240, 238, 0.08);
+  color: #d9fffc;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .import-confirm-strip span,
 .import-confirm-strip strong {
   min-width: 0;
