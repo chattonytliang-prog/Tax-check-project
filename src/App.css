@@ -1545,6 +1545,37 @@ th {
   margin-top: 14px;
 }
 
+.import-summary-panel {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(86, 240, 238, 0.2);
+  border-radius: 8px;
+  background: rgba(4, 32, 39, 0.58);
+  color: #d9fffc;
+}
+
+.import-summary-panel strong {
+  display: block;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.import-summary-panel p {
+  margin: 6px 0 0;
+  color: #bcefed;
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.import-summary-panel small {
+  display: block;
+  margin-top: 8px;
+  color: #8fc6c6;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
 .intake-score {
   display: grid;
   gap: 6px;

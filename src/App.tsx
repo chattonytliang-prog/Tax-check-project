@@ -6429,6 +6429,7 @@ function App() {
 
 function ClientForm({ client, clients, onChange }: { client: Client; clients: Client[]; onChange: (client: Client) => void }) {
   const [numberDrafts, setNumberDrafts] = useState<Record<string, string>>({})
+  const [importSummary, setImportSummary] = useState<{ fileName: string; labels: string[]; sourceType: string } | null>(null)
   const patch = <K extends keyof Client>(key: K, value: Client[K]) => {
     onChange(applyAutoDerivedMetrics(client, { ...client, [key]: value }))
   }
@@ -6621,19 +6622,23 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
     if (!file) return
     try {
       const isExcelFile = /\.(xlsx|xls)$/i.test(file.name)
+      const sourceType = isExcelFile ? 'Excel/ERP 导出文件' : /\.json$/i.test(file.name) ? 'JSON 数据文件' : 'CSV/TSV/ERP 导出文件'
       const parsedPatch = isExcelFile
         ? await parseClientImportWorkbook(await file.arrayBuffer())
         : parseClientImportText(await file.text())
       const patchData = coerceImportedClientPatch(parsedPatch)
       const importedLabels = Object.keys(patchData).map(fieldLabel)
       if (!importedLabels.length) {
+        setImportSummary(null)
         window.alert('未识别到可填充字段。请确认表头或字段名使用系统字段名、中文字段名，或采用“字段名 / 值”两列格式。')
         return
       }
       onChange(deriveClientMetrics({ ...client, ...patchData }))
-      window.alert(`已从表格填充 ${importedLabels.length} 个字段：${importedLabels.slice(0, 12).join('、')}${importedLabels.length > 12 ? '等' : ''}`)
+      setImportSummary({ fileName: file.name, labels: importedLabels, sourceType })
+      window.alert(`已从表格预填 ${importedLabels.length} 个字段，保存期间数据前请核对：${importedLabels.slice(0, 12).join('、')}${importedLabels.length > 12 ? '等' : ''}`)
     } catch (error) {
       console.warn('Failed to import client file.', error)
+      setImportSummary(null)
       window.alert('文件解析失败。请使用 JSON、CSV、TSV、XLS 或 XLSX，并使用系统字段名或中文字段名。')
     }
   }
@@ -6858,6 +6863,14 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
               </button>
             )}
           </div>
+          {importSummary && (
+            <div className="import-summary-panel">
+              <strong>已识别并预填 {importSummary.labels.length} 个字段</strong>
+              <p>{importSummary.sourceType}：{importSummary.fileName}</p>
+              <p>字段映射：{importSummary.labels.slice(0, 12).join('、')}{importSummary.labels.length > 12 ? '等' : ''}</p>
+              <small>保存期间数据前，请核对预填金额、期间和纳税人类型；当前仅解析本地文件，不连接真实 ERP。</small>
+            </div>
+          )}
         </div>
         <div className="intake-score">
           <span>{completeness.label}</span>
