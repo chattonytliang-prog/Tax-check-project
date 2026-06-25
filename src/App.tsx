@@ -2619,6 +2619,63 @@ function fieldLabel(field: string) {
   return conditionFields.find((item) => item.value === field)?.label || clientFieldLabels[field] || field
 }
 
+function csvCell(value: string | number) {
+  const text = String(value)
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+}
+
+function downloadClientImportTemplate() {
+  const fields = [
+    'name',
+    'creditCode',
+    'region',
+    'industry',
+    'taxpayerType',
+    'analysisYear',
+    'analysisMonth',
+    'dataBasis',
+    'monthlyRevenue',
+    'monthlyCost',
+    'monthlyProfit',
+    'collectionFlow',
+    'monthlyInvoice',
+    'consecutive12MonthSales',
+    'employees',
+    'socialSecurityCount',
+    'salaryDeclaredCount',
+  ]
+  const sampleRow = [
+    '示例企业（请替换）',
+    '请填写统一社会信用代码',
+    '省市',
+    '行业',
+    '一般纳税人',
+    2024,
+    '2024-03',
+    '管理报表',
+    560000,
+    420000,
+    80000,
+    620000,
+    480000,
+    4200000,
+    35,
+    32,
+    35,
+  ]
+  const csv = [
+    fields.map(fieldLabel).map(csvCell).join(','),
+    sampleRow.map(csvCell).join(','),
+  ].join('\r\n')
+  const blob = new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'HY税务健康检查导入模板.csv'
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 function plainRiskLevel(level: RiskLevel) {
   const rank = riskRank(level)
   if (rank >= 3) return '高'
@@ -6930,6 +6987,9 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
               <FileText /> 上传表格填充
               <input type="file" accept=".json,.csv,.tsv,.txt,.xlsx,.xls" onChange={(event) => void importClientFile(event.target.files?.[0] || null)} />
             </label>
+            <button type="button" className="secondary-button compact-button" onClick={downloadClientImportTemplate}>
+              <Download /> 下载导入模板
+            </button>
             {firstMissingIssue && (
               <button type="button" className="secondary-button compact-button" onClick={() => focusFieldByLabel(firstMissingIssue.label)}>
                 <AlertTriangle /> 补第一个缺失项
