@@ -4010,9 +4010,21 @@ function App() {
       .sort((a, b) => riskRank(b.risk.level) - riskRank(a.risk.level) || a.client.name.localeCompare(b.client.name, 'zh-Hans-CN'))
       .slice(0, 3)
     const level: RiskLevel = bossStats.high > 0 ? '高' : bossStats.medium > 0 ? '中' : '低'
-    const missingFieldTotals = new Map<string, { count: number; examples: string[]; sources: string[] }>()
+    const missingFieldTotals = new Map<string, { count: number; examples: string[]; sources: string[]; blockedRules: string[] }>()
     let missingDataClients = 0
     bossPeriodClientRows.forEach((row) => {
+      const skippedRuleNamesByField = new Map<string, string[]>()
+      if (row.periodComplete) {
+        getSkippedRules(row.analysisClient, managedRules).forEach(({ rule, execution }) => {
+          execution.missingFields.forEach((field) => {
+            const label = fieldLabel(field)
+            const names = skippedRuleNamesByField.get(label) || []
+            const ruleName = `${rule.code} ${rule.name}`
+            if (!names.includes(ruleName) && names.length < 2) names.push(ruleName)
+            skippedRuleNamesByField.set(label, names)
+          })
+        })
+      }
       const issues = row.periodComplete
         ? validateClientForReport(row.client).map((issue) => ({ label: issue.label, source: '企业基础资料字段' }))
         : []
@@ -4020,13 +4032,22 @@ function App() {
       const combinedIssues = [...periodIssues, ...issues]
       if (combinedIssues.length > 0) missingDataClients += 1
       combinedIssues.forEach((issue) => {
-        const current = missingFieldTotals.get(issue.label) || { count: 0, examples: [], sources: [] }
+        const current = missingFieldTotals.get(issue.label) || { count: 0, examples: [], sources: [], blockedRules: [] }
         const example = row.periodComplete
           ? `${row.client.name} / ${bossPeriodLabel}`
           : `${row.client.name} / 缺 ${row.missingMonths.slice(0, 2).join('、')}`
         if (!current.examples.includes(example) && current.examples.length < 2) current.examples.push(example)
         if (!current.sources.includes(issue.source)) current.sources.push(issue.source)
-        missingFieldTotals.set(issue.label, { count: current.count + 1, examples: current.examples, sources: current.sources })
+        const blockedRules = skippedRuleNamesByField.get(issue.label) || (row.periodComplete ? [] : ['当前期间规则检测'])
+        blockedRules.forEach((ruleName) => {
+          if (!current.blockedRules.includes(ruleName) && current.blockedRules.length < 2) current.blockedRules.push(ruleName)
+        })
+        missingFieldTotals.set(issue.label, {
+          count: current.count + 1,
+          examples: current.examples,
+          sources: current.sources,
+          blockedRules: current.blockedRules,
+        })
       })
     })
     const missingFields = Array.from(missingFieldTotals, ([label, value]) => ({ label, ...value }))
@@ -4052,7 +4073,7 @@ function App() {
         ]
 
     return { level, conclusion, topRisks, actions, missingDataClients, missingFields }
-  }, [bossPeriodActive, bossPeriodClientRows, bossPeriodLabel, bossStats.analysable, bossStats.high, bossStats.medium, bossStats.missingPeriodClients, clients.length, reports.length])
+  }, [bossPeriodActive, bossPeriodClientRows, bossPeriodLabel, bossStats.analysable, bossStats.high, bossStats.medium, bossStats.missingPeriodClients, clients.length, managedRules, reports.length])
   const dashboardLevelRows = useMemo<ChartDatum[]>(() => {
     const clientStats = clients.map((client) => detectRisks(client, managedRules))
     return [
@@ -5133,6 +5154,7 @@ function App() {
                         <strong>{item.label}</strong>
                         <p>来源：{item.sources.join('、')}</p>
                         <p>涉及：{item.examples.join('；')}</p>
+                        <p>影响：{item.blockedRules.length ? item.blockedRules.join('；') : '报告完整性和复核准确度'}</p>
                       </div>
                       <span>{item.count} 家企业</span>
                     </article>
