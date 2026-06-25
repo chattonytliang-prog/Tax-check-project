@@ -4934,9 +4934,12 @@ function App() {
                 <h2>企业档案与期间数据</h2>
               </div>
               <div className="header-actions">
-                <button type="button" className="secondary-button" onClick={loadRiskDemoCases}>
-                  <ClipboardList /> 载入测试案例
-                </button>
+                <div className="demo-import-action">
+                  <button type="button" className="secondary-button" onClick={loadRiskDemoCases}>
+                    <ClipboardList /> 载入测试案例
+                  </button>
+                  <small>演示数据，仅用于试算流程验证；同编号测试案例会被更新。</small>
+                </div>
                 <button
                   className="primary-button"
                   onClick={() => {

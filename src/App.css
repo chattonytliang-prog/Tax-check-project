@@ -362,6 +362,19 @@ button svg,
   margin-top: 12px;
 }
 
+.demo-import-action {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  max-width: 300px;
+}
+
+.demo-import-action small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .file-import-button {
   width: fit-content;
   cursor: pointer;
