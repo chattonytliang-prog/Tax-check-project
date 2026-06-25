@@ -596,7 +596,19 @@ button svg,
 }
 
 .boss-gap-list strong {
+  display: block;
   color: var(--ink);
+}
+
+.boss-gap-list div {
+  min-width: 0;
+}
+
+.boss-gap-list p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .boss-gap-list span {

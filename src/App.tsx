@@ -4010,7 +4010,7 @@ function App() {
       .sort((a, b) => riskRank(b.risk.level) - riskRank(a.risk.level) || a.client.name.localeCompare(b.client.name, 'zh-Hans-CN'))
       .slice(0, 3)
     const level: RiskLevel = bossStats.high > 0 ? '高' : bossStats.medium > 0 ? '中' : '低'
-    const missingFieldTotals = new Map<string, number>()
+    const missingFieldTotals = new Map<string, { count: number; examples: string[] }>()
     let missingDataClients = 0
     bossPeriodClientRows.forEach((row) => {
       const issues = row.periodComplete ? validateClientForReport(row.client) : []
@@ -4018,10 +4018,15 @@ function App() {
       const combinedIssues = [...periodIssues, ...issues]
       if (combinedIssues.length > 0) missingDataClients += 1
       combinedIssues.forEach((issue) => {
-        missingFieldTotals.set(issue.label, (missingFieldTotals.get(issue.label) || 0) + 1)
+        const current = missingFieldTotals.get(issue.label) || { count: 0, examples: [] }
+        const example = row.periodComplete
+          ? `${row.client.name} / ${bossPeriodLabel}`
+          : `${row.client.name} / 缺 ${row.missingMonths.slice(0, 2).join('、')}`
+        if (!current.examples.includes(example) && current.examples.length < 2) current.examples.push(example)
+        missingFieldTotals.set(issue.label, { count: current.count + 1, examples: current.examples })
       })
     })
-    const missingFields = Array.from(missingFieldTotals, ([label, count]) => ({ label, count }))
+    const missingFields = Array.from(missingFieldTotals, ([label, value]) => ({ label, ...value }))
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'zh-Hans-CN'))
       .slice(0, 5)
     const conclusion = clients.length === 0
@@ -5121,7 +5126,10 @@ function App() {
                 <div className="boss-gap-list">
                   {bossDashboard.missingFields.length ? bossDashboard.missingFields.map((item) => (
                     <article key={item.label}>
-                      <strong>{item.label}</strong>
+                      <div>
+                        <strong>{item.label}</strong>
+                        <p>涉及：{item.examples.join('；')}</p>
+                      </div>
                       <span>{item.count} 家企业</span>
                     </article>
                   )) : (
