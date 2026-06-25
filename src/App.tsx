@@ -4218,6 +4218,28 @@ function App() {
     selectPeriodMonths(monthsBetween(`${year}-01`, `${year}-12`), `${year}全年`)
   }
 
+  const openBossPeriodReportFlow = () => {
+    if (!bossPeriodActive) {
+      setPage(reports.length ? 'reports' : 'result')
+      return
+    }
+    const rankedRows = bossPeriodClientRows
+      .filter((row) => row.periodComplete)
+      .sort((a, b) => riskRank(b.level) - riskRank(a.level) || b.risks.length - a.risks.length)
+    const targetRow = rankedRows[0]
+    if (!targetRow) {
+      window.alert(`当前老板查看期间「${bossPeriodLabel}」还没有企业具备完整月度归档。请先让财务补齐期间资料。`)
+      return
+    }
+    const entries = bossPeriodMonths
+      .map((month) => targetRow.client.periodEntries.find((entry) => entry.months.length === 1 && entry.months[0] === month))
+      .filter((entry): entry is ClientPeriodEntry => Boolean(entry))
+    setSelectedClientId(targetRow.client.id)
+    setSelectedPeriodEntryIds(entries.map((entry) => entry.id))
+    setRiskDetectionStep('confirm')
+    setPage('result')
+  }
+
   const togglePeriodEntry = (entryId: string) => {
     if (!selectedClient) return
     setSelectedPeriodEntryIds((current) => {
@@ -5057,8 +5079,8 @@ function App() {
                 <strong>{plainRiskLevel(bossDashboard.level)}风险</strong>
                 <p>{bossDashboard.conclusion}</p>
                 <div className="boss-actions">
-                  <button className="primary-button" onClick={() => setPage(reports.length ? 'reports' : 'result')}>
-                    <FileText /> {reports.length ? '查看老板报告' : '生成健康报告'}
+                  <button className="primary-button boss-period-report-action" onClick={openBossPeriodReportFlow}>
+                    <FileText /> {bossPeriodActive ? '生成当前期间报告' : reports.length ? '查看老板报告' : '生成健康报告'}
                   </button>
                   <button className="secondary-button" onClick={() => setPage('clients')}>
                     <Building2 /> 进入财务工作区
