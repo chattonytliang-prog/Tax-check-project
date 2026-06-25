@@ -3725,6 +3725,8 @@ function App() {
   const [ruleDraft, setRuleDraft] = useState<ManagedRule>(emptyManagedRule)
   const [editingRuleCode, setEditingRuleCode] = useState('')
   const [selectedPeriodEntryIds, setSelectedPeriodEntryIds] = useState<string[]>([])
+  const [bossPeriodStart, setBossPeriodStart] = useState('')
+  const [bossPeriodEnd, setBossPeriodEnd] = useState('')
   const [riskDetectionStep, setRiskDetectionStep] = useState<RiskDetectionStep>('client')
   const [reportConfirmOpen, setReportConfirmOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -3937,18 +3939,79 @@ function App() {
       groups: buildGroupSummaries(clients, managedRules).length,
     }
   }, [clients, managedRules])
+  const bossPeriodMonths = useMemo(() => (
+    bossPeriodStart && bossPeriodEnd ? monthsBetween(bossPeriodStart, bossPeriodEnd) : []
+  ), [bossPeriodEnd, bossPeriodStart])
+  const bossPeriodActive = bossPeriodMonths.length > 0
+  const bossPeriodInvalid = Boolean(bossPeriodStart && bossPeriodEnd && !bossPeriodActive)
+  const bossPeriodLabel = bossPeriodActive ? formatMonthRange(bossPeriodMonths) : '全部期间'
+  const bossPeriodClientRows = useMemo(() => {
+    if (!bossPeriodActive) {
+      return clientRows.map((row) => ({ ...row, missingMonths: [] as string[], periodComplete: true }))
+    }
+
+    return clients.map((client) => {
+      const monthlyEntries = bossPeriodMonths
+        .map((month) => client.periodEntries.find((entry) => entry.months.length === 1 && entry.months[0] === month))
+        .filter((entry): entry is ClientPeriodEntry => Boolean(entry))
+      const coveredMonths = new Set(monthlyEntries.flatMap((entry) => entry.months))
+      const missingMonths = bossPeriodMonths.filter((month) => !coveredMonths.has(month))
+      const analysisClient = missingMonths.length
+        ? client
+        : deriveClientMetrics({
+            ...client,
+            ...summarizePeriodEntries(client, monthlyEntries),
+            id: client.id,
+            name: client.name,
+            creditCode: client.creditCode,
+            region: client.region,
+            industry: client.industry,
+            taxpayerType: client.taxpayerType,
+            establishedAt: client.establishedAt,
+            projectScope: client.projectScope,
+            groupName: client.groupName,
+            entityRole: client.entityRole,
+            periodEntries: client.periodEntries,
+          })
+      const risks = missingMonths.length ? [] : detectRisks(analysisClient, managedRules)
+
+      return {
+        client,
+        risks,
+        level: missingMonths.length ? '低' as RiskLevel : getOverallLevel(risks),
+        report: reports.find((report) => report.clientId === client.id),
+        missingMonths,
+        periodComplete: missingMonths.length === 0,
+      }
+    })
+  }, [bossPeriodActive, bossPeriodMonths, clientRows, clients, managedRules, reports])
+  const bossStats = useMemo(() => {
+    const analysableRows = bossPeriodClientRows.filter((row) => row.periodComplete)
+    const riskSets = analysableRows.map((row) => row.risks)
+    return {
+      high: riskSets.filter((risks) => getOverallLevel(risks) === '高').length,
+      medium: riskSets.filter((risks) => getOverallLevel(risks) === '中').length,
+      detections: riskSets.reduce((sum, risks) => sum + risks.length, 0),
+      analysable: analysableRows.length,
+      missingPeriodClients: bossPeriodClientRows.filter((row) => !row.periodComplete).length,
+    }
+  }, [bossPeriodClientRows])
   const bossDashboard = useMemo(() => {
-    const allRisks = clientRows.flatMap(({ client, risks }) => risks.map((risk) => ({ client, risk })))
+    const allRisks = bossPeriodClientRows
+      .filter((row) => row.periodComplete)
+      .flatMap(({ client, risks }) => risks.map((risk) => ({ client, risk })))
     const topRisks = allRisks
       .sort((a, b) => riskRank(b.risk.level) - riskRank(a.risk.level))
       .slice(0, 3)
-    const level: RiskLevel = stats.high > 0 ? '高' : stats.medium > 0 ? '中' : '低'
+    const level: RiskLevel = bossStats.high > 0 ? '高' : bossStats.medium > 0 ? '中' : '低'
     const missingFieldTotals = new Map<string, number>()
     let missingDataClients = 0
-    clients.forEach((client) => {
-      const issues = validateClientForReport(client)
-      if (issues.length > 0) missingDataClients += 1
-      issues.forEach((issue) => {
+    bossPeriodClientRows.forEach((row) => {
+      const issues = row.periodComplete ? validateClientForReport(row.client) : []
+      const periodIssues = row.missingMonths.slice(0, 3).map((month) => ({ label: `${month} 月度归档` }))
+      const combinedIssues = [...periodIssues, ...issues]
+      if (combinedIssues.length > 0) missingDataClients += 1
+      combinedIssues.forEach((issue) => {
         missingFieldTotals.set(issue.label, (missingFieldTotals.get(issue.label) || 0) + 1)
       })
     })
@@ -3957,21 +4020,25 @@ function App() {
       .slice(0, 5)
     const conclusion = clients.length === 0
       ? '当前还没有企业档案。建议先由财务录入企业和最近期间数据，再生成老板可读的税务健康结论。'
-      : stats.high > 0
-        ? `当前有 ${stats.high} 家企业处于高风险状态，建议老板先安排财务负责人和税务顾问处理重点事项。`
-        : stats.medium > 0
-          ? `当前有 ${stats.medium} 家企业存在中风险提示，建议先补齐资料并安排顾问复核。`
-          : '当前未发现高/中风险企业，可先归档本次初筛结果，并在下一期数据更新后复查。'
+      : bossPeriodActive && bossStats.analysable === 0
+        ? `${bossPeriodLabel} 暂无企业具备完整月度归档，建议先让财务补齐指定期间资料。`
+        : bossStats.high > 0
+          ? `${bossPeriodLabel} 有 ${bossStats.high} 家企业处于高风险状态，建议老板先安排财务负责人和税务顾问处理重点事项。`
+          : bossStats.medium > 0
+            ? `${bossPeriodLabel} 有 ${bossStats.medium} 家企业存在中风险提示，建议先补齐资料并安排顾问复核。`
+            : `${bossPeriodLabel} 未发现高/中风险企业，可先归档本次初筛结果，并在下一期数据更新后复查。`
     const actions = clients.length === 0
       ? ['安排财务录入第一家企业档案', '载入测试案例查看完整流程', '生成一份老板版报告样例']
       : [
-          missingDataClients > 0 ? `安排财务补齐 ${missingDataClients} 家企业的关键资料` : '要求财务保留本次检查底稿',
+          bossPeriodActive && bossStats.missingPeriodClients > 0
+            ? `先补齐 ${bossStats.missingPeriodClients} 家企业的指定期间月度归档`
+            : missingDataClients > 0 ? `安排财务补齐 ${missingDataClients} 家企业的关键资料` : '要求财务保留本次检查底稿',
           topRisks.length > 0 ? `优先复核 ${topRisks.length} 个重点风险事项` : '将低风险初筛结果归档',
           reports.length > 0 ? '查看最新报告并确认后续跟进节奏' : '生成第一份税务健康报告',
         ]
 
     return { level, conclusion, topRisks, actions, missingDataClients, missingFields }
-  }, [clientRows, clients, reports.length, stats.high, stats.medium])
+  }, [bossPeriodActive, bossPeriodClientRows, bossPeriodLabel, bossStats.analysable, bossStats.high, bossStats.medium, bossStats.missingPeriodClients, clients.length, reports.length])
   const dashboardLevelRows = useMemo<ChartDatum[]>(() => {
     const clientStats = clients.map((client) => detectRisks(client, managedRules))
     return [
@@ -4943,6 +5010,47 @@ function App() {
                 </button>
               </div>
             </header>
+            <section className="boss-period-filter" aria-label="老板查看期间">
+              <div>
+                <p className="eyebrow">老板查看期间</p>
+                <h3>{bossPeriodLabel}</h3>
+                <p>
+                  {bossPeriodInvalid
+                    ? '结束月份不能早于开始月份，请重新选择。'
+                    : bossPeriodActive
+                      ? `${bossStats.analysable} 家企业期间资料完整，${bossStats.missingPeriodClients} 家缺期间数据。`
+                      : '默认查看全部企业当前数据；也可以指定月份区间，只看该期间健康情况。'}
+                </p>
+              </div>
+              <div className="boss-period-controls">
+                <label>
+                  <span>开始月份</span>
+                  <input type="month" value={bossPeriodStart} onChange={(event) => setBossPeriodStart(event.target.value)} />
+                </label>
+                <label>
+                  <span>结束月份</span>
+                  <input type="month" value={bossPeriodEnd} onChange={(event) => setBossPeriodEnd(event.target.value)} />
+                </label>
+                <button
+                  className="secondary-button"
+                  onClick={() => {
+                    setBossPeriodStart('2024-03')
+                    setBossPeriodEnd('2024-06')
+                  }}
+                >
+                  2024年3-6月
+                </button>
+                <button
+                  className="ghost-button"
+                  onClick={() => {
+                    setBossPeriodStart('')
+                    setBossPeriodEnd('')
+                  }}
+                >
+                  全部期间
+                </button>
+              </div>
+            </section>
             <section className={`boss-dashboard level-${bossDashboard.level === '高' ? 'high' : bossDashboard.level === '中' ? 'medium' : 'low'}`}>
               <div className="boss-summary">
                 <span>当前税务健康等级</span>
