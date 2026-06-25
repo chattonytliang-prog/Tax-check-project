@@ -6941,6 +6941,11 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
               <strong>已识别并预填 {importSummary.labels.length} 个字段</strong>
               <p>{importSummary.sourceType}：{importSummary.fileName}</p>
               <p>字段映射：{importSummary.labels.slice(0, 12).join('、')}{importSummary.labels.length > 12 ? '等' : ''}</p>
+              <div className="import-confirm-strip" aria-label="导入预填确认流程">
+                <span>1. 已解析本地文件</span>
+                <span>2. 已预填表单字段</span>
+                <strong>3. 保存前人工确认</strong>
+              </div>
               <p className={importSummary.missingSaveLabels.length ? 'import-summary-warning' : 'import-summary-ok'}>
                 建档必填：{importSummary.missingSaveLabels.length ? `还缺 ${importSummary.missingSaveLabels.join('、')}` : '已补齐'}
               </p>

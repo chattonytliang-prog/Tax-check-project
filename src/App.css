@@ -1716,6 +1716,32 @@ th {
   overflow-wrap: anywhere;
 }
 
+.import-confirm-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.import-confirm-strip span,
+.import-confirm-strip strong {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(86, 240, 238, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #bcefed;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.import-confirm-strip strong {
+  border-color: rgba(157, 244, 199, 0.32);
+  background: rgba(157, 244, 199, 0.1);
+  color: #d9fffc;
+}
+
 .import-summary-panel .import-summary-warning {
   color: #ffd6a8;
 }
@@ -1730,6 +1756,12 @@ th {
   color: #8fc6c6;
   font-size: 12px;
   line-height: 1.7;
+}
+
+@media (max-width: 640px) {
+  .import-confirm-strip {
+    grid-template-columns: 1fr;
+  }
 }
 
 .intake-score {
