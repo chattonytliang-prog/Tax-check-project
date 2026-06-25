@@ -4010,20 +4010,23 @@ function App() {
       .sort((a, b) => riskRank(b.risk.level) - riskRank(a.risk.level) || a.client.name.localeCompare(b.client.name, 'zh-Hans-CN'))
       .slice(0, 3)
     const level: RiskLevel = bossStats.high > 0 ? '高' : bossStats.medium > 0 ? '中' : '低'
-    const missingFieldTotals = new Map<string, { count: number; examples: string[] }>()
+    const missingFieldTotals = new Map<string, { count: number; examples: string[]; sources: string[] }>()
     let missingDataClients = 0
     bossPeriodClientRows.forEach((row) => {
-      const issues = row.periodComplete ? validateClientForReport(row.client) : []
-      const periodIssues = row.missingMonths.slice(0, 3).map((month) => ({ label: `${month} 月度归档` }))
+      const issues = row.periodComplete
+        ? validateClientForReport(row.client).map((issue) => ({ label: issue.label, source: '企业基础资料字段' }))
+        : []
+      const periodIssues = row.missingMonths.slice(0, 3).map((month) => ({ label: `${month} 月度归档`, source: '期间归档' }))
       const combinedIssues = [...periodIssues, ...issues]
       if (combinedIssues.length > 0) missingDataClients += 1
       combinedIssues.forEach((issue) => {
-        const current = missingFieldTotals.get(issue.label) || { count: 0, examples: [] }
+        const current = missingFieldTotals.get(issue.label) || { count: 0, examples: [], sources: [] }
         const example = row.periodComplete
           ? `${row.client.name} / ${bossPeriodLabel}`
           : `${row.client.name} / 缺 ${row.missingMonths.slice(0, 2).join('、')}`
         if (!current.examples.includes(example) && current.examples.length < 2) current.examples.push(example)
-        missingFieldTotals.set(issue.label, { count: current.count + 1, examples: current.examples })
+        if (!current.sources.includes(issue.source)) current.sources.push(issue.source)
+        missingFieldTotals.set(issue.label, { count: current.count + 1, examples: current.examples, sources: current.sources })
       })
     })
     const missingFields = Array.from(missingFieldTotals, ([label, value]) => ({ label, ...value }))
@@ -5128,6 +5131,7 @@ function App() {
                     <article key={item.label}>
                       <div>
                         <strong>{item.label}</strong>
+                        <p>来源：{item.sources.join('、')}</p>
                         <p>涉及：{item.examples.join('；')}</p>
                       </div>
                       <span>{item.count} 家企业</span>
