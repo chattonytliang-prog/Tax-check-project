@@ -583,6 +583,14 @@ button svg,
   background: var(--surface-2);
 }
 
+.boss-risk-list article {
+  align-items: flex-start;
+}
+
+.boss-risk-list article > div {
+  min-width: 0;
+}
+
 .boss-risk-list strong {
   display: block;
 }
@@ -605,6 +613,11 @@ button svg,
   margin: 4px 0 0;
   color: var(--muted);
   font-size: 13px;
+}
+
+.boss-risk-list .boss-risk-evidence {
+  color: var(--ink);
+  line-height: 1.6;
 }
 
 .boss-action-list {
@@ -2867,6 +2880,7 @@ textarea:focus {
   .stat-grid,
   .result-summary,
   .boss-dashboard,
+  .analytics-grid,
   .form-grid,
   .rule-filter-grid,
   .check-grid,
@@ -2888,6 +2902,12 @@ textarea:focus {
   .chart-panel,
   .three-panel {
     min-height: auto;
+    min-width: 0;
+  }
+
+  .chart-canvas,
+  .risk-orbit {
+    max-width: 100%;
   }
 
   .risk-orbit {

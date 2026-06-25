@@ -3947,7 +3947,7 @@ function App() {
   const bossPeriodLabel = bossPeriodActive ? formatMonthRange(bossPeriodMonths) : '全部期间'
   const bossPeriodClientRows = useMemo(() => {
     if (!bossPeriodActive) {
-      return clientRows.map((row) => ({ ...row, missingMonths: [] as string[], periodComplete: true }))
+      return clientRows.map((row) => ({ ...row, analysisClient: row.client, missingMonths: [] as string[], periodComplete: true }))
     }
 
     return clients.map((client) => {
@@ -3977,6 +3977,7 @@ function App() {
 
       return {
         client,
+        analysisClient,
         risks,
         level: missingMonths.length ? '低' as RiskLevel : getOverallLevel(risks),
         report: reports.find((report) => report.clientId === client.id),
@@ -3999,9 +4000,14 @@ function App() {
   const bossDashboard = useMemo(() => {
     const allRisks = bossPeriodClientRows
       .filter((row) => row.periodComplete)
-      .flatMap(({ client, risks }) => risks.map((risk) => ({ client, risk })))
+      .flatMap(({ client, analysisClient, risks }) => risks.map((risk) => ({
+        client,
+        risk,
+        evidence: risk.reason(analysisClient),
+        material: risk.materials[0] || '对应申报表、发票、合同或银行流水资料',
+      })))
     const topRisks = allRisks
-      .sort((a, b) => riskRank(b.risk.level) - riskRank(a.risk.level))
+      .sort((a, b) => riskRank(b.risk.level) - riskRank(a.risk.level) || a.client.name.localeCompare(b.client.name, 'zh-Hans-CN'))
       .slice(0, 3)
     const level: RiskLevel = bossStats.high > 0 ? '高' : bossStats.medium > 0 ? '中' : '低'
     const missingFieldTotals = new Map<string, number>()
@@ -5092,11 +5098,13 @@ function App() {
                   <h3>老板优先看</h3>
                 </div>
                 <div className="boss-risk-list">
-                  {bossDashboard.topRisks.length ? bossDashboard.topRisks.map(({ client, risk }) => (
+                  {bossDashboard.topRisks.length ? bossDashboard.topRisks.map(({ client, risk, evidence, material }) => (
                     <article key={`${client.id}-${risk.code}`}>
                       <div>
                         <strong>{riskDisplayTitle(risk)}</strong>
                         <p>{client.name} / {risk.taxType}</p>
+                        <p className="boss-risk-evidence">原因：{evidence}</p>
+                        <p className="boss-risk-evidence">资料：{material}</p>
                       </div>
                       <LevelBadge level={risk.level} />
                     </article>
