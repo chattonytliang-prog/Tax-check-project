@@ -4077,9 +4077,9 @@ function App() {
   const dashboardLevelRows = useMemo<ChartDatum[]>(() => {
     const clientStats = clients.map((client) => detectRisks(client, managedRules))
     return [
-      { name: '高风险企业', value: clientStats.filter((risks) => getOverallLevel(risks) === '高').length },
-      { name: '中风险企业', value: clientStats.filter((risks) => getOverallLevel(risks) === '中').length },
-      { name: '低风险企业', value: clientStats.filter((risks) => getOverallLevel(risks) === '低').length },
+      { name: '高风险', value: clientStats.filter((risks) => getOverallLevel(risks) === '高').length },
+      { name: '中风险', value: clientStats.filter((risks) => getOverallLevel(risks) === '中').length },
+      { name: '低风险', value: clientStats.filter((risks) => getOverallLevel(risks) === '低').length },
     ]
   }, [clients, managedRules])
   const dashboardTaxRows = useMemo<ChartDatum[]>(() => {
@@ -4092,7 +4092,7 @@ function App() {
     return rows.length ? rows : [{ name: '暂无风险事项', value: 0 }]
   }, [clients, managedRules])
   const dashboardLevelOption = useMemo<EChartsOption>(() => ({
-    color: ['#b63136', '#b76a20', '#0c8c82'],
+    color: ['#8f3d42', '#b88a46', '#2b8a78'],
     tooltip: { trigger: 'item' },
     series: [
       {
@@ -4100,18 +4100,18 @@ function App() {
         radius: ['42%', '66%'],
         center: ['50%', '52%'],
         avoidLabelOverlap: true,
-        label: { color: '#102027', formatter: '{b}\n{c}' },
+        label: { show: false },
         data: dashboardLevelRows,
       },
     ],
   }), [dashboardLevelRows])
   const dashboardTaxOption = useMemo<EChartsOption>(() => ({
-    color: ['#12aeea'],
+    color: ['#1689a6'],
     tooltip: { trigger: 'axis' },
     grid: { left: 24, right: 16, top: 18, bottom: 32, containLabel: true },
     xAxis: { type: 'category', data: dashboardTaxRows.map((row) => row.name), axisLabel: { color: '#637781' } },
     yAxis: { type: 'value', minInterval: 1, axisLabel: { color: '#637781' }, splitLine: { lineStyle: { color: 'rgba(31, 71, 82, 0.12)' } } },
-    series: [{ type: 'bar', data: dashboardTaxRows.map((row) => row.value), barMaxWidth: 34, itemStyle: { borderRadius: [6, 6, 0, 0] } }],
+    series: [{ type: 'bar', data: dashboardTaxRows.map((row) => row.value), barMaxWidth: 34, itemStyle: { borderRadius: [6, 6, 0, 0], color: '#1689a6' } }],
   }), [dashboardTaxRows])
   const currentRiskLevelRows = useMemo<ChartDatum[]>(() => [
     { name: '高风险', value: currentRisks.filter((risk) => risk.level === '高').length },
@@ -5108,6 +5108,25 @@ function App() {
                 </button>
               </div>
             </section>
+            <div className="analytics-grid executive-analytics">
+              <EChartPanel
+                title="企业风险等级分布"
+                subtitle="按当前规则引擎检测结果统计"
+                option={dashboardLevelOption}
+                rows={dashboardLevelRows}
+              />
+              <EChartPanel
+                title="税种风险命中分布"
+                subtitle="汇总所有企业当前命中的风险事项"
+                option={dashboardTaxOption}
+                rows={dashboardTaxRows}
+              />
+              <RiskOrbit
+                high={stats.high}
+                medium={stats.medium}
+                low={Math.max(clients.length - stats.high - stats.medium, 0)}
+              />
+            </div>
             <section className={`boss-dashboard level-${bossDashboard.level === '高' ? 'high' : bossDashboard.level === '中' ? 'medium' : 'low'}`}>
               <div className="boss-summary">
                 <span>当前税务健康等级</span>
@@ -5179,25 +5198,6 @@ function App() {
               <StatCard label="集团项目" value={stats.groups} icon={<ClipboardList />} tone="green" />
               <StatCard label="命中风险" value={stats.detections} icon={<AlertTriangle />} tone="orange" />
               <StatCard label="高风险企业" value={stats.high} icon={<Gauge />} tone="red" />
-            </div>
-            <div className="analytics-grid">
-              <EChartPanel
-                title="企业风险等级分布"
-                subtitle="按当前规则引擎检测结果统计"
-                option={dashboardLevelOption}
-                rows={dashboardLevelRows}
-              />
-              <EChartPanel
-                title="税种风险命中分布"
-                subtitle="汇总所有企业当前命中的风险事项"
-                option={dashboardTaxOption}
-                rows={dashboardTaxRows}
-              />
-              <RiskOrbit
-                high={stats.high}
-                medium={stats.medium}
-                low={Math.max(clients.length - stats.high - stats.medium, 0)}
-              />
             </div>
             <div className="two-column">
               <section className="panel">

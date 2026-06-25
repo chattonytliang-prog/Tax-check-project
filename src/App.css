@@ -624,7 +624,7 @@ button svg,
 
 .boss-risk-list strong {
   display: block;
-  color: #a82a31;
+  color: #22343b;
   font-size: 17px;
   line-height: 1.35;
 }
@@ -680,11 +680,11 @@ button svg,
 }
 
 .level-high .boss-summary::before {
-  background: linear-gradient(90deg, #b63136, #d78348);
+  background: linear-gradient(90deg, #8f3d42, #c48b5a);
 }
 
 .level-high .boss-summary strong {
-  color: var(--red);
+  color: #8f3d42;
 }
 
 .level-medium .boss-summary {
@@ -692,11 +692,11 @@ button svg,
 }
 
 .level-medium .boss-summary::before {
-  background: linear-gradient(90deg, #b76a20, #d9ad54);
+  background: linear-gradient(90deg, #9b7138, #d2ad62);
 }
 
 .level-medium .boss-summary strong {
-  color: var(--orange);
+  color: #9b7138;
 }
 
 .level-low .boss-summary::before {
@@ -747,14 +747,14 @@ button svg,
 
 .stat-card.red .stat-icon,
 .level-high {
-  color: var(--red);
-  background: rgba(182, 49, 54, 0.1);
+  color: #8f3d42;
+  background: rgba(143, 61, 66, 0.1);
 }
 
 .stat-card.orange .stat-icon,
 .level-medium {
-  color: var(--orange);
-  background: rgba(183, 106, 32, 0.12);
+  color: #9b7138;
+  background: rgba(155, 113, 56, 0.12);
 }
 
 .stat-card.green .stat-icon,
@@ -776,6 +776,37 @@ button svg,
   margin: 16px 0;
 }
 
+.executive-analytics {
+  margin-top: -2px;
+  grid-template-columns: minmax(260px, 0.92fr) minmax(300px, 1fr) minmax(320px, 1.08fr);
+  align-items: stretch;
+}
+
+.executive-analytics .chart-panel,
+.executive-analytics .three-panel {
+  min-height: 360px;
+}
+
+.executive-analytics .three-panel {
+  grid-column: auto;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-content: center;
+  padding: 20px;
+}
+
+.executive-analytics .three-panel p {
+  max-width: none;
+}
+
+.executive-analytics .risk-orbit {
+  height: 190px;
+}
+
+.executive-analytics .orbit-legend {
+  justify-content: flex-start;
+}
+
 .panel,
 .table-panel,
 .form-section,
@@ -795,7 +826,7 @@ button svg,
 
 .chart-panel,
 .three-panel {
-  min-height: 420px;
+  min-height: 360px;
 }
 
 .chart-panel {
@@ -817,7 +848,7 @@ button svg,
 
 .chart-canvas {
   width: 100%;
-  height: clamp(240px, 28vh, 300px);
+  height: clamp(210px, 24vh, 260px);
   min-height: 0;
 }
 
@@ -848,14 +879,14 @@ button svg,
   overflow: hidden;
   color: white;
   background:
-    radial-gradient(circle at 50% 45%, rgba(86, 240, 238, 0.24), transparent 34%),
-    linear-gradient(180deg, #07191f, #041014);
+    radial-gradient(circle at 50% 45%, rgba(86, 240, 238, 0.2), transparent 34%),
+    linear-gradient(180deg, #08232a, #041014);
   border-color: rgba(86, 240, 238, 0.2);
 }
 
 .three-panel h3 {
   margin: 0;
-  font-size: 26px;
+  font-size: 24px;
 }
 
 .three-panel p {
@@ -867,7 +898,7 @@ button svg,
 
 .risk-orbit {
   width: 100%;
-  height: clamp(260px, 32vh, 340px);
+  height: clamp(230px, 28vh, 300px);
   min-height: 0;
 }
 
@@ -899,11 +930,11 @@ button svg,
 }
 
 .legend-high {
-  background: var(--red);
+  background: #8f3d42;
 }
 
 .legend-medium {
-  background: var(--orange);
+  background: #b88a46;
 }
 
 .legend-low {
