@@ -2030,6 +2030,46 @@ th {
   overflow-wrap: anywhere;
 }
 
+.import-evidence-packet {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 214, 168, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 214, 168, 0.06);
+}
+
+.import-evidence-packet > strong {
+  color: #ffe7c7;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.import-evidence-packet > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.import-evidence-packet span {
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid rgba(255, 214, 168, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffe7c7;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.import-evidence-packet small {
+  margin-top: 0;
+  color: #d7b98d;
+}
+
 .import-confirm-strip span,
 .import-confirm-strip strong {
   min-width: 0;

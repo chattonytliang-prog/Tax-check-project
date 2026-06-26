@@ -2757,6 +2757,13 @@ const importManualReviewChecklist = [
   '员工、社保和工资申报人数已确认口径一致',
 ]
 
+const importEvidencePacketItems = [
+  '原始导出文件',
+  '字段映射确认清单',
+  '保存前人工复核记录',
+  '未识别字段处理说明',
+]
+
 const unmappedImportTemplateSuggestions = [
   '企业名称',
   '统一社会信用代码',
@@ -7208,6 +7215,15 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                     <span key={item}>{item}</span>
                   ))}
                 </div>
+              </div>
+              <div className="import-evidence-packet" aria-label="导入留痕资料包">
+                <strong>导入留痕资料包</strong>
+                <div>
+                  {importEvidencePacketItems.map((item) => (
+                    <span key={item}>{item}</span>
+                  ))}
+                </div>
+                <small>建议随本期档案一并留存，便于老板查看资料来源，也便于后续复核字段映射。</small>
               </div>
               {importSummary.unmappedHeaders.length > 0 && (
                 <div>
