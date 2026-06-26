@@ -6613,6 +6613,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
     missingSaveLabels: string[]
     missingReportLabels: string[]
   } | null>(null)
+  const [importReviewConfirmed, setImportReviewConfirmed] = useState(false)
   const patch = <K extends keyof Client>(key: K, value: Client[K]) => {
     onChange(applyAutoDerivedMetrics(client, { ...client, [key]: value }))
   }
@@ -6851,6 +6852,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
       const importedLabels = Object.keys(patchData).map(fieldLabel)
       if (!importedLabels.length) {
         setImportSummary(null)
+        setImportReviewConfirmed(false)
         window.alert('未识别到可填充字段。请确认表头或字段名使用系统字段名、中文字段名，或采用“字段名 / 值”两列格式。')
         return
       }
@@ -6867,10 +6869,12 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         missingSaveLabels: importedSaveMissing,
         missingReportLabels: importedReportMissing,
       })
+      setImportReviewConfirmed(false)
       window.alert(`已从表格预填 ${importedLabels.length} 个字段，保存期间数据前请核对：${importedLabels.slice(0, 12).join('、')}${importedLabels.length > 12 ? '等' : ''}`)
     } catch (error) {
       console.warn('Failed to import client file.', error)
       setImportSummary(null)
+      setImportReviewConfirmed(false)
       window.alert('文件解析失败。请使用 JSON、CSV、TSV、XLS 或 XLSX，并使用系统字段名或中文字段名。')
     }
   }
@@ -7140,6 +7144,14 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                 <span>2. 已预填表单字段</span>
                 <strong>3. 保存前人工确认</strong>
               </div>
+              <label className={importReviewConfirmed ? 'import-review-check confirmed' : 'import-review-check'}>
+                <input
+                  type="checkbox"
+                  checked={importReviewConfirmed}
+                  onChange={(event) => setImportReviewConfirmed(event.target.checked)}
+                />
+                <span>{importReviewConfirmed ? '已确认预填字段和源文件一致' : '保存前请勾选确认已复核预填字段'}</span>
+              </label>
               <p className={importSummary.missingSaveLabels.length ? 'import-summary-warning' : 'import-summary-ok'}>
                 建档必填：{importSummary.missingSaveLabels.length ? `还缺 ${importSummary.missingSaveLabels.join('、')}` : '已补齐'}
               </p>

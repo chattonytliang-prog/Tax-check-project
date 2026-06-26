@@ -1852,6 +1852,41 @@ th {
   color: #d9fffc;
 }
 
+.import-review-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 214, 168, 0.3);
+  border-radius: 6px;
+  background: rgba(255, 214, 168, 0.08);
+  color: #ffe7c7;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.import-review-check input {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  accent-color: #9df4c7;
+}
+
+.import-review-check span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.import-review-check.confirmed {
+  border-color: rgba(157, 244, 199, 0.36);
+  background: rgba(157, 244, 199, 0.1);
+  color: #d9fffc;
+}
+
 .import-summary-panel .import-summary-warning {
   color: #ffd6a8;
 }
