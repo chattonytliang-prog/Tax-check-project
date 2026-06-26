@@ -2776,6 +2776,12 @@ const importDeliveryPacketChecks = [
   '人工确认可留痕',
 ]
 
+const importBossReportHandoffItems = [
+  '资料来源',
+  '检查期间',
+  '复核结论',
+]
+
 const unmappedImportTemplateSuggestions = [
   '企业名称',
   '统一社会信用代码',
@@ -7251,6 +7257,15 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                         <span key={item}>{item}</span>
                       ))}
                     </div>
+                  </div>
+                  <div className="import-boss-handoff" aria-label="导入老板报告引用口径">
+                    <strong>老板报告引用口径</strong>
+                    <div>
+                      {importBossReportHandoffItems.map((item) => (
+                        <span key={item}>{item}</span>
+                      ))}
+                    </div>
+                    <small>建议在老板版摘要中同步说明资料来源、检查期间和复核结论，避免只给风险结果不交代依据。</small>
                   </div>
                 </div>
               </div>
