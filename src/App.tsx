@@ -7107,6 +7107,10 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
             <span>可识别中文表头，或“字段名 / 值”两列格式</span>
             <strong>导入只做预填，保存前仍需人工核对</strong>
           </div>
+          <div className="import-safety-note" aria-label="本地导入安全边界">
+            <ShieldCheck />
+            <span>仅读取本地选择的导出文件，不连接生产 ERP、不写回 ERP、不保存密钥或真实敏感样本。</span>
+          </div>
           <div className="import-field-guide" aria-label="导入模板字段解释">
             {importTemplateFieldGuides.map((item) => (
               <span key={item.label}>
