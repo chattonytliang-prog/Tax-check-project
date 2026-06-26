@@ -2796,6 +2796,13 @@ const importPilotHandoffItems = [
   '交付可验收',
 ]
 
+const importHandoffSequenceItems = [
+  '先留源文件',
+  '再核字段',
+  '后写摘要',
+  '最后交付',
+]
+
 const unmappedImportTemplateSuggestions = [
   '企业名称',
   '统一社会信用代码',
@@ -7298,6 +7305,15 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                       ))}
                     </div>
                     <small>用于把本次导入从财务复核推进到老板摘要和客户验收，避免资料包停留在上传记录。</small>
+                  </div>
+                  <div className="import-handoff-sequence" aria-label="导入资料交付顺序">
+                    <strong>资料交付顺序</strong>
+                    <div>
+                      {importHandoffSequenceItems.map((item) => (
+                        <span key={item}>{item}</span>
+                      ))}
+                    </div>
+                    <small>交付前按顺序走完留存、核对、摘要和交付，方便财务与老板在同一份资料口径上验收。</small>
                   </div>
                 </div>
               </div>
