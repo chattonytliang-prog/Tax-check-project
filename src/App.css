@@ -588,7 +588,8 @@ button svg,
 .boss-period-review-cadence,
 .boss-period-followup-evidence,
 .boss-period-handoff-owner,
-.boss-period-acceptance-materials {
+.boss-period-acceptance-materials,
+.boss-period-deliverable-checklist {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -604,7 +605,8 @@ button svg,
 .boss-period-review-cadence strong,
 .boss-period-followup-evidence strong,
 .boss-period-handoff-owner strong,
-.boss-period-acceptance-materials strong {
+.boss-period-acceptance-materials strong,
+.boss-period-deliverable-checklist strong {
   color: var(--ink);
   font-size: 12px;
 }
@@ -614,7 +616,8 @@ button svg,
 .boss-period-review-cadence span,
 .boss-period-followup-evidence span,
 .boss-period-handoff-owner span,
-.boss-period-acceptance-materials span {
+.boss-period-acceptance-materials span,
+.boss-period-deliverable-checklist span {
   padding: 5px 8px;
   border: 1px solid rgba(23, 128, 98, 0.14);
   border-radius: 6px;
@@ -639,6 +642,10 @@ button svg,
 }
 
 .boss-period-acceptance-materials {
+  margin-top: -10px;
+}
+
+.boss-period-deliverable-checklist {
   margin-top: -10px;
 }
 

@@ -5441,6 +5441,12 @@ function App() {
               <span>签收页</span>
               <span>复核纪要</span>
             </section>
+            <section className="boss-period-deliverable-checklist" aria-label="老板期间报告交付清单">
+              <strong>交付清单</strong>
+              <span>风险摘要</span>
+              <span>问题清单</span>
+              <span>整改计划</span>
+            </section>
             <div className="analytics-grid executive-analytics">
               <EChartPanel
                 title="企业风险等级分布"
