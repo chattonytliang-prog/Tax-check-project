@@ -2789,6 +2789,13 @@ const importClientAcceptanceItems = [
   '报告可引用',
 ]
 
+const importPilotHandoffItems = [
+  '资料已归档',
+  '复核已完成',
+  '摘要可引用',
+  '交付可验收',
+]
+
 const unmappedImportTemplateSuggestions = [
   '企业名称',
   '统一社会信用代码',
@@ -7282,6 +7289,15 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                       ))}
                     </div>
                     <small>交付前按这四项快速确认，确保导入资料能被财务复核、老板看懂，并能进入报告附件口径。</small>
+                  </div>
+                  <div className="import-pilot-handoff" aria-label="导入试点交付确认">
+                    <strong>试点交付确认</strong>
+                    <div>
+                      {importPilotHandoffItems.map((item) => (
+                        <span key={item}>{item}</span>
+                      ))}
+                    </div>
+                    <small>用于把本次导入从财务复核推进到老板摘要和客户验收，避免资料包停留在上传记录。</small>
                   </div>
                 </div>
               </div>
