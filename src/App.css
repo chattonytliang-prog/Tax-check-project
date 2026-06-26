@@ -2359,14 +2359,16 @@ th {
 
 .import-acceptance-usage,
 .import-acceptance-next,
-.import-acceptance-signoff {
+.import-acceptance-signoff,
+.import-acceptance-archive {
   display: grid;
   gap: 6px;
 }
 
 .import-acceptance-usage strong,
 .import-acceptance-next strong,
-.import-acceptance-signoff strong {
+.import-acceptance-signoff strong,
+.import-acceptance-archive strong {
   color: #d9fffc;
   font-size: 11px;
   line-height: 1.4;
@@ -2374,7 +2376,8 @@ th {
 
 .import-acceptance-usage div,
 .import-acceptance-next div,
-.import-acceptance-signoff div {
+.import-acceptance-signoff div,
+.import-acceptance-archive div {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -2382,7 +2385,8 @@ th {
 
 .import-acceptance-usage span,
 .import-acceptance-next span,
-.import-acceptance-signoff span {
+.import-acceptance-signoff span,
+.import-acceptance-archive span {
   min-width: 0;
   padding: 4px 7px;
   border: 1px solid rgba(86, 240, 238, 0.18);

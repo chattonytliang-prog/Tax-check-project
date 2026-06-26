@@ -2833,6 +2833,12 @@ const importAcceptanceSignoffItems = [
   '客户签收',
 ]
 
+const importAcceptanceArchiveItems = [
+  '源文件目录',
+  '验收纪要',
+  '报告附件',
+]
+
 const unmappedImportTemplateSuggestions = [
   '企业名称',
   '统一社会信用代码',
@@ -7405,6 +7411,14 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                       <strong>签收角色</strong>
                       <div>
                         {importAcceptanceSignoffItems.map((item) => (
+                          <span key={item}>{item}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="import-acceptance-archive" aria-label="导入验收归档去向">
+                      <strong>归档去向</strong>
+                      <div>
+                        {importAcceptanceArchiveItems.map((item) => (
                           <span key={item}>{item}</span>
                         ))}
                       </div>
