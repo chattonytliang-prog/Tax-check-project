@@ -1834,6 +1834,56 @@ th {
   line-height: 1.55;
 }
 
+.import-sample-check {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(157, 244, 199, 0.2);
+  border-radius: 8px;
+  background: rgba(157, 244, 199, 0.07);
+  color: #d9fffc;
+}
+
+.import-sample-check > strong {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.import-sample-check > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.import-sample-check span {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(157, 244, 199, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.import-sample-check b,
+.import-sample-check small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.import-sample-check b {
+  color: #e6fff3;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.import-sample-check small {
+  margin-top: 4px;
+  color: #9df4c7;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
 .import-summary-panel {
   margin-top: 12px;
   padding: 12px 14px;
@@ -2053,6 +2103,10 @@ th {
 @media (max-width: 780px) {
   .import-field-groups > div {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .import-sample-check > div {
+    grid-template-columns: 1fr;
   }
 
   .import-review-status {

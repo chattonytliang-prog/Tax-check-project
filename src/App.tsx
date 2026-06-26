@@ -2744,6 +2744,12 @@ const importTemplateFieldGroups = [
   { title: '用工一致性', fields: '员工人数、社保人数、工资申报人数' },
 ]
 
+const importSampleCheckSteps = [
+  { title: '先试一行', detail: '用脱敏样例行导入，确认表头可被识别。' },
+  { title: '核对四类字段', detail: '重点看企业识别、期间快照、金额预填和用工人数。' },
+  { title: '再保存数据', detail: '样例值请替换为已复核数据，保存前完成人工确认。' },
+]
+
 function plainRiskLevel(level: RiskLevel) {
   const rank = riskRank(level)
   if (rank >= 3) return '高'
@@ -7140,6 +7146,17 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                 <span key={group.title}>
                   <b>{group.title}</b>
                   <small>{group.fields}</small>
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="import-sample-check" aria-label="导入样例字段校验提示">
+            <strong>试导入前样例字段校验</strong>
+            <div>
+              {importSampleCheckSteps.map((step) => (
+                <span key={step.title}>
+                  <b>{step.title}</b>
+                  <small>{step.detail}</small>
                 </span>
               ))}
             </div>
