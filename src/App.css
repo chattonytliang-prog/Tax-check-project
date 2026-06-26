@@ -566,6 +566,23 @@ button svg,
   line-height: 1.2;
 }
 
+.boss-period-report-basis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -4px 0 14px;
+}
+
+.boss-period-report-basis span {
+  padding: 6px 9px;
+  border: 1px solid rgba(10, 78, 96, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .boss-dashboard {
   display: grid;
   grid-template-columns: minmax(280px, 0.95fr) minmax(420px, 1.35fr) minmax(300px, 0.9fr);

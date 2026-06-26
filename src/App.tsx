@@ -5400,6 +5400,11 @@ function App() {
                 <strong>{bossStats.detections} 项</strong>
               </div>
             </section>
+            <section className="boss-period-report-basis" aria-label="老板期间报告使用口径">
+              <span>已归档月份</span>
+              <span>连续期间</span>
+              <span>规则结论</span>
+            </section>
             <div className="analytics-grid executive-analytics">
               <EChartPanel
                 title="企业风险等级分布"
