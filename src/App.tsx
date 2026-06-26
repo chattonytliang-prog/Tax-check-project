@@ -551,6 +551,15 @@ const blankClient: Client = {
 
 const blankDraftClient = () => deriveClientMetrics({ ...blankClient, id: crypto.randomUUID() })
 
+function clientFromReport(report: Report): Client {
+  return deriveClientMetrics({
+    ...blankClient,
+    id: report.clientId || report.id,
+    name: report.clientName || '历史报告',
+    periodEntries: [],
+  })
+}
+
 const demoPeriodMonths = monthsBetween('2024-01', '2025-12')
 
 function demoSavedAt(index: number) {
@@ -3972,6 +3981,7 @@ function App() {
   const [page, setPage] = useState<Page>('dashboard')
   const [clients, setClients] = useState<Client[]>(demoClients)
   const [selectedClientId, setSelectedClientId] = useState(demoClients[0].id)
+  const [selectedReportId, setSelectedReportId] = useState('')
   const [editingClient, setEditingClient] = useState<Client>(blankDraftClient())
   const [reports, setReports] = useState<Report[]>([])
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
@@ -4127,6 +4137,7 @@ function App() {
   }, [loggedIn, authUser])
 
   const selectedClient = clients.find((client) => client.id === selectedClientId) || clients[0]
+  const selectedReport = reports.find((report) => report.id === selectedReportId)
   const selectedPeriodEntryIdSet = useMemo(() => new Set(selectedPeriodEntryIds), [selectedPeriodEntryIds])
   const selectedPeriodEntries = useMemo(() => {
     if (!selectedClient) return []
@@ -4162,6 +4173,10 @@ function App() {
   const overallLevel = getOverallLevel(currentRisks)
   const currentCompleteness = selectedDetectionClient ? getDataCompleteness(selectedDetectionClient, currentRisks) : null
   const currentReportIssues = selectedDetectionClient ? validateClientForReport(selectedDetectionClient) : []
+  const reportPageClient = selectedReport
+    ? clients.find((client) => client.id === selectedReport.clientId) || clientFromReport(selectedReport)
+    : selectedClient
+  const reportPageRisks = selectedReport ? selectedReport.risks : currentRisks
 
   const clientRows = useMemo(() => {
     return clients
@@ -4977,6 +4992,7 @@ function App() {
       content: buildProfessionalReportContent(structuredReport),
       structured: structuredReport,
     }
+    setSelectedReportId('')
     setPage('report')
 
     let report = baseReport
@@ -5033,6 +5049,7 @@ function App() {
     }
 
     setReports((current) => [report, ...current])
+    setSelectedReportId(report.id)
 
     try {
       await apiSend<{ report: Report }>('/api/reports', 'POST', report)
@@ -6297,16 +6314,26 @@ function App() {
           </div>
         )}
 
-        {page === 'report' && selectedClient && (
+        {page === 'report' && reportPageClient && (
           <ReportPage
-            report={reports.find((report) => report.clientId === selectedClient.id)}
-            client={selectedClient}
-            risks={currentRisks}
-            onGenerate={() => createReport()}
+            report={selectedReport || reports.find((report) => report.clientId === reportPageClient.id)}
+            client={reportPageClient}
+            risks={reportPageRisks}
+            onGenerate={() => {
+              if (selectedReport && !clients.some((client) => client.id === selectedReport.clientId)) {
+                window.alert('这份历史报告未匹配到当前企业档案，可继续查看或导出；如需重新生成，请先恢复对应企业档案。')
+                return
+              }
+              createReport()
+            }}
             aiStage={aiReportStage}
             onUpdate={(content) =>
               setReports((current) =>
-                current.map((report) => (report.clientId === selectedClient.id ? { ...report, content } : report)),
+                current.map((report) => (
+                  selectedReport
+                    ? (report.id === selectedReport.id ? { ...report, content } : report)
+                    : (report.clientId === reportPageClient.id ? { ...report, content } : report)
+                )),
               )
             }
           />
@@ -6366,6 +6393,7 @@ function App() {
                           {report && (
                             <button
                               onClick={() => {
+                                setSelectedReportId(report.id)
                                 setSelectedClientId(client.id)
                                 setSelectedPeriodEntryIds([])
                                 setPage('report')
@@ -6390,6 +6418,7 @@ function App() {
                   <div className="report-actions">
                     <button
                       onClick={() => {
+                        setSelectedReportId(report.id)
                         setSelectedClientId(report.clientId)
                         setSelectedPeriodEntryIds([])
                         setPage('report')
