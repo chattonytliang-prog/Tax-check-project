@@ -5405,6 +5405,12 @@ function App() {
               <span>连续期间</span>
               <span>规则结论</span>
             </section>
+            <section className="boss-period-delivery-ready" aria-label="老板期间报告交付前确认">
+              <strong>交付前确认</strong>
+              <span>资料完整</span>
+              <span>老板确认</span>
+              <span>客户签收</span>
+            </section>
             <div className="analytics-grid executive-analytics">
               <EChartPanel
                 title="企业风险等级分布"
