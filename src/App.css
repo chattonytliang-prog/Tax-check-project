@@ -2357,6 +2357,36 @@ th {
   overflow-wrap: anywhere;
 }
 
+.import-acceptance-usage {
+  display: grid;
+  gap: 6px;
+}
+
+.import-acceptance-usage strong {
+  color: #d9fffc;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.import-acceptance-usage div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.import-acceptance-usage span {
+  min-width: 0;
+  padding: 4px 7px;
+  border: 1px solid rgba(86, 240, 238, 0.18);
+  border-radius: 6px;
+  background: rgba(86, 240, 238, 0.08);
+  color: #d9fffc;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .import-confirm-strip span,
 .import-confirm-strip strong {
   min-width: 0;

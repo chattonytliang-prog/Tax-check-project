@@ -2815,6 +2815,12 @@ const importAcceptanceSummaryItems = [
   '结论已确认',
 ]
 
+const importAcceptanceMemoUsageItems = [
+  '老板摘要',
+  '客户验收',
+  '档案留存',
+]
+
 const unmappedImportTemplateSuggestions = [
   '企业名称',
   '统一社会信用代码',
@@ -7367,6 +7373,14 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                       ))}
                     </div>
                     <small>交付时可按这三句话复述本次导入状态，让老板和客户快速判断资料包能否进入报告。</small>
+                    <div className="import-acceptance-usage" aria-label="导入验收纪要使用位置">
+                      <strong>纪要使用位置</strong>
+                      <div>
+                        {importAcceptanceMemoUsageItems.map((item) => (
+                          <span key={item}>{item}</span>
+                        ))}
+                      </div>
+                    </div>
                     <button type="button" className="import-acceptance-memo" onClick={copyImportAcceptanceMemo}>
                       <ClipboardList /> 复制导入验收纪要
                     </button>
