@@ -584,7 +584,8 @@ button svg,
 }
 
 .boss-period-delivery-ready,
-.boss-period-archive-targets {
+.boss-period-archive-targets,
+.boss-period-review-cadence {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -596,13 +597,15 @@ button svg,
 }
 
 .boss-period-delivery-ready strong,
-.boss-period-archive-targets strong {
+.boss-period-archive-targets strong,
+.boss-period-review-cadence strong {
   color: var(--ink);
   font-size: 12px;
 }
 
 .boss-period-delivery-ready span,
-.boss-period-archive-targets span {
+.boss-period-archive-targets span,
+.boss-period-review-cadence span {
   padding: 5px 8px;
   border: 1px solid rgba(23, 128, 98, 0.14);
   border-radius: 6px;
@@ -611,6 +614,10 @@ button svg,
 }
 
 .boss-period-archive-targets {
+  margin-top: -10px;
+}
+
+.boss-period-review-cadence {
   margin-top: -10px;
 }
 

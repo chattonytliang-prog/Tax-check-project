@@ -5417,6 +5417,12 @@ function App() {
               <span>验收记录</span>
               <span>复查跟进</span>
             </section>
+            <section className="boss-period-review-cadence" aria-label="老板期间报告复查节奏">
+              <strong>复查节奏</strong>
+              <span>7日内确认</span>
+              <span>30日内复盘</span>
+              <span>下期对照</span>
+            </section>
             <div className="analytics-grid executive-analytics">
               <EChartPanel
                 title="企业风险等级分布"
