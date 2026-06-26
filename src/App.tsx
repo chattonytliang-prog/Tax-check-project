@@ -5429,6 +5429,12 @@ function App() {
               <span>补充资料</span>
               <span>下期截图</span>
             </section>
+            <section className="boss-period-handoff-owner" aria-label="老板期间报告交付责任">
+              <strong>交付责任</strong>
+              <span>负责人确认</span>
+              <span>截止日期</span>
+              <span>复查人</span>
+            </section>
             <div className="analytics-grid executive-analytics">
               <EChartPanel
                 title="企业风险等级分布"
