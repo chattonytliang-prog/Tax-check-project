@@ -1831,6 +1831,31 @@ th {
   color: #ffd6a8;
 }
 
+.import-unmapped-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 214, 168, 0.32);
+  border-radius: 6px;
+  background: rgba(255, 214, 168, 0.1);
+  color: #ffe7c7;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.import-unmapped-copy svg {
+  width: 14px;
+  height: 14px;
+}
+
+.import-unmapped-copy:hover {
+  border-color: rgba(255, 214, 168, 0.55);
+  background: rgba(255, 214, 168, 0.16);
+}
+
 .import-summary-panel .import-summary-ok {
   color: #9df4c7;
 }

@@ -6746,6 +6746,20 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
       window.alert(content)
     }
   }
+  const copyUnmappedImportHeaders = async () => {
+    if (!importSummary?.unmappedHeaders.length) return
+    const content = [
+      `导入文件：${importSummary.fileName}`,
+      `未识别表头：${importSummary.unmappedHeaders.join('、')}`,
+      '处理建议：请核对导入模板字段，或改成“字段名 / 值”两列格式后重新导入。',
+    ].join('\n')
+    try {
+      await navigator.clipboard.writeText(content)
+      window.alert('未识别字段清单已复制。')
+    } catch {
+      window.alert(content)
+    }
+  }
   const renderSectionRequirementSummary = (labels: string[]) => {
     const requiredLabels = labels.filter((label) => {
       const requirement = intakeRequirementLabels[label]
@@ -7085,9 +7099,14 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                 {importSummary.mappings.length > 8 && <small>+{importSummary.mappings.length - 8} 个已映射字段</small>}
               </div>
               {importSummary.unmappedHeaders.length > 0 && (
-                <p className="import-summary-warning">
-                  未识别表头：{importSummary.unmappedHeaders.join('、')}。这些列未预填，请核对模板字段或改成“字段名 / 值”两列格式。
-                </p>
+                <div>
+                  <p className="import-summary-warning">
+                    未识别表头：{importSummary.unmappedHeaders.join('、')}。这些列未预填，请核对模板字段或改成“字段名 / 值”两列格式。
+                  </p>
+                  <button type="button" className="import-unmapped-copy" onClick={copyUnmappedImportHeaders}>
+                    <ClipboardList /> 复制未识别字段
+                  </button>
+                </div>
               )}
               <div className="import-confirm-strip" aria-label="导入预填确认流程">
                 <span>1. 已解析本地文件</span>
