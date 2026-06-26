@@ -1720,6 +1720,42 @@ th {
   color: #ffe7c7;
 }
 
+.import-field-guide {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.import-field-guide span {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(86, 240, 238, 0.16);
+  border-radius: 8px;
+  background: rgba(4, 32, 39, 0.42);
+  color: #bcefed;
+}
+
+.import-field-guide strong,
+.import-field-guide small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.import-field-guide strong {
+  color: #d9fffc;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.import-field-guide small {
+  margin-top: 4px;
+  color: #8fc6c6;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .import-summary-panel {
   margin-top: 12px;
   padding: 12px 14px;
@@ -1808,6 +1844,10 @@ th {
 }
 
 @media (max-width: 640px) {
+  .import-field-guide {
+    grid-template-columns: 1fr;
+  }
+
   .import-confirm-strip {
     grid-template-columns: 1fr;
   }

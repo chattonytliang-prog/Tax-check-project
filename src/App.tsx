@@ -2728,6 +2728,14 @@ function downloadClientImportTemplate() {
   URL.revokeObjectURL(url)
 }
 
+const importTemplateFieldGuides = [
+  { label: '企业名称 / 统一社会信用代码', detail: '用于建立或识别企业档案，导入后仍需人工确认是否为本次检查主体。' },
+  { label: '所属年度 / 所属月份 / 数据来源', detail: '用于形成期间快照，决定后续检测和报告对应哪一段审阅范围。' },
+  { label: '月收入 / 月成本费用 / 月利润', detail: '用于基础经营规模、利润波动和所得税相关风险初筛。' },
+  { label: '收款流水 / 月开票金额', detail: '用于比对收款、收入和开票差异，只做预填提示，不替代账务复核。' },
+  { label: '员工人数 / 社保人数 / 工资申报人数', detail: '用于个税、社保和用工人数一致性初筛。' },
+]
+
 function plainRiskLevel(level: RiskLevel) {
   const rank = riskRank(level)
   if (rank >= 3) return '高'
@@ -7056,6 +7064,14 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
             <span>支持 Excel、CSV、TSV、JSON 和常见 ERP 导出表</span>
             <span>可识别中文表头，或“字段名 / 值”两列格式</span>
             <strong>导入只做预填，保存前仍需人工核对</strong>
+          </div>
+          <div className="import-field-guide" aria-label="导入模板字段解释">
+            {importTemplateFieldGuides.map((item) => (
+              <span key={item.label}>
+                <strong>{item.label}</strong>
+                <small>{item.detail}</small>
+              </span>
+            ))}
           </div>
           {importSummary && (
             <div className="import-summary-panel">
