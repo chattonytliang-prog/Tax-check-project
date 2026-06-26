@@ -5459,6 +5459,12 @@ function App() {
               <span>决策意见</span>
               <span>执行口径</span>
             </section>
+            <section className="boss-period-archive-handoff" aria-label="老板期间报告归档移交">
+              <strong>归档移交</strong>
+              <span>资料包</span>
+              <span>移交人</span>
+              <span>保存位置</span>
+            </section>
             <div className="analytics-grid executive-analytics">
               <EChartPanel
                 title="企业风险等级分布"
