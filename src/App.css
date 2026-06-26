@@ -516,6 +516,25 @@ button svg,
   font: inherit;
 }
 
+.boss-period-mode-cue {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  width: 100%;
+}
+
+.boss-period-mode-cue span {
+  padding: 4px 7px;
+  border: 1px solid rgba(10, 78, 96, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .boss-period-brief {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -3933,6 +3952,10 @@ textarea:focus {
 
   .boss-period-controls {
     justify-content: stretch;
+  }
+
+  .boss-period-mode-cue {
+    justify-content: flex-start;
   }
 
   .boss-period-controls label,

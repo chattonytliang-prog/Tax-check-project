@@ -5375,6 +5375,11 @@ function App() {
                 >
                   全部期间
                 </button>
+                <div className="boss-period-mode-cue" aria-label="老板期间选择口径">
+                  <span>全部期间</span>
+                  <span>手动起止</span>
+                  <span>连续月份</span>
+                </div>
               </div>
             </section>
             <section className="boss-period-brief" aria-label="本次检查口径">
