@@ -2070,6 +2070,43 @@ th {
   color: #d7b98d;
 }
 
+.import-archive-naming {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 214, 168, 0.16);
+}
+
+.import-archive-naming strong {
+  color: #ffe7c7;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.import-archive-naming div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.import-archive-naming span {
+  min-width: 0;
+  padding: 4px 7px;
+  border: 1px solid rgba(255, 214, 168, 0.16);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.08);
+  color: #ffe7c7;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.import-archive-naming small {
+  color: #d7b98d;
+  overflow-wrap: anywhere;
+}
+
 .import-confirm-strip span,
 .import-confirm-strip strong {
   min-width: 0;

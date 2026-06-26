@@ -2764,6 +2764,12 @@ const importEvidencePacketItems = [
   '未识别字段处理说明',
 ]
 
+const importArchiveNamingHints = [
+  '企业简称',
+  '检查期间',
+  '导入批次',
+]
+
 const unmappedImportTemplateSuggestions = [
   '企业名称',
   '统一社会信用代码',
@@ -7224,6 +7230,15 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                   ))}
                 </div>
                 <small>建议随本期档案一并留存，便于老板查看资料来源，也便于后续复核字段映射。</small>
+                <div className="import-archive-naming" aria-label="导入资料归档编号建议">
+                  <strong>归档编号建议</strong>
+                  <div>
+                    {importArchiveNamingHints.map((item) => (
+                      <span key={item}>{item}</span>
+                    ))}
+                  </div>
+                  <small>建议命名为“企业简称-检查期间-导入批次”，方便老板报告和后续复盘快速追溯。</small>
+                </div>
               </div>
               {importSummary.unmappedHeaders.length > 0 && (
                 <div>
