@@ -2827,6 +2827,12 @@ const importAcceptanceNextActionItems = [
   '生成报告',
 ]
 
+const importAcceptanceSignoffItems = [
+  '财务经办',
+  '老板确认',
+  '客户签收',
+]
+
 const unmappedImportTemplateSuggestions = [
   '企业名称',
   '统一社会信用代码',
@@ -7391,6 +7397,14 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                       <strong>验收后动作</strong>
                       <div>
                         {importAcceptanceNextActionItems.map((item) => (
+                          <span key={item}>{item}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="import-acceptance-signoff" aria-label="导入验收签收角色">
+                      <strong>签收角色</strong>
+                      <div>
+                        {importAcceptanceSignoffItems.map((item) => (
                           <span key={item}>{item}</span>
                         ))}
                       </div>
