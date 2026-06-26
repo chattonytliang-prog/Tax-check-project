@@ -5471,6 +5471,12 @@ function App() {
               <span>验收日期</span>
               <span>缺件确认</span>
             </section>
+            <section className="boss-period-archive-review" aria-label="老板期间报告归档复核">
+              <strong>归档复核</strong>
+              <span>复核人</span>
+              <span>复核日期</span>
+              <span>抽查结论</span>
+            </section>
             <div className="analytics-grid executive-analytics">
               <EChartPanel
                 title="企业风险等级分布"

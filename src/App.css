@@ -593,7 +593,8 @@ button svg,
 .boss-period-acceptance-loop,
 .boss-period-decision-record,
 .boss-period-archive-handoff,
-.boss-period-archive-acceptance {
+.boss-period-archive-acceptance,
+.boss-period-archive-review {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -614,7 +615,8 @@ button svg,
 .boss-period-acceptance-loop strong,
 .boss-period-decision-record strong,
 .boss-period-archive-handoff strong,
-.boss-period-archive-acceptance strong {
+.boss-period-archive-acceptance strong,
+.boss-period-archive-review strong {
   color: var(--ink);
   font-size: 12px;
 }
@@ -629,7 +631,8 @@ button svg,
 .boss-period-acceptance-loop span,
 .boss-period-decision-record span,
 .boss-period-archive-handoff span,
-.boss-period-archive-acceptance span {
+.boss-period-archive-acceptance span,
+.boss-period-archive-review span {
   padding: 5px 8px;
   border: 1px solid rgba(23, 128, 98, 0.14);
   border-radius: 6px;
@@ -674,6 +677,10 @@ button svg,
 }
 
 .boss-period-archive-acceptance {
+  margin-top: -10px;
+}
+
+.boss-period-archive-review {
   margin-top: -10px;
 }
 
