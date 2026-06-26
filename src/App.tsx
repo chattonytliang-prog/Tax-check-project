@@ -5465,6 +5465,12 @@ function App() {
               <span>移交人</span>
               <span>保存位置</span>
             </section>
+            <section className="boss-period-archive-acceptance" aria-label="老板期间报告归档验收">
+              <strong>归档验收</strong>
+              <span>验收人</span>
+              <span>验收日期</span>
+              <span>缺件确认</span>
+            </section>
             <div className="analytics-grid executive-analytics">
               <EChartPanel
                 title="企业风险等级分布"
