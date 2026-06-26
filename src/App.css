@@ -1856,7 +1856,8 @@ th {
   color: #ffd6a8;
 }
 
-.import-unmapped-copy {
+.import-unmapped-copy,
+.import-fill-missing {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1871,12 +1872,14 @@ th {
   cursor: pointer;
 }
 
-.import-unmapped-copy svg {
+.import-unmapped-copy svg,
+.import-fill-missing svg {
   width: 14px;
   height: 14px;
 }
 
-.import-unmapped-copy:hover {
+.import-unmapped-copy:hover,
+.import-fill-missing:hover {
   border-color: rgba(255, 214, 168, 0.55);
   background: rgba(255, 214, 168, 0.16);
 }

@@ -6781,6 +6781,9 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
       window.alert(content)
     }
   }
+
+  const firstImportMissingLabel = importSummary?.missingSaveLabels[0] || importSummary?.missingReportLabels[0]
+
   const renderSectionRequirementSummary = (labels: string[]) => {
     const requiredLabels = labels.filter((label) => {
       const requirement = intakeRequirementLabels[label]
@@ -7143,6 +7146,11 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
               <p className={importSummary.missingReportLabels.length ? 'import-summary-warning' : 'import-summary-ok'}>
                 检测必填：{importSummary.missingReportLabels.length ? `还缺 ${importSummary.missingReportLabels.join('、')}` : '已补齐'}
               </p>
+              {firstImportMissingLabel && (
+                <button type="button" className="import-fill-missing" onClick={() => focusFieldByLabel(firstImportMissingLabel)}>
+                  <AlertTriangle /> 跳转补齐首个缺失项
+                </button>
+              )}
               <small>保存期间数据前，请核对预填金额、期间和纳税人类型；当前仅解析本地文件，不连接真实 ERP。</small>
             </div>
           )}
