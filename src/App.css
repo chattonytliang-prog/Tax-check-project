@@ -1971,7 +1971,8 @@ th {
   overflow-wrap: anywhere;
 }
 
-.import-mapping-copy {
+.import-mapping-copy,
+.import-acceptance-memo {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1986,12 +1987,14 @@ th {
   cursor: pointer;
 }
 
-.import-mapping-copy svg {
+.import-mapping-copy svg,
+.import-acceptance-memo svg {
   width: 14px;
   height: 14px;
 }
 
-.import-mapping-copy:hover {
+.import-mapping-copy:hover,
+.import-acceptance-memo:hover {
   border-color: rgba(86, 240, 238, 0.42);
   background: rgba(86, 240, 238, 0.14);
 }

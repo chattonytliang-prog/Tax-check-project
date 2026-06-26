@@ -6872,6 +6872,29 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
       window.alert(content)
     }
   }
+  const copyImportAcceptanceMemo = async () => {
+    if (!importSummary) return
+    const missingTotal = importSummary.missingSaveLabels.length + importSummary.missingReportLabels.length
+    const content = [
+      `导入验收纪要：${importSummary.fileName}`,
+      `资料来源：${importSummary.sourceType}`,
+      `字段映射：已预填 ${importSummary.labels.length} 项，已识别映射 ${importSummary.mappings.length} 项。`,
+      importSummary.unmappedHeaders.length
+        ? `未识别表头：${importSummary.unmappedHeaders.join('、')}，需保留源文件并人工说明。`
+        : '未识别表头：无。',
+      missingTotal
+        ? `资料缺口：仍有 ${missingTotal} 项待补齐，保存或检测前需完成复核。`
+        : '资料缺口：建档和基础检测必填项已补齐。',
+      `人工确认：${importReviewConfirmed ? '已确认预填字段和源文件一致。' : '待确认，保存前需由财务勾选确认。'}`,
+      '交付结论：本次导入仅作为预填和资料留痕，规则引擎结论不被导入记录或 AI 覆盖。',
+    ].join('\n')
+    try {
+      await navigator.clipboard.writeText(content)
+      window.alert('导入验收纪要已复制。')
+    } catch {
+      window.alert(content)
+    }
+  }
 
   const firstImportMissingLabel = importSummary?.missingSaveLabels[0] || importSummary?.missingReportLabels[0]
   const importReviewStatusItems = importSummary ? [
@@ -7344,6 +7367,9 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                       ))}
                     </div>
                     <small>交付时可按这三句话复述本次导入状态，让老板和客户快速判断资料包能否进入报告。</small>
+                    <button type="button" className="import-acceptance-memo" onClick={copyImportAcceptanceMemo}>
+                      <ClipboardList /> 复制导入验收纪要
+                    </button>
                   </div>
                 </div>
               </div>
