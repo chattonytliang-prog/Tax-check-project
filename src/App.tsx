@@ -2803,6 +2803,12 @@ const importHandoffSequenceItems = [
   '最后交付',
 ]
 
+const importReviewOwnershipItems = [
+  '财务复核字段',
+  '老板查看结论',
+  '客户确认留痕',
+]
+
 const unmappedImportTemplateSuggestions = [
   '企业名称',
   '统一社会信用代码',
@@ -7314,6 +7320,15 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                       ))}
                     </div>
                     <small>交付前按顺序走完留存、核对、摘要和交付，方便财务与老板在同一份资料口径上验收。</small>
+                  </div>
+                  <div className="import-review-ownership" aria-label="导入复核责任分工">
+                    <strong>复核责任分工</strong>
+                    <div>
+                      {importReviewOwnershipItems.map((item) => (
+                        <span key={item}>{item}</span>
+                      ))}
+                    </div>
+                    <small>把字段、结论和确认动作拆给对应角色，避免试点交付时只知道资料已上传，却不知道谁已复核。</small>
                   </div>
                 </div>
               </div>
