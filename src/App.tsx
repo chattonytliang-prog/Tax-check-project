@@ -5411,6 +5411,12 @@ function App() {
               <span>老板确认</span>
               <span>客户签收</span>
             </section>
+            <section className="boss-period-archive-targets" aria-label="老板期间报告归档去向">
+              <strong>归档去向</strong>
+              <span>报告附件</span>
+              <span>验收记录</span>
+              <span>复查跟进</span>
+            </section>
             <div className="analytics-grid executive-analytics">
               <EChartPanel
                 title="企业风险等级分布"
