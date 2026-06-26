@@ -6792,6 +6792,12 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
   }
 
   const firstImportMissingLabel = importSummary?.missingSaveLabels[0] || importSummary?.missingReportLabels[0]
+  const importReviewStatusItems = importSummary ? [
+    { label: '字段映射', value: `${importSummary.mappings.length} 项` },
+    { label: '未识别表头', value: importSummary.unmappedHeaders.length ? `${importSummary.unmappedHeaders.length} 项待处理` : '无' },
+    { label: '缺失项', value: importSummary.missingSaveLabels.length + importSummary.missingReportLabels.length ? `${importSummary.missingSaveLabels.length + importSummary.missingReportLabels.length} 项待补齐` : '已补齐' },
+    { label: '人工复核', value: importReviewConfirmed ? '已确认' : '待确认' },
+  ] : []
 
   const renderSectionRequirementSummary = (labels: string[]) => {
     const requiredLabels = labels.filter((label) => {
@@ -7142,6 +7148,14 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
             <div className="import-summary-panel">
               <strong>已识别并预填 {importSummary.labels.length} 个字段</strong>
               <p>{importSummary.sourceType}：{importSummary.fileName}</p>
+              <div className="import-review-status" aria-label="导入复核状态">
+                {importReviewStatusItems.map((item) => (
+                  <span key={item.label}>
+                    <small>{item.label}</small>
+                    <b>{item.value}</b>
+                  </span>
+                ))}
+              </div>
               <p>字段映射：{importSummary.labels.slice(0, 12).join('、')}{importSummary.labels.length > 12 ? '等' : ''}</p>
               <div className="import-mapping-preview" aria-label="导入字段映射预览">
                 {importSummary.mappings.slice(0, 8).map((item) => (
