@@ -5477,6 +5477,12 @@ function App() {
               <span>复核日期</span>
               <span>抽查结论</span>
             </section>
+            <section className="boss-period-pilot-acceptance" aria-label="老板期间报告试点验收">
+              <strong>试点验收</strong>
+              <span>验收结论</span>
+              <span>上线确认</span>
+              <span>交付签收</span>
+            </section>
             <div className="analytics-grid executive-analytics">
               <EChartPanel
                 title="企业风险等级分布"
