@@ -2809,6 +2809,12 @@ const importReviewOwnershipItems = [
   '客户确认留痕',
 ]
 
+const importAcceptanceSummaryItems = [
+  '来源已说明',
+  '字段已核对',
+  '结论已确认',
+]
+
 const unmappedImportTemplateSuggestions = [
   '企业名称',
   '统一社会信用代码',
@@ -7329,6 +7335,15 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                       ))}
                     </div>
                     <small>把字段、结论和确认动作拆给对应角色，避免试点交付时只知道资料已上传，却不知道谁已复核。</small>
+                  </div>
+                  <div className="import-acceptance-summary" aria-label="导入验收摘要口径">
+                    <strong>验收摘要口径</strong>
+                    <div>
+                      {importAcceptanceSummaryItems.map((item) => (
+                        <span key={item}>{item}</span>
+                      ))}
+                    </div>
+                    <small>交付时可按这三句话复述本次导入状态，让老板和客户快速判断资料包能否进入报告。</small>
                   </div>
                 </div>
               </div>
