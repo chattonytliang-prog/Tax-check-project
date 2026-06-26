@@ -5423,6 +5423,12 @@ function App() {
               <span>30日内复盘</span>
               <span>下期对照</span>
             </section>
+            <section className="boss-period-followup-evidence" aria-label="老板期间报告复查留痕">
+              <strong>复查留痕</strong>
+              <span>整改记录</span>
+              <span>补充资料</span>
+              <span>下期截图</span>
+            </section>
             <div className="analytics-grid executive-analytics">
               <EChartPanel
                 title="企业风险等级分布"
