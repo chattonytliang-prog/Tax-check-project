@@ -346,6 +346,51 @@ type Report = {
   aiModel?: string
 }
 
+function reportRiskList(report?: Report): RiskResult[] {
+  return Array.isArray(report?.risks) ? report.risks : []
+}
+
+function reportTextContent(report: Report) {
+  const content = typeof report.content === 'string' ? report.content.trim() : ''
+  if (content) return content
+  return `${report.clientName || '历史报告'}税务风险体检报告
+
+该历史报告缺少正文内容，系统已切换为兼容预览。请重新生成报告以获得完整正式版本。`
+}
+
+function isCompleteStructuredReport(report?: StructuredReport): report is StructuredReport {
+  return Boolean(
+    report
+    && report.version === 'professional-v1'
+    && typeof report.title === 'string'
+    && Array.isArray(report.clientProfile)
+    && Array.isArray(report.scope)
+    && report.executiveSummary
+    && typeof report.executiveSummary.overallLevel === 'string'
+    && typeof report.executiveSummary.totalRisks === 'number'
+    && typeof report.executiveSummary.highRisks === 'number'
+    && typeof report.executiveSummary.mediumRisks === 'number'
+    && typeof report.executiveSummary.lowRisks === 'number'
+    && typeof report.executiveSummary.conclusion === 'string'
+    && report.dataQuality
+    && typeof report.dataQuality.score === 'number'
+    && typeof report.dataQuality.label === 'string'
+    && typeof report.dataQuality.note === 'string'
+    && Array.isArray(report.dataQuality.missingFields)
+    && Array.isArray(report.dataQuality.suggestedMaterials)
+    && Array.isArray(report.taxSummaries)
+    && Array.isArray(report.keyFindings)
+    && Array.isArray(report.detailedFindings)
+    && Array.isArray(report.actionPlan)
+    && Array.isArray(report.expertReviewItems)
+    && Array.isArray(report.followUpCadence)
+    && Array.isArray(report.deliveryChecklist)
+    && Array.isArray(report.clientAcknowledgement)
+    && Array.isArray(report.signOffBlock)
+    && Array.isArray(report.disclaimers)
+  )
+}
+
 type AuthUser = {
   id: string
   username: string
@@ -3397,7 +3442,7 @@ function structuredReportHtml(report: StructuredReport) {
 }
 
 function legacyReportHtml(report: Report) {
-  return `<section><h1>${escapeHtml(report.clientName)}税务风险体检报告</h1><pre>${escapeHtml(sanitizePublicReportContent(report.content))}</pre></section>`
+  return `<section><h1>${escapeHtml(report.clientName || '历史报告')}税务风险体检报告</h1><pre>${escapeHtml(sanitizePublicReportContent(reportTextContent(report)))}</pre></section>`
 }
 
 function reportDocumentFooterHtml(report: Report) {
@@ -3416,7 +3461,7 @@ function reportDocumentFooterHtml(report: Report) {
 }
 
 function professionalReportDocumentHtml(report: Report, mode: 'word' | 'print') {
-  const body = report.structured ? structuredReportHtml(report.structured) : legacyReportHtml(report)
+  const body = isCompleteStructuredReport(report.structured) ? structuredReportHtml(report.structured) : legacyReportHtml(report)
   const printScript = mode === 'print'
     ? '<script>window.addEventListener("load", () => window.setTimeout(() => window.print(), 250));</script>'
     : ''
@@ -3424,7 +3469,7 @@ function professionalReportDocumentHtml(report: Report, mode: 'word' | 'print') 
     <html>
       <head>
         <meta charset="utf-8" />
-        <title>${escapeHtml(report.clientName)}税务风险体检报告</title>
+        <title>${escapeHtml(report.clientName || '历史报告')}税务风险体检报告</title>
         <style>
           @page { size: A4; margin: 18mm 16mm; }
           * { box-sizing: border-box; }
@@ -4176,7 +4221,7 @@ function App() {
   const reportPageClient = selectedReport
     ? clients.find((client) => client.id === selectedReport.clientId) || clientFromReport(selectedReport)
     : selectedClient
-  const reportPageRisks = selectedReport ? selectedReport.risks : currentRisks
+  const reportPageRisks = selectedReport ? reportRiskList(selectedReport) : currentRisks
 
   const clientRows = useMemo(() => {
     return clients
@@ -8222,9 +8267,12 @@ function ReportPage({
   aiStage: 'reviewing' | 'generating' | null
   onUpdate: (content: string) => void
 }) {
-  const structured = report?.structured || buildStructuredReport(client, risks, report?.aiReview)
-  const fallbackContent = report?.content || buildProfessionalReportContent(structured)
-  const draft = sanitizePublicReportContent(fallbackContent || buildReportContent(client, risks))
+  const safeRisks = Array.isArray(risks) ? risks : []
+  const structured = isCompleteStructuredReport(report?.structured)
+    ? report.structured
+    : buildStructuredReport(client, safeRisks, report?.aiReview)
+  const fallbackContent = report ? reportTextContent(report) : buildProfessionalReportContent(structured)
+  const draft = sanitizePublicReportContent(fallbackContent || buildReportContent(client, safeRisks))
   const aiMessage = aiStage === 'reviewing'
     ? 'AI 正在复核数据...'
     : aiStage === 'generating'
@@ -8269,9 +8317,9 @@ function ReportPage({
               id: crypto.randomUUID(),
               clientId: client.id,
               clientName: client.name,
-              riskLevel: getOverallLevel(risks),
+              riskLevel: getOverallLevel(safeRisks),
               createdAt: formatDate(),
-              risks,
+              risks: safeRisks,
               content: draft,
               structured,
             })}
@@ -8285,9 +8333,9 @@ function ReportPage({
               id: crypto.randomUUID(),
               clientId: client.id,
               clientName: client.name,
-              riskLevel: getOverallLevel(risks),
+              riskLevel: getOverallLevel(safeRisks),
               createdAt: formatDate(),
-              risks,
+              risks: safeRisks,
               content: draft,
               structured,
             })}
