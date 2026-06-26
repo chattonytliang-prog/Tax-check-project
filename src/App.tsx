@@ -2770,6 +2770,12 @@ const importArchiveNamingHints = [
   '导入批次',
 ]
 
+const importDeliveryPacketChecks = [
+  '源文件可追溯',
+  '映射口径可复核',
+  '人工确认可留痕',
+]
+
 const unmappedImportTemplateSuggestions = [
   '企业名称',
   '统一社会信用代码',
@@ -7238,6 +7244,14 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                     ))}
                   </div>
                   <small>建议命名为“企业简称-检查期间-导入批次”，方便老板报告和后续复盘快速追溯。</small>
+                  <div className="import-delivery-packet" aria-label="导入交付包完整性">
+                    <strong>交付包完整性</strong>
+                    <div>
+                      {importDeliveryPacketChecks.map((item) => (
+                        <span key={item}>{item}</span>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
               {importSummary.unmappedHeaders.length > 0 && (
