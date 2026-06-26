@@ -2361,7 +2361,8 @@ th {
 .import-acceptance-next,
 .import-acceptance-signoff,
 .import-acceptance-archive,
-.import-acceptance-review {
+.import-acceptance-review,
+.import-acceptance-positioning {
   display: grid;
   gap: 6px;
 }
@@ -2370,7 +2371,8 @@ th {
 .import-acceptance-next strong,
 .import-acceptance-signoff strong,
 .import-acceptance-archive strong,
-.import-acceptance-review strong {
+.import-acceptance-review strong,
+.import-acceptance-positioning strong {
   color: #d9fffc;
   font-size: 11px;
   line-height: 1.4;
@@ -2380,7 +2382,8 @@ th {
 .import-acceptance-next div,
 .import-acceptance-signoff div,
 .import-acceptance-archive div,
-.import-acceptance-review div {
+.import-acceptance-review div,
+.import-acceptance-positioning div {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -2390,7 +2393,8 @@ th {
 .import-acceptance-next span,
 .import-acceptance-signoff span,
 .import-acceptance-archive span,
-.import-acceptance-review span {
+.import-acceptance-review span,
+.import-acceptance-positioning span {
   min-width: 0;
   padding: 4px 7px;
   border: 1px solid rgba(86, 240, 238, 0.18);

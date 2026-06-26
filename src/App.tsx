@@ -2845,6 +2845,12 @@ const importAcceptanceReviewItems = [
   '结论复核',
 ]
 
+const importAcceptancePositioningItems = [
+  '仅作预填',
+  '人工确认',
+  '规则为准',
+]
+
 const unmappedImportTemplateSuggestions = [
   '企业名称',
   '统一社会信用代码',
@@ -7433,6 +7439,14 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                       <strong>复核节点</strong>
                       <div>
                         {importAcceptanceReviewItems.map((item) => (
+                          <span key={item}>{item}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="import-acceptance-positioning" aria-label="导入验收交付口径">
+                      <strong>交付口径</strong>
+                      <div>
+                        {importAcceptancePositioningItems.map((item) => (
                           <span key={item}>{item}</span>
                         ))}
                       </div>
