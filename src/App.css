@@ -2357,24 +2357,28 @@ th {
   overflow-wrap: anywhere;
 }
 
-.import-acceptance-usage {
+.import-acceptance-usage,
+.import-acceptance-next {
   display: grid;
   gap: 6px;
 }
 
-.import-acceptance-usage strong {
+.import-acceptance-usage strong,
+.import-acceptance-next strong {
   color: #d9fffc;
   font-size: 11px;
   line-height: 1.4;
 }
 
-.import-acceptance-usage div {
+.import-acceptance-usage div,
+.import-acceptance-next div {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.import-acceptance-usage span {
+.import-acceptance-usage span,
+.import-acceptance-next span {
   min-width: 0;
   padding: 4px 7px;
   border: 1px solid rgba(86, 240, 238, 0.18);
