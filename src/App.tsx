@@ -5447,6 +5447,12 @@ function App() {
               <span>问题清单</span>
               <span>整改计划</span>
             </section>
+            <section className="boss-period-acceptance-loop" aria-label="老板期间报告验收闭环">
+              <strong>验收闭环</strong>
+              <span>签收状态</span>
+              <span>复核结论</span>
+              <span>归档编号</span>
+            </section>
             <div className="analytics-grid executive-analytics">
               <EChartPanel
                 title="企业风险等级分布"
