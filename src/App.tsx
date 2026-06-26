@@ -2782,6 +2782,13 @@ const importBossReportHandoffItems = [
   '复核结论',
 ]
 
+const importClientAcceptanceItems = [
+  '来源可说明',
+  '字段可复核',
+  '确认人可追溯',
+  '报告可引用',
+]
+
 const unmappedImportTemplateSuggestions = [
   '企业名称',
   '统一社会信用代码',
@@ -7266,6 +7273,15 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                       ))}
                     </div>
                     <small>建议在老板版摘要中同步说明资料来源、检查期间和复核结论，避免只给风险结果不交代依据。</small>
+                  </div>
+                  <div className="import-client-acceptance" aria-label="导入客户验收检查口径">
+                    <strong>客户验收检查口径</strong>
+                    <div>
+                      {importClientAcceptanceItems.map((item) => (
+                        <span key={item}>{item}</span>
+                      ))}
+                    </div>
+                    <small>交付前按这四项快速确认，确保导入资料能被财务复核、老板看懂，并能进入报告附件口径。</small>
                   </div>
                 </div>
               </div>
