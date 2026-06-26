@@ -2839,6 +2839,12 @@ const importAcceptanceArchiveItems = [
   '报告附件',
 ]
 
+const importAcceptanceReviewItems = [
+  '字段复核',
+  '缺口复核',
+  '结论复核',
+]
+
 const unmappedImportTemplateSuggestions = [
   '企业名称',
   '统一社会信用代码',
@@ -7419,6 +7425,14 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                       <strong>归档去向</strong>
                       <div>
                         {importAcceptanceArchiveItems.map((item) => (
+                          <span key={item}>{item}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="import-acceptance-review" aria-label="导入验收复核节点">
+                      <strong>复核节点</strong>
+                      <div>
+                        {importAcceptanceReviewItems.map((item) => (
                           <span key={item}>{item}</span>
                         ))}
                       </div>
