@@ -2736,6 +2736,14 @@ const importTemplateFieldGuides = [
   { label: '员工人数 / 社保人数 / 工资申报人数', detail: '用于个税、社保和用工人数一致性初筛。' },
 ]
 
+const importTemplateFieldGroups = [
+  { title: '建档识别', fields: '企业名称、统一社会信用代码、地区、行业、纳税人类型' },
+  { title: '期间快照', fields: '所属年度、所属月份、数据来源' },
+  { title: '金额预填', fields: '月收入、月成本费用、月利润、连续12个月销售额' },
+  { title: '收付票据', fields: '收款流水、月开票金额' },
+  { title: '用工一致性', fields: '员工人数、社保人数、工资申报人数' },
+]
+
 function plainRiskLevel(level: RiskLevel) {
   const rank = riskRank(level)
   if (rank >= 3) return '高'
@@ -7118,6 +7126,17 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                 <small>{item.detail}</small>
               </span>
             ))}
+          </div>
+          <div className="import-field-groups" aria-label="导入模板字段分组核对">
+            <strong>模板字段分组核对</strong>
+            <div>
+              {importTemplateFieldGroups.map((group) => (
+                <span key={group.title}>
+                  <b>{group.title}</b>
+                  <small>{group.fields}</small>
+                </span>
+              ))}
+            </div>
           </div>
           {importSummary && (
             <div className="import-summary-panel">
