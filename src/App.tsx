@@ -5367,15 +5367,6 @@ function App() {
                   <input type="month" value={bossPeriodEnd} onChange={(event) => setBossPeriodEnd(event.target.value)} />
                 </label>
                 <button
-                  className="secondary-button"
-                  onClick={() => {
-                    setBossPeriodStart('2024-03')
-                    setBossPeriodEnd('2024-06')
-                  }}
-                >
-                  2024年3-6月
-                </button>
-                <button
                   className="ghost-button"
                   onClick={() => {
                     setBossPeriodStart('')
