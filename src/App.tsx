@@ -2750,6 +2750,13 @@ const importSampleCheckSteps = [
   { title: '再保存数据', detail: '样例值请替换为已复核数据，保存前完成人工确认。' },
 ]
 
+const importManualReviewChecklist = [
+  '企业名称、统一社会信用代码与本次检查主体一致',
+  '所属年度、月份和数据来源对应正确期间',
+  '收入、成本、利润、收款和开票金额已和源表核对',
+  '员工、社保和工资申报人数已确认口径一致',
+]
+
 const unmappedImportTemplateSuggestions = [
   '企业名称',
   '统一社会信用代码',
@@ -7194,6 +7201,14 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
               <button type="button" className="import-mapping-copy" onClick={copyImportMappingReview}>
                 <ClipboardList /> 复制映射确认清单
               </button>
+              <div className="import-manual-review-checklist" aria-label="导入保存前人工复核清单">
+                <strong>保存前人工复核清单</strong>
+                <div>
+                  {importManualReviewChecklist.map((item) => (
+                    <span key={item}>{item}</span>
+                  ))}
+                </div>
+              </div>
               {importSummary.unmappedHeaders.length > 0 && (
                 <div>
                   <p className="import-summary-warning">
