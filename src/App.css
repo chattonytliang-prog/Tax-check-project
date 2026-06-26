@@ -1808,6 +1808,31 @@ th {
   overflow-wrap: anywhere;
 }
 
+.import-mapping-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border: 1px solid rgba(86, 240, 238, 0.22);
+  border-radius: 6px;
+  background: rgba(86, 240, 238, 0.08);
+  color: #d9fffc;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.import-mapping-copy svg {
+  width: 14px;
+  height: 14px;
+}
+
+.import-mapping-copy:hover {
+  border-color: rgba(86, 240, 238, 0.42);
+  background: rgba(86, 240, 238, 0.14);
+}
+
 .import-confirm-strip span,
 .import-confirm-strip strong {
   min-width: 0;

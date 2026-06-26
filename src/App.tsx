@@ -6760,6 +6760,27 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
       window.alert(content)
     }
   }
+  const copyImportMappingReview = async () => {
+    if (!importSummary?.mappings.length) return
+    const mappedLines = importSummary.mappings.map((item) => `${item.source} -> ${item.label}`)
+    const content = [
+      `导入文件：${importSummary.fileName}`,
+      `文件类型：${importSummary.sourceType}`,
+      `已预填字段数：${importSummary.labels.length}`,
+      '字段映射确认清单：',
+      ...mappedLines,
+      importSummary.unmappedHeaders.length
+        ? `未识别表头：${importSummary.unmappedHeaders.join('、')}`
+        : '未识别表头：无',
+      '复核要求：保存期间数据前，请逐项核对预填金额、期间、纳税人类型和字段映射是否正确。',
+    ].join('\n')
+    try {
+      await navigator.clipboard.writeText(content)
+      window.alert('字段映射确认清单已复制。')
+    } catch {
+      window.alert(content)
+    }
+  }
   const renderSectionRequirementSummary = (labels: string[]) => {
     const requiredLabels = labels.filter((label) => {
       const requirement = intakeRequirementLabels[label]
@@ -7098,6 +7119,9 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                 ))}
                 {importSummary.mappings.length > 8 && <small>+{importSummary.mappings.length - 8} 个已映射字段</small>}
               </div>
+              <button type="button" className="import-mapping-copy" onClick={copyImportMappingReview}>
+                <ClipboardList /> 复制映射确认清单
+              </button>
               {importSummary.unmappedHeaders.length > 0 && (
                 <div>
                   <p className="import-summary-warning">
