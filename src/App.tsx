@@ -45,6 +45,13 @@ import { reportDeliveryChecklist } from './lib/reportDeliveryChecklist'
 import { reportDocumentId } from './lib/reportDocumentId'
 import { reportFileName } from './lib/reportFileName'
 import { reportFollowUpCadence } from './lib/reportFollowUpCadence'
+import {
+  isCompleteStructuredReport,
+  reportRiskList,
+  reportTextContent,
+  type CompleteStructuredReportShape,
+  type CompleteStructuredRiskFindingShape,
+} from './lib/reportCompatibility'
 import { reportReviewAction } from './lib/reportReviewAction'
 import { deepReportRuleTemplates } from './lib/reportRuleTemplates'
 import { reportSignOffBlock } from './lib/reportSignOffBlock'
@@ -282,55 +289,8 @@ type ManagedRule = {
   updatedAt?: string
 }
 
-type StructuredRiskFinding = {
-  id: string
-  title: string
-  level: RiskLevel
-  taxType: string
-  priority: string
-  scenario: string
-  currentFinding: string
-  riskAnalysis: string
-  exposureEstimate: string
-  recommendation: string
-  basis: string
-  legalBasis: string
-  remediation: string
-  materials: string[]
-  deepTemplate: boolean
-}
-
-type StructuredReport = {
-  version: 'professional-v1'
-  title: string
-  clientProfile: Array<{ label: string; value: string }>
-  scope: Array<{ label: string; value: string }>
-  executiveSummary: {
-    overallLevel: RiskLevel
-    totalRisks: number
-    highRisks: number
-    mediumRisks: number
-    lowRisks: number
-    conclusion: string
-  }
-  dataQuality: {
-    score: number
-    label: string
-    note: string
-    missingFields: string[]
-    suggestedMaterials: string[]
-  }
-  taxSummaries: string[]
-  keyFindings: StructuredRiskFinding[]
-  detailedFindings: StructuredRiskFinding[]
-  actionPlan: Array<{ priority: string; item: string; ownerHint: string }>
-  expertReviewItems: string[]
-  followUpCadence: string[]
-  deliveryChecklist: string[]
-  clientAcknowledgement: string[]
-  signOffBlock: Array<{ label: string; value: string }>
-  disclaimers: string[]
-}
+type StructuredRiskFinding = CompleteStructuredRiskFindingShape
+type StructuredReport = CompleteStructuredReportShape
 
 type Report = {
   id: string
@@ -344,51 +304,6 @@ type Report = {
   aiReview?: AiReview
   aiGenerated?: boolean
   aiModel?: string
-}
-
-function reportRiskList(report?: Report): RiskResult[] {
-  return Array.isArray(report?.risks) ? report.risks : []
-}
-
-function reportTextContent(report: Report) {
-  const content = typeof report.content === 'string' ? report.content.trim() : ''
-  if (content) return content
-  return `${report.clientName || '历史报告'}税务风险体检报告
-
-该历史报告缺少正文内容，系统已切换为兼容预览。请重新生成报告以获得完整正式版本。`
-}
-
-function isCompleteStructuredReport(report?: StructuredReport): report is StructuredReport {
-  return Boolean(
-    report
-    && report.version === 'professional-v1'
-    && typeof report.title === 'string'
-    && Array.isArray(report.clientProfile)
-    && Array.isArray(report.scope)
-    && report.executiveSummary
-    && typeof report.executiveSummary.overallLevel === 'string'
-    && typeof report.executiveSummary.totalRisks === 'number'
-    && typeof report.executiveSummary.highRisks === 'number'
-    && typeof report.executiveSummary.mediumRisks === 'number'
-    && typeof report.executiveSummary.lowRisks === 'number'
-    && typeof report.executiveSummary.conclusion === 'string'
-    && report.dataQuality
-    && typeof report.dataQuality.score === 'number'
-    && typeof report.dataQuality.label === 'string'
-    && typeof report.dataQuality.note === 'string'
-    && Array.isArray(report.dataQuality.missingFields)
-    && Array.isArray(report.dataQuality.suggestedMaterials)
-    && Array.isArray(report.taxSummaries)
-    && Array.isArray(report.keyFindings)
-    && Array.isArray(report.detailedFindings)
-    && Array.isArray(report.actionPlan)
-    && Array.isArray(report.expertReviewItems)
-    && Array.isArray(report.followUpCadence)
-    && Array.isArray(report.deliveryChecklist)
-    && Array.isArray(report.clientAcknowledgement)
-    && Array.isArray(report.signOffBlock)
-    && Array.isArray(report.disclaimers)
-  )
 }
 
 type AuthUser = {
