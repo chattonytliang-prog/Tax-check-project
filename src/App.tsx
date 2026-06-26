@@ -5453,6 +5453,12 @@ function App() {
               <span>复核结论</span>
               <span>归档编号</span>
             </section>
+            <section className="boss-period-decision-record" aria-label="老板期间报告决策记录">
+              <strong>决策记录</strong>
+              <span>老板确认</span>
+              <span>决策意见</span>
+              <span>执行口径</span>
+            </section>
             <div className="analytics-grid executive-analytics">
               <EChartPanel
                 title="企业风险等级分布"
