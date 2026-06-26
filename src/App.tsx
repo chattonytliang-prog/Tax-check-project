@@ -2750,6 +2750,16 @@ const importSampleCheckSteps = [
   { title: '再保存数据', detail: '样例值请替换为已复核数据，保存前完成人工确认。' },
 ]
 
+const unmappedImportTemplateSuggestions = [
+  '企业名称',
+  '统一社会信用代码',
+  '所属年度',
+  '所属月份',
+  '月收入',
+  '月开票金额',
+  '员工人数',
+]
+
 function plainRiskLevel(level: RiskLevel) {
   const rank = riskRank(level)
   if (rank >= 3) return '高'
@@ -6766,7 +6776,8 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
     const content = [
       `导入文件：${importSummary.fileName}`,
       `未识别表头：${importSummary.unmappedHeaders.join('、')}`,
-      '处理建议：请核对导入模板字段，或改成“字段名 / 值”两列格式后重新导入。',
+      `建议改用模板字段：${unmappedImportTemplateSuggestions.join('、')}`,
+      '处理建议：先将 ERP 导出列名改成最接近的模板字段；仍无法对应的列保留原文件备查，不参与自动预填。',
     ].join('\n')
     try {
       await navigator.clipboard.writeText(content)
@@ -7188,6 +7199,14 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                   <p className="import-summary-warning">
                     未识别表头：{importSummary.unmappedHeaders.join('、')}。这些列未预填，请核对模板字段或改成“字段名 / 值”两列格式。
                   </p>
+                  <div className="import-unmapped-suggestions" aria-label="未识别字段模板建议">
+                    <strong>建议优先改成模板字段</strong>
+                    <div>
+                      {unmappedImportTemplateSuggestions.map((field) => (
+                        <span key={field}>{field}</span>
+                      ))}
+                    </div>
+                  </div>
                   <button type="button" className="import-unmapped-copy" onClick={copyUnmappedImportHeaders}>
                     <ClipboardList /> 复制未识别字段
                   </button>

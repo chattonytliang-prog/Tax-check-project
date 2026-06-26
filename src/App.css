@@ -2054,6 +2054,41 @@ th {
   color: #ffd6a8;
 }
 
+.import-unmapped-suggestions {
+  display: grid;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 9px 10px;
+  border: 1px dashed rgba(255, 214, 168, 0.3);
+  border-radius: 8px;
+  background: rgba(255, 214, 168, 0.08);
+}
+
+.import-unmapped-suggestions strong {
+  color: #ffe7c7;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.import-unmapped-suggestions div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.import-unmapped-suggestions span {
+  min-width: 0;
+  padding: 4px 7px;
+  border: 1px solid rgba(255, 214, 168, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffe7c7;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .import-unmapped-copy,
 .import-fill-missing {
   display: inline-flex;
