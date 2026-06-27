@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { genericFieldBasedBasis, publicRiskBasis, publicRiskReason } from './reportTextSanitizer'
+import {
+  genericFieldBasedBasis,
+  localizeInternalFieldNames,
+  publicRiskBasis,
+  publicRiskReason,
+} from './reportTextSanitizer'
 
 describe('report text sanitizer', () => {
   it('removes internal execution conditions from customer-facing reasons', () => {
@@ -30,5 +35,29 @@ describe('report text sanitizer', () => {
     const basis = '依据增值税发票管理相关要求复核。（执行条件：内部阈值 > 100000）'
 
     expect(publicRiskBasis(basis)).toBe('依据增值税发票管理相关要求复核。')
+  })
+
+  it('localizes internal field keys in report-facing text', () => {
+    const reason =
+      '收款流水 collectionFlow 值为 2,400,000，与月收入 monthlyRevenue 200,000 比较时口径不一致（collectionFlow 可能是年度累计），建议确认数据口径。'
+
+    const output = publicRiskReason(reason)
+
+    expect(output).toBe(
+      '收款流水 值为 2,400,000，与月收入 200,000 比较时口径不一致（收款流水 可能是年度累计），建议确认数据口径。',
+    )
+    expect(output).not.toMatch(/\b(collectionFlow|monthlyRevenue)\b/)
+  })
+
+  it('localizes internal field keys in specific review basis text', () => {
+    expect(publicRiskBasis('依据 collectionFlow 与 monthlyRevenue 差异进一步复核。')).toBe(
+      '依据 收款流水 与 月收入 差异进一步复核。',
+    )
+  })
+
+  it('keeps already-localized labels from being duplicated', () => {
+    expect(localizeInternalFieldNames('收款流水 collectionFlow 与月收入 monthlyRevenue 需要复核。')).toBe(
+      '收款流水 与月收入 需要复核。',
+    )
   })
 })
