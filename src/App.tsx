@@ -5254,7 +5254,6 @@ function App() {
         )}
         <nav className="sidebar-nav">
           <div className="nav-group">
-            <span className="nav-group-label">老板驾驶舱</span>
             <button className={page === 'dashboard' ? 'active' : ''} onClick={() => setPage('dashboard')}>
               <LayoutDashboard /> 税务健康总览
             </button>
@@ -5304,7 +5303,7 @@ function App() {
           <section className="page">
             <header className="page-header">
               <div>
-                <p className="eyebrow">老板驾驶舱</p>
+                <p className="eyebrow">税务总览</p>
                 <h2>税务健康总览</h2>
               </div>
               <div className="header-actions">
