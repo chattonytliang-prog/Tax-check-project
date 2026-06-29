@@ -7308,67 +7308,79 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
   return (
     <div className="form-layout">
       <section className="form-section intake-overview">
-        <div>
+        <div className="intake-overview-main">
           <p className="eyebrow">录入路线</p>
-          <h3>按税务健康检查口径采集资料</h3>
-          <p className="section-helper">
-            先录入企业共用画像，再按增值税、企业所得税、个人所得税与综合线索补充关键字段。多主体项目建议按主体分别建档，集团口径另行汇总。当前版本只采集可量化信息和风险标记，不要求访谈、抽凭或上传底稿。
-          </p>
-          <p className="auto-fill-note">除标注“必填 / 条件必填 / 检测必填 / 系统计算”的字段外，其余字段均为选填。为提高检查准确度，建议有数据、能确认的字段尽量填写。</p>
-          <p className="auto-fill-note">系统会根据基础数据自动计算部分检测口径；如需改用特殊口径，请在对应字段切换“手动填写”并说明原因。</p>
-          <div className="intake-overview-actions">
-            <label className="secondary-button compact-button file-import-button">
-              <FileText /> 上传表格填充
+          <h3>先选择录入方式</h3>
+          <p className="section-helper">上传表格可快速预填；手动填写适合少量字段补录。保存后会形成企业期间快照，再进入企业档案和风险检测。</p>
+          <div className="intake-method-grid">
+            <label className="intake-method-card file-import-button">
               <input type="file" accept=".json,.csv,.tsv,.txt,.xlsx,.xls" onChange={(event) => void importClientFile(event.target.files?.[0] || null)} />
+              <FileText />
+              <strong>上传导入</strong>
+              <span>Excel、CSV、TSV、JSON 或 ERP 导出表</span>
             </label>
-            <button type="button" className="secondary-button compact-button" onClick={downloadClientImportTemplate}>
-              <Download /> 下载导入模板
+            <button type="button" className="intake-method-card" onClick={() => jumpToSection('intake-basic')}>
+              <Plus />
+              <strong>手动填写</strong>
+              <span>从企业识别、期间和经营金额开始录入</span>
+            </button>
+            <button type="button" className="intake-method-card" onClick={downloadClientImportTemplate}>
+              <Download />
+              <strong>下载模板</strong>
+              <span>按标准字段准备导入文件</span>
             </button>
             {firstMissingIssue && (
-              <button type="button" className="secondary-button compact-button" onClick={() => focusFieldByLabel(firstMissingIssue.label)}>
-                <AlertTriangle /> 补第一个缺失项
+              <button type="button" className="intake-method-card attention" onClick={() => focusFieldByLabel(firstMissingIssue.label)}>
+                <AlertTriangle />
+                <strong>补缺失项</strong>
+                <span>跳到「{firstMissingIssue.label}」</span>
               </button>
             )}
           </div>
-          <div className="import-guide-strip" aria-label="导入字段映射说明">
-            <span>支持 Excel、CSV、TSV、JSON 和常见 ERP 导出表</span>
-            <span>可识别中文表头，或“字段名 / 值”两列格式</span>
-            <strong>导入只做预填，保存前仍需人工核对</strong>
-          </div>
-          <div className="import-safety-note" aria-label="本地导入安全边界">
-            <ShieldCheck />
-            <span>仅读取本地选择的导出文件，不连接生产 ERP、不写回 ERP、不保存密钥或真实敏感样本。</span>
-          </div>
-          <div className="import-field-guide" aria-label="导入模板字段解释">
-            {importTemplateFieldGuides.map((item) => (
-              <span key={item.label}>
-                <strong>{item.label}</strong>
-                <small>{item.detail}</small>
-              </span>
-            ))}
-          </div>
-          <div className="import-field-groups" aria-label="导入模板字段分组核对">
-            <strong>模板字段分组核对</strong>
-            <div>
-              {importTemplateFieldGroups.map((group) => (
-                <span key={group.title}>
-                  <b>{group.title}</b>
-                  <small>{group.fields}</small>
+          <details className="intake-guide-details">
+            <summary>导入说明和字段校验</summary>
+            <p className="auto-fill-note">除标注“必填 / 条件必填 / 检测必填 / 系统计算”的字段外，其余字段均为选填；有数据、能确认的字段建议尽量填写。</p>
+            <p className="auto-fill-note">系统会根据基础数据自动计算部分检测口径；如需改用特殊口径，请在对应字段切换“手动填写”并说明原因。</p>
+            <div className="import-guide-strip" aria-label="导入字段映射说明">
+              <span>支持 Excel、CSV、TSV、JSON 和常见 ERP 导出表</span>
+              <span>可识别中文表头，或“字段名 / 值”两列格式</span>
+              <strong>导入只做预填，保存前仍需人工核对</strong>
+            </div>
+            <div className="import-safety-note" aria-label="本地导入安全边界">
+              <ShieldCheck />
+              <span>仅读取本地选择的导出文件，不连接生产 ERP、不写回 ERP、不保存密钥或真实敏感样本。</span>
+            </div>
+            <div className="import-field-guide" aria-label="导入模板字段解释">
+              {importTemplateFieldGuides.map((item) => (
+                <span key={item.label}>
+                  <strong>{item.label}</strong>
+                  <small>{item.detail}</small>
                 </span>
               ))}
             </div>
-          </div>
-          <div className="import-sample-check" aria-label="导入样例字段校验提示">
-            <strong>试导入前样例字段校验</strong>
-            <div>
-              {importSampleCheckSteps.map((step) => (
-                <span key={step.title}>
-                  <b>{step.title}</b>
-                  <small>{step.detail}</small>
-                </span>
-              ))}
+            <div className="import-field-groups" aria-label="导入模板字段分组核对">
+              <strong>模板字段分组核对</strong>
+              <div>
+                {importTemplateFieldGroups.map((group) => (
+                  <span key={group.title}>
+                    <b>{group.title}</b>
+                    <small>{group.fields}</small>
+                  </span>
+                ))}
+              </div>
             </div>
-          </div>
+            <div className="import-sample-check" aria-label="导入样例字段校验提示">
+              <strong>试导入前样例字段校验</strong>
+              <div>
+                {importSampleCheckSteps.map((step) => (
+                  <span key={step.title}>
+                    <b>{step.title}</b>
+                    <small>{step.detail}</small>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </details>
           {importSummary && (
             <div className="import-summary-panel">
               <strong>已识别并预填 {importSummary.labels.length} 个字段</strong>
@@ -7591,27 +7603,48 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         </div>
       </section>
 
-      <section className="intake-requirement-panel">
-        <div>
+      <section className="intake-status-bar">
+        <div className="intake-status-item">
           <strong>建档必填 <span className="requirement-progress">{saveTotal - saveIssues.length}/{saveTotal}</span></strong>
           <div className="requirement-bar" aria-hidden="true"><span style={{ width: `${Math.round(((saveTotal - saveIssues.length) / saveTotal) * 100)}%` }} /></div>
-          <small>缺失时不能保存并检测。</small>
-          {renderMissingChips(saveIssues, '已补齐')}
         </div>
-        <div>
+        <div className="intake-status-item">
           <strong>基础检测必填 <span className="requirement-progress">{reportTotal - reportIssues.length}/{reportTotal}</span></strong>
           <div className="requirement-bar" aria-hidden="true"><span style={{ width: `${Math.round(((reportTotal - reportIssues.length) / reportTotal) * 100)}%` }} /></div>
-          <small>缺失时仍可生成报告，但会提示资料不足。</small>
-          {renderMissingChips(reportIssues, '已补齐')}
+        </div>
+        <div className="intake-status-item score">
+          <strong>完整度 {completeness.score}%</strong>
+          <small>{completeness.label}</small>
         </div>
         {(saveIssues.length > 0 || reportIssues.length > 0) && (
           <div className="requirement-copy-row">
+            {firstMissingIssue && (
+              <button type="button" className="secondary-button compact-button" onClick={() => focusFieldByLabel(firstMissingIssue.label)}>
+                <AlertTriangle /> 补第一个缺失项
+              </button>
+            )}
             <button type="button" className="secondary-button compact-button" onClick={copyMissingSummary}>
               <ClipboardList /> 复制缺失清单
             </button>
           </div>
         )}
       </section>
+
+      <details className="intake-missing-details">
+        <summary>查看缺失字段清单</summary>
+        <div className="intake-requirement-panel">
+          <div>
+            <strong>建档必填 <span className="requirement-progress">{saveTotal - saveIssues.length}/{saveTotal}</span></strong>
+            <small>缺失时不能保存并检测。</small>
+            {renderMissingChips(saveIssues, '已补齐')}
+          </div>
+          <div>
+            <strong>基础检测必填 <span className="requirement-progress">{reportTotal - reportIssues.length}/{reportTotal}</span></strong>
+            <small>缺失时仍可生成报告，但会提示资料不足。</small>
+            {renderMissingChips(reportIssues, '已补齐')}
+          </div>
+        </div>
+      </details>
 
       <nav className="intake-section-nav" aria-label="录入子目录">
         {sectionNavItems.map((item) => (
