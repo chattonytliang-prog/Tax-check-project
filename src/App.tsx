@@ -5260,9 +5260,6 @@ function App() {
           </div>
           <div className="nav-group">
             <span className="nav-group-label">财务工作区</span>
-            <button className={page === 'clients' ? 'active' : ''} onClick={() => setPage('clients')}>
-              <Building2 /> 企业档案
-            </button>
             <button
               className={page === 'form' ? 'active' : ''}
               onClick={() => {
@@ -5271,6 +5268,9 @@ function App() {
               }}
             >
               <Plus /> 数据录入
+            </button>
+            <button className={page === 'clients' ? 'active' : ''} onClick={() => setPage('clients')}>
+              <Building2 /> 企业档案
             </button>
             <button className={page === 'result' ? 'active' : ''} onClick={openRiskDetectionPage}>
               <Gauge /> 风险检测
