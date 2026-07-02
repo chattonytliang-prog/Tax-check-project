@@ -56,7 +56,7 @@ import { reportReviewAction } from './lib/reportReviewAction'
 import { deepReportRuleTemplates } from './lib/reportRuleTemplates'
 import { reportSignOffBlock } from './lib/reportSignOffBlock'
 import { reportScopeSummary } from './lib/reportScopeSummary'
-import { publicRiskBasis, publicRiskReason, sanitizePublicReportContent } from './lib/reportTextSanitizer'
+import { escapeHtml, publicRiskBasis, publicRiskReason, sanitizePublicReportContent } from './lib/reportTextSanitizer'
 import {
   clientImportFieldLabels,
   createClientImportTemplateCsv,
@@ -3230,10 +3230,6 @@ function printReportPdf(report: Report) {
   printWindow.document.open()
   printWindow.document.write(html)
   printWindow.document.close()
-}
-
-function escapeHtml(value: string) {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
 function wait(ms: number) {

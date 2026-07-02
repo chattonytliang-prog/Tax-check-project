@@ -49,3 +49,12 @@ export function sanitizePublicReportContent(content: string) {
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
+
+export function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}

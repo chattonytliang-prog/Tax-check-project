@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   genericFieldBasedBasis,
+  escapeHtml,
   localizeInternalFieldNames,
   publicRiskBasis,
   publicRiskReason,
@@ -76,5 +77,11 @@ describe('report text sanitizer', () => {
     expect(output).toContain('相关规则条件')
     expect(output).toContain('建议复核。')
     expect(output).not.toMatch(/Issue VAT-001|issueId: VAT-001|outputTax > 100000/)
+  })
+
+  it('escapes HTML special characters for exported reports', () => {
+    expect(escapeHtml(`<script data-x="1">alert('x')</script>`)).toBe(
+      '&lt;script data-x=&quot;1&quot;&gt;alert(&#39;x&#39;)&lt;/script&gt;',
+    )
   })
 })
