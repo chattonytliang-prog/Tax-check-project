@@ -2300,10 +2300,12 @@ type ParsedClientImport = {
   patch: Partial<Client>
   mappings: ImportMappingPreview[]
   unmappedHeaders: string[]
+  detectedTables: string[]
+  detectedSourceType?: string
 }
 
 function emptyParsedClientImport(): ParsedClientImport {
-  return { patch: {}, mappings: [], unmappedHeaders: [] }
+  return { patch: {}, mappings: [], unmappedHeaders: [], detectedTables: [] }
 }
 
 function normalizeImportKey(key: string) {
@@ -2325,6 +2327,150 @@ function parseDelimitedRows(text: string) {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => line.split(/,|\t/).map((cell) => cell.trim()))
+}
+
+function parseImportedAmount(value: string) {
+  const normalized = String(value || '')
+    .replace(/[,，\s]/g, '')
+    .replace(/[￥¥元]/g, '')
+    .replace(/[()（）]/g, (char) => (char === '(' || char === '（' ? '-' : ''))
+  if (!normalized || normalized === '-' || normalized === '--') return null
+  const amount = Number(normalized)
+  return Number.isFinite(amount) ? amount : null
+}
+
+function isAmountLikeCell(value: string) {
+  return parseImportedAmount(value) !== null
+}
+
+function normalizeFinancialLabel(value: string) {
+  return normalizeImportKey(value).replace(/^[一二三四五六七八九十\d]+[、.．]/, '')
+}
+
+function getFinancialRowLabel(row: string[]) {
+  const textCells = row
+    .map((cell) => cell.trim())
+    .filter((cell) => cell && !isAmountLikeCell(cell))
+  return normalizeFinancialLabel(textCells.slice(0, 3).join(''))
+}
+
+const financialRowFieldRules: Array<{ field: keyof Client; patterns: string[] }> = [
+  { field: 'name', patterns: ['企业名称', '公司名称', '纳税人名称', '单位名称'] },
+  { field: 'creditCode', patterns: ['统一社会信用代码', '纳税人识别号', '税号'] },
+  { field: 'analysisYear', patterns: ['所属年度', '会计年度', '年度'] },
+  { field: 'analysisMonth', patterns: ['所属月份', '期间月份', '会计期间'] },
+  { field: 'ytdRevenue', patterns: ['营业收入本年累计', '收入本年累计', '本年累计收入'] },
+  { field: 'monthlyRevenue', patterns: ['营业收入本月', '收入本月', '本月收入'] },
+  { field: 'mainBusinessRevenue', patterns: ['主营业务收入', '营业收入', '销售收入'] },
+  { field: 'ytdCostExpense', patterns: ['营业成本本年累计', '成本费用本年累计', '本年累计成本'] },
+  { field: 'monthlyCost', patterns: ['营业成本本月', '成本费用本月', '本月成本'] },
+  { field: 'mainBusinessCost', patterns: ['主营业务成本', '营业成本', '销售成本'] },
+  { field: 'ytdProfit', patterns: ['利润总额', '净利润', '营业利润'] },
+  { field: 'assetsTotal', patterns: ['资产总计', '资产合计', '资产总额'] },
+  { field: 'payrollTotal', patterns: ['工资薪金', '应付职工薪酬', '工资总额', '职工薪酬'] },
+  { field: 'outputTax', patterns: ['销项税额', '应交增值税销项税额'] },
+  { field: 'inputTax', patterns: ['进项税额', '应交增值税进项税额'] },
+  { field: 'vatTaxPayable', patterns: ['应交增值税', '增值税应纳税额', '应纳税额合计'] },
+  { field: 'taxableSales', patterns: ['应税销售额', '销售额合计', '货物及劳务销售额'] },
+  { field: 'collectionFlow', patterns: ['银行存款', '收款流水', '现金及银行存款'] },
+  { field: 'entertainmentExpense', patterns: ['业务招待费'] },
+  { field: 'adExpense', patterns: ['广告费', '业务宣传费', '广告宣传费'] },
+  { field: 'welfareExpense', patterns: ['职工福利费'] },
+  { field: 'unionExpense', patterns: ['工会经费'] },
+  { field: 'educationExpense', patterns: ['职工教育经费'] },
+  { field: 'nonOperatingExpense', patterns: ['营业外支出'] },
+  { field: 'nonOperatingIncome', patterns: ['营业外收入'] },
+  { field: 'otherReceivableAgencyBalance', patterns: ['其他应收款', '代收代付'] },
+]
+
+function detectImportSourceType(rows: string[][]) {
+  const sample = rows.slice(0, 20).flat().join(' ')
+  if (/金蝶|Kingdee|KIS|云星空|精斗云/i.test(sample)) return '金蝶导出表'
+  if (/用友|Yonyou|YonSuite|U8|NC|好会计/i.test(sample)) return '用友导出表'
+  if (/科目余额|利润表|资产负债表|增值税|申报表/.test(sample)) return '财务导出表'
+  return undefined
+}
+
+function detectImportTables(rows: string[][]) {
+  const sample = rows.slice(0, 30).flat().join(' ')
+  const tables: string[] = []
+  if (/科目余额|科目编码|科目名称|期初余额|期末余额/.test(sample)) tables.push('科目余额表')
+  if (/利润表|营业收入|营业成本|利润总额|净利润/.test(sample)) tables.push('利润表')
+  if (/资产负债表|资产总计|负债合计|所有者权益/.test(sample)) tables.push('资产负债表')
+  if (/增值税|销项税额|进项税额|应税销售额|纳税申报/.test(sample)) tables.push('增值税数据')
+  return Array.from(new Set(tables))
+}
+
+function findFinancialAmount(row: string[], headerRow?: string[]) {
+  const preferredHeaders = ['本年累计金额', '本期金额', '本月金额', '期末余额', '贷方发生额', '借方发生额', '金额', '税额', '销售额', '累计数', '本月数']
+  if (headerRow) {
+    const normalizedHeaders = headerRow.map(normalizeFinancialLabel)
+    for (const header of preferredHeaders) {
+      const index = normalizedHeaders.findIndex((item) => item.includes(normalizeFinancialLabel(header)))
+      const amount = index >= 0 ? parseImportedAmount(row[index] || '') : null
+      if (amount !== null) return amount
+    }
+  }
+  const amounts = row.map(parseImportedAmount).filter((value): value is number => value !== null)
+  return amounts.find((value) => value !== 0) ?? amounts[0] ?? null
+}
+
+function findFinancialTextValue(row: string[], patterns: string[]) {
+  const normalizedPatterns = patterns.map(normalizeFinancialLabel)
+  return row.find((cell) => {
+    const normalized = normalizeFinancialLabel(cell)
+    return normalized && !isAmountLikeCell(cell) && !normalizedPatterns.some((pattern) => normalized.includes(pattern))
+  }) || ''
+}
+
+function mergeParsedClientImports(base: ParsedClientImport, extra: ParsedClientImport): ParsedClientImport {
+  const patch = { ...base.patch, ...extra.patch }
+  const seenMappings = new Set<string>()
+  const mappings = [...base.mappings, ...extra.mappings].filter((item) => {
+    const key = `${item.source}-${String(item.field)}`
+    if (seenMappings.has(key)) return false
+    seenMappings.add(key)
+    return true
+  })
+  return {
+    patch,
+    mappings,
+    unmappedHeaders: Array.from(new Set([...base.unmappedHeaders, ...extra.unmappedHeaders])).slice(0, 12),
+    detectedTables: Array.from(new Set([...base.detectedTables, ...extra.detectedTables])),
+    detectedSourceType: extra.detectedSourceType || base.detectedSourceType,
+  }
+}
+
+function parseFinancialExportRows(rows: string[][]): ParsedClientImport {
+  const patch: Partial<Client> = {}
+  const mappings: ImportMappingPreview[] = []
+  const detectedTables = detectImportTables(rows)
+  const detectedSourceType = detectImportSourceType(rows)
+  const headerRow = rows.find((row) => row.some((cell) => /项目|科目|本期|本月|本年|期末|金额|税额|余额/.test(cell)))
+
+  rows.forEach((row) => {
+    const rowLabel = getFinancialRowLabel(row)
+    if (!rowLabel) return
+    const rule = financialRowFieldRules.find((item) => (
+      item.patterns.some((pattern) => rowLabel.includes(normalizeFinancialLabel(pattern)))
+    ))
+    if (!rule) return
+    const amount = findFinancialAmount(row, headerRow)
+    const rawValue = rule.field === 'name' || rule.field === 'creditCode' || rule.field === 'analysisYear' || rule.field === 'analysisMonth'
+      ? findFinancialTextValue(row, rule.patterns) || row[row.length - 1]
+      : amount
+    if (rawValue === null || rawValue === undefined || rawValue === '') return
+    patch[rule.field] = rawValue as never
+    mappings.push({ source: row.slice(0, 3).filter(Boolean).join(' / '), field: rule.field, label: fieldLabel(String(rule.field)) })
+  })
+
+  return {
+    patch,
+    mappings,
+    unmappedHeaders: [],
+    detectedTables,
+    detectedSourceType,
+  }
 }
 
 function parseClientImportRows(rows: string[][]): ParsedClientImport {
@@ -2356,11 +2502,13 @@ function parseClientImportRows(rows: string[][]): ParsedClientImport {
     })
   }
 
-  return {
+  return mergeParsedClientImports({
     patch,
     mappings,
     unmappedHeaders: Array.from(new Set(unmappedHeaders)).slice(0, 12),
-  }
+    detectedTables: detectImportTables(rows),
+    detectedSourceType: detectImportSourceType(rows),
+  }, parseFinancialExportRows(rows))
 }
 
 function parseClientImportObject(raw: Record<string, unknown>): ParsedClientImport {
@@ -2380,6 +2528,7 @@ function parseClientImportObject(raw: Record<string, unknown>): ParsedClientImpo
     patch,
     mappings,
     unmappedHeaders: Array.from(new Set(unmappedHeaders)).slice(0, 12),
+    detectedTables: [],
   }
 }
 
@@ -6749,6 +6898,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
     mappings: ImportMappingPreview[]
     unmappedHeaders: string[]
     sourceType: string
+    detectedTables: string[]
     missingSaveLabels: string[]
     missingReportLabels: string[]
   } | null>(null)
@@ -7013,10 +7163,10 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
     if (!file) return
     try {
       const isExcelFile = /\.(xlsx|xls)$/i.test(file.name)
-      const sourceType = isExcelFile ? 'Excel/ERP 导出文件' : /\.json$/i.test(file.name) ? 'JSON 数据文件' : 'CSV/TSV/ERP 导出文件'
       const parsedImport = isExcelFile
         ? await parseClientImportWorkbook(await file.arrayBuffer())
         : parseClientImportText(await file.text())
+      const sourceType = parsedImport.detectedSourceType || (isExcelFile ? 'Excel/ERP 导出文件' : /\.json$/i.test(file.name) ? 'JSON 数据文件' : 'CSV/TSV/ERP 导出文件')
       const patchData = coerceImportedClientPatch(parsedImport.patch)
       const importedLabels = Object.keys(patchData).map(fieldLabel)
       if (!importedLabels.length) {
@@ -7035,6 +7185,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         mappings: parsedImport.mappings.filter((item) => Object.prototype.hasOwnProperty.call(patchData, item.field)),
         unmappedHeaders: parsedImport.unmappedHeaders,
         sourceType,
+        detectedTables: parsedImport.detectedTables,
         missingSaveLabels: importedSaveMissing,
         missingReportLabels: importedReportMissing,
       })
@@ -7339,6 +7490,11 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
             <div className="import-summary-panel">
               <strong>已识别并预填 {importSummary.labels.length} 个字段</strong>
               <p>{importSummary.sourceType}：{importSummary.fileName}</p>
+              {importSummary.detectedTables.length > 0 && (
+                <div className="import-detected-tables" aria-label="识别到的导出表类型">
+                  {importSummary.detectedTables.map((item) => <span key={item}>{item}</span>)}
+                </div>
+              )}
               <div className="import-review-status" aria-label="导入复核状态">
                 {importReviewStatusItems.map((item) => (
                   <span key={item.label}>

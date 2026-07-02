@@ -2063,6 +2063,23 @@ th {
   overflow-wrap: anywhere;
 }
 
+.import-detected-tables {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.import-detected-tables span {
+  border: 1px solid rgba(157, 244, 199, 0.2);
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: rgba(157, 244, 199, 0.08);
+  color: #9df4c7;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .import-review-status {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
