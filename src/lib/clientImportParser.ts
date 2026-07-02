@@ -222,8 +222,25 @@ function detectImportTables(rows: string[][]) {
   return Array.from(new Set(tables))
 }
 
-function findFinancialAmount(row: string[], headerRow?: string[]) {
-  const preferredHeaders = ['本年累计金额', '本期金额', '本月金额', '期末余额', '贷方发生额', '借方发生额', '金额', '税额', '销售额', '累计数', '本月数']
+const defaultFinancialAmountHeaders = ['本年累计金额', '本期金额', '本月金额', '期末余额', '贷方发生额', '借方发生额', '金额', '税额', '销售额', '累计数', '本月数']
+
+const fieldAmountHeaderPreferences: Record<string, string[]> = {
+  mainBusinessRevenue: ['本期贷方', '贷方发生额', '本年累计贷方', '本年累计金额', '本期金额', '金额'],
+  monthlyRevenue: ['本期贷方', '贷方发生额', '本月金额', '本期金额', '金额'],
+  ytdRevenue: ['本年累计贷方', '本年累计金额', '贷方发生额', '本期贷方', '金额'],
+  mainBusinessCost: ['本期借方', '借方发生额', '本年累计借方', '本年累计金额', '本期金额', '金额'],
+  monthlyCost: ['本期借方', '借方发生额', '本月金额', '本期金额', '金额'],
+  ytdCostExpense: ['本年累计借方', '本年累计金额', '借方发生额', '本期借方', '金额'],
+  inputTax: ['本期借方', '借方发生额', '进项税额', '税额', '期末余额', '金额'],
+  outputTax: ['本期贷方', '贷方发生额', '销项税额', '税额', '期末余额', '金额'],
+  collectionFlow: ['本期借方', '借方发生额', '期末余额', '金额'],
+}
+
+function findFinancialAmount(row: string[], headerRow?: string[], field?: string) {
+  const preferredHeaders = [
+    ...(field ? fieldAmountHeaderPreferences[field] || [] : []),
+    ...defaultFinancialAmountHeaders,
+  ]
   if (headerRow) {
     const normalizedHeaders = headerRow.map(normalizeFinancialLabel)
     for (const header of preferredHeaders) {
@@ -283,7 +300,7 @@ function parseFinancialExportRows(rows: string[][]): ParsedClientImport {
       item.patterns.some((pattern) => rowLabel.includes(normalizeFinancialLabel(pattern)))
     ))
     if (!rule) return
-    const amount = findFinancialAmount(row, headerRow)
+    const amount = findFinancialAmount(row, headerRow, rule.field)
     const rawValue = ['name', 'creditCode', 'analysisYear', 'analysisMonth'].includes(rule.field)
       ? findFinancialTextValue(row, rule.patterns) || row[row.length - 1]
       : amount

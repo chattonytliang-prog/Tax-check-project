@@ -135,6 +135,25 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('uses account-balance debit and credit columns based on mapped field', () => {
+    const parsed = parseClientImportRows([
+      ['科目编码', '科目名称', '期末余额', '本期借方', '本期贷方'],
+      ['6001', '主营业务收入', '0', '0', '1,500,000'],
+      ['6401', '主营业务成本', '0', '920000', '0'],
+      ['22210101', '应交增值税销项税额', '0', '0', '195000'],
+      ['22210102', '应交增值税进项税额', '0', '112000', '0'],
+      ['1002', '银行存款', '2800000', '3,100,000', '300000'],
+    ])
+
+    expect(parsed.patch).toMatchObject({
+      mainBusinessRevenue: 1500000,
+      mainBusinessCost: 920000,
+      outputTax: 195000,
+      inputTax: 112000,
+      collectionFlow: 3100000,
+    })
+  })
+
   it('merges recognizable rows across workbook sheets', async () => {
     const XLSX = await import('@e965/xlsx')
     const workbook = XLSX.utils.book_new()
