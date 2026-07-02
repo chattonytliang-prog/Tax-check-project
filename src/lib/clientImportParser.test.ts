@@ -35,6 +35,18 @@ describe('clientImportParser', () => {
     expect(parsed.mappings.map((item) => item.field)).toEqual(expect.arrayContaining(['name', 'monthlyRevenue', 'outputTax']))
   })
 
+  it('ignores a UTF-8 BOM before the first CSV header', () => {
+    const parsed = parseClientImportText([
+      '\uFEFF企业名称,月收入',
+      '上海 BOM 测试有限公司,120000',
+    ].join('\n'))
+
+    expect(parsed.patch).toMatchObject({
+      name: '上海 BOM 测试有限公司',
+      monthlyRevenue: '120000',
+    })
+  })
+
   it('keeps quoted CSV amounts with thousands separators in one cell', () => {
     const parsed = parseClientImportText([
       '企业名称,月收入,月成本费用',

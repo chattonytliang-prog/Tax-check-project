@@ -157,7 +157,7 @@ export function createClientImportTemplateCsv() {
 }
 
 function normalizeImportKey(key: string) {
-  return key.replace(/[：:\s（）()_/-]/g, '').trim()
+  return key.replace(/^\uFEFF/, '').replace(/[：:\s（）()_/-]/g, '').trim()
 }
 
 function resolveImportField(key: string) {
