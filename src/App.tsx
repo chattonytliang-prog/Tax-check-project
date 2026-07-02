@@ -82,6 +82,7 @@ import {
   type DataBasis,
   type PeriodEntry,
 } from './lib/periodAnalysis'
+import { apiDelete, apiGet, apiSend } from './lib/apiClient'
 import './App.css'
 
 type Page = 'dashboard' | 'clients' | 'form' | 'result' | 'report' | 'reports' | 'rules' | 'admin'
@@ -3278,36 +3279,6 @@ function printReportPdf(report: Report) {
 
 function escapeHtml(value: string) {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
-
-async function apiGet<T>(url: string): Promise<T> {
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`API request failed: ${response.status}`)
-  }
-  return response.json() as Promise<T>
-}
-
-async function apiSend<T>(url: string, method: 'POST' | 'PUT', body: unknown): Promise<T> {
-  const response = await fetch(url, {
-    method,
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!response.ok) {
-    const data = await response.json().catch(() => null)
-    throw new Error(data?.error || data?.detail || `API request failed: ${response.status}`)
-  }
-  return response.json() as Promise<T>
-}
-
-async function apiDelete<T>(url: string): Promise<T> {
-  const response = await fetch(url, { method: 'DELETE' })
-  if (!response.ok) {
-    const data = await response.json().catch(() => null)
-    throw new Error(data?.error || data?.detail || `API request failed: ${response.status}`)
-  }
-  return response.json() as Promise<T>
 }
 
 function wait(ms: number) {
