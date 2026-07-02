@@ -4,6 +4,7 @@ import {
   localizeInternalFieldNames,
   publicRiskBasis,
   publicRiskReason,
+  sanitizePublicReportContent,
 } from './reportTextSanitizer'
 
 describe('report text sanitizer', () => {
@@ -59,5 +60,21 @@ describe('report text sanitizer', () => {
     expect(localizeInternalFieldNames('收款流水 collectionFlow 与月收入 monthlyRevenue 需要复核。')).toBe(
       '收款流水 与月收入 需要复核。',
     )
+  })
+
+  it('removes internal issue ids and simple rule expressions from report content', () => {
+    const content = `
+      高风险事项（Issue VAT-001）
+      issueId: VAT-001
+      outputTax > 100000
+      建议复核。
+    `
+
+    const output = sanitizePublicReportContent(content)
+
+    expect(output).toContain('高风险事项')
+    expect(output).toContain('相关规则条件')
+    expect(output).toContain('建议复核。')
+    expect(output).not.toMatch(/Issue VAT-001|issueId: VAT-001|outputTax > 100000/)
   })
 })

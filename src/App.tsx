@@ -56,7 +56,7 @@ import { reportReviewAction } from './lib/reportReviewAction'
 import { deepReportRuleTemplates } from './lib/reportRuleTemplates'
 import { reportSignOffBlock } from './lib/reportSignOffBlock'
 import { reportScopeSummary } from './lib/reportScopeSummary'
-import { publicRiskBasis, publicRiskReason } from './lib/reportTextSanitizer'
+import { publicRiskBasis, publicRiskReason, sanitizePublicReportContent } from './lib/reportTextSanitizer'
 import {
   clientImportFieldLabels,
   decodeClientImportText,
@@ -2890,17 +2890,6 @@ ${risks.length
 
 十、免责声明
 本报告基于企业提供资料及系统规则进行辅助分析，仅供经营和税务风险管理参考。具体税务处理应结合完整原始资料、适用地区口径及最新政策，并由专业人员进一步复核确认。`
-}
-
-function sanitizePublicReportContent(content: string) {
-  return content
-    .replace(/[（(]\s*Issue\s+[A-Z-]*\d+\s*[)）]/gi, '')
-    .replace(/\bIssue\s+[A-Z-]*\d+\b/gi, '风险事项')
-    .replace(/\b(issueId|code)\s*[:：=]\s*[A-Z-]*\d+\b/gi, '')
-    .replace(/\b[a-z][A-Za-z0-9_]*(?:\s*[=!<>]=?\s*(?:true|false|\d+(?:\.\d+)?|'[^']*'|"[^"]*"))/g, '相关规则条件')
-    .replace(/[ \t]{2,}/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
 }
 
 function exportBadgeHtml(level: RiskLevel) {

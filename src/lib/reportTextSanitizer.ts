@@ -38,3 +38,14 @@ export function publicRiskBasis(basis: string) {
   }
   return publicRiskReason(basis)
 }
+
+export function sanitizePublicReportContent(content: string) {
+  return content
+    .replace(/[（(]\s*Issue\s+[A-Z-]*\d+\s*[)）]/gi, '')
+    .replace(/\bIssue\s+[A-Z-]*\d+\b/gi, '风险事项')
+    .replace(/\b(issueId|code)\s*[:：=]\s*[A-Z-]*\d+\b/gi, '')
+    .replace(/\b[a-z][A-Za-z0-9_]*(?:\s*[=!<>]=?\s*(?:true|false|\d+(?:\.\d+)?|'[^']*'|"[^"]*"))/g, '相关规则条件')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
