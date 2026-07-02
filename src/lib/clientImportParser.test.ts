@@ -18,6 +18,19 @@ describe('clientImportParser', () => {
     expect(parsed.mappings.map((item) => item.field)).toEqual(expect.arrayContaining(['name', 'monthlyRevenue', 'outputTax']))
   })
 
+  it('keeps quoted CSV amounts with thousands separators in one cell', () => {
+    const parsed = parseClientImportText([
+      '企业名称,月收入,月成本费用',
+      '上海模板测试有限公司,"1,200,000","820,000"',
+    ].join('\n'))
+
+    expect(parsed.patch).toMatchObject({
+      name: '上海模板测试有限公司',
+      monthlyRevenue: '1,200,000',
+      monthlyCost: '820,000',
+    })
+  })
+
   it('recognizes Kingdee profit statement row exports', () => {
     const parsed = parseClientImportRows([
       ['项目', '本期金额'],

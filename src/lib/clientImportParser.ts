@@ -118,11 +118,36 @@ function resolveImportField(key: string) {
 }
 
 function parseDelimitedRows(text: string) {
+  const parseLine = (line: string) => {
+    const cells: string[] = []
+    let cell = ''
+    let quoted = false
+
+    for (let index = 0; index < line.length; index += 1) {
+      const char = line[index]
+      const next = line[index + 1]
+      if (char === '"' && quoted && next === '"') {
+        cell += '"'
+        index += 1
+      } else if (char === '"') {
+        quoted = !quoted
+      } else if (!quoted && (char === ',' || char === '\t')) {
+        cells.push(cell.trim())
+        cell = ''
+      } else {
+        cell += char
+      }
+    }
+
+    cells.push(cell.trim())
+    return cells
+  }
+
   return text
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
-    .map((line) => line.split(/,|\t/).map((cell) => cell.trim()))
+    .map(parseLine)
 }
 
 function parseImportedAmount(value: string) {
