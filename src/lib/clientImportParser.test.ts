@@ -1,0 +1,74 @@
+import { describe, expect, it } from 'vitest'
+import { parseClientImportRows, parseClientImportText } from './clientImportParser'
+
+describe('clientImportParser', () => {
+  it('parses template-style CSV headers into client fields', () => {
+    const parsed = parseClientImportText([
+      '企业名称,统一社会信用代码,月收入,月成本费用,销项税额',
+      '上海模板测试有限公司,91310000TEMPLATE,100000,60000,13000',
+    ].join('\n'))
+
+    expect(parsed.patch).toMatchObject({
+      name: '上海模板测试有限公司',
+      creditCode: '91310000TEMPLATE',
+      monthlyRevenue: '100000',
+      monthlyCost: '60000',
+      outputTax: '13000',
+    })
+    expect(parsed.mappings.map((item) => item.field)).toEqual(expect.arrayContaining(['name', 'monthlyRevenue', 'outputTax']))
+  })
+
+  it('recognizes Kingdee profit statement row exports', () => {
+    const parsed = parseClientImportRows([
+      ['项目', '本期金额'],
+      ['金蝶云星空 利润表', ''],
+      ['企业名称', '上海导入测试有限公司'],
+      ['统一社会信用代码', '91310000TESTIMPORT'],
+      ['营业收入', '1,200,000'],
+      ['营业成本', '820000'],
+      ['利润总额', '180000'],
+      ['资产总计', '3600000'],
+      ['销项税额', '156000'],
+      ['进项税额', '98000'],
+      ['工资薪金', '300000'],
+    ])
+
+    expect(parsed.detectedSourceType).toBe('金蝶导出表')
+    expect(parsed.detectedTables).toEqual(expect.arrayContaining(['利润表', '增值税数据']))
+    expect(parsed.patch).toMatchObject({
+      name: '上海导入测试有限公司',
+      creditCode: '91310000TESTIMPORT',
+      mainBusinessRevenue: 1200000,
+      mainBusinessCost: 820000,
+      ytdProfit: 180000,
+      assetsTotal: 3600000,
+      outputTax: '156000',
+      inputTax: '98000',
+      payrollTotal: 300000,
+    })
+  })
+
+  it('recognizes Yonyou account balance exports', () => {
+    const parsed = parseClientImportRows([
+      ['科目编码', '科目名称', '期末余额'],
+      ['1002', '银行存款', '2,500,000'],
+      ['22210101', '应交增值税销项税额', '52000'],
+      ['22210102', '应交增值税进项税额', '31000'],
+      ['660201', '业务招待费', '18000'],
+      ['660202', '广告宣传费', '45000'],
+      ['2211', '应付职工薪酬', '280000'],
+      ['用友 U8 科目余额表', '', ''],
+    ])
+
+    expect(parsed.detectedSourceType).toBe('用友导出表')
+    expect(parsed.detectedTables).toContain('科目余额表')
+    expect(parsed.patch).toMatchObject({
+      collectionFlow: 2500000,
+      outputTax: 52000,
+      inputTax: 31000,
+      entertainmentExpense: 18000,
+      adExpense: 45000,
+      payrollTotal: 280000,
+    })
+  })
+})
