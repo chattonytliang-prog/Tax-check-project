@@ -566,129 +566,62 @@ button svg,
   line-height: 1.2;
 }
 
-.boss-period-report-basis {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: -4px 0 14px;
+.dashboard-next-step {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px 16px;
+  margin: -4px 0 16px;
+  border: 1px solid rgba(10, 78, 96, 0.14);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 10px 26px rgba(6, 37, 48, 0.06);
 }
 
-.boss-period-report-basis span {
-  padding: 6px 9px;
-  border: 1px solid rgba(10, 78, 96, 0.12);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.74);
+.dashboard-next-copy {
+  min-width: 0;
+}
+
+.dashboard-next-copy .eyebrow {
+  margin-top: 0;
+}
+
+.dashboard-next-copy h3 {
+  margin: 4px 0 6px;
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.dashboard-next-copy p {
+  margin: 0;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 900;
 }
 
-.boss-period-delivery-ready,
-.boss-period-archive-targets,
-.boss-period-review-cadence,
-.boss-period-followup-evidence,
-.boss-period-handoff-owner,
-.boss-period-acceptance-materials,
-.boss-period-deliverable-checklist,
-.boss-period-acceptance-loop,
-.boss-period-decision-record,
-.boss-period-archive-handoff,
-.boss-period-archive-acceptance,
-.boss-period-archive-review,
-.boss-period-pilot-acceptance {
+.dashboard-next-actions {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
-  margin: -6px 0 14px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 900;
 }
 
-.boss-period-delivery-ready strong,
-.boss-period-archive-targets strong,
-.boss-period-review-cadence strong,
-.boss-period-followup-evidence strong,
-.boss-period-handoff-owner strong,
-.boss-period-acceptance-materials strong,
-.boss-period-deliverable-checklist strong,
-.boss-period-acceptance-loop strong,
-.boss-period-decision-record strong,
-.boss-period-archive-handoff strong,
-.boss-period-archive-acceptance strong,
-.boss-period-archive-review strong,
-.boss-period-pilot-acceptance strong {
+.dashboard-next-list {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dashboard-next-list span {
+  min-width: 0;
+  border: 1px solid rgba(10, 78, 96, 0.12);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: rgba(242, 248, 248, 0.74);
   color: var(--ink);
   font-size: 12px;
-}
-
-.boss-period-delivery-ready span,
-.boss-period-archive-targets span,
-.boss-period-review-cadence span,
-.boss-period-followup-evidence span,
-.boss-period-handoff-owner span,
-.boss-period-acceptance-materials span,
-.boss-period-deliverable-checklist span,
-.boss-period-acceptance-loop span,
-.boss-period-decision-record span,
-.boss-period-archive-handoff span,
-.boss-period-archive-acceptance span,
-.boss-period-archive-review span,
-.boss-period-pilot-acceptance span {
-  padding: 5px 8px;
-  border: 1px solid rgba(23, 128, 98, 0.14);
-  border-radius: 6px;
-  background: rgba(233, 248, 241, 0.78);
-  color: #176a56;
-}
-
-.boss-period-archive-targets {
-  margin-top: -10px;
-}
-
-.boss-period-review-cadence {
-  margin-top: -10px;
-}
-
-.boss-period-followup-evidence {
-  margin-top: -10px;
-}
-
-.boss-period-handoff-owner {
-  margin-top: -10px;
-}
-
-.boss-period-acceptance-materials {
-  margin-top: -10px;
-}
-
-.boss-period-deliverable-checklist {
-  margin-top: -10px;
-}
-
-.boss-period-acceptance-loop {
-  margin-top: -10px;
-}
-
-.boss-period-decision-record {
-  margin-top: -10px;
-}
-
-.boss-period-archive-handoff {
-  margin-top: -10px;
-}
-
-.boss-period-archive-acceptance {
-  margin-top: -10px;
-}
-
-.boss-period-archive-review {
-  margin-top: -10px;
-}
-
-.boss-period-pilot-acceptance {
-  margin-top: -10px;
+  font-weight: 800;
+  line-height: 1.45;
 }
 
 .boss-dashboard {
@@ -1877,6 +1810,19 @@ th {
 .intake-method-card.attention {
   border-color: rgba(183, 106, 32, 0.28);
   background: rgba(183, 106, 32, 0.06);
+}
+
+.intake-helper-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.intake-helper-actions span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
 }
 
 .intake-guide-details,
@@ -4170,6 +4116,18 @@ textarea:focus {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .dashboard-next-step {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-next-actions {
+    justify-content: flex-start;
+  }
+
+  .dashboard-next-list {
+    grid-template-columns: 1fr;
+  }
+
   .intake-status-item.score {
     border-left: 0;
     padding-left: 0;
@@ -4203,7 +4161,8 @@ textarea:focus {
 
   .boss-period-controls label,
   .boss-period-controls input,
-  .boss-period-controls button {
+  .boss-period-controls button,
+  .dashboard-next-actions button {
     width: 100%;
   }
 

@@ -5376,88 +5376,29 @@ function App() {
                 <strong>{bossStats.detections} 项</strong>
               </div>
             </section>
-            <section className="boss-period-report-basis" aria-label="老板期间报告使用口径">
-              <span>已归档月份</span>
-              <span>连续期间</span>
-              <span>规则结论</span>
-            </section>
-            <section className="boss-period-delivery-ready" aria-label="老板期间报告交付前确认">
-              <strong>交付前确认</strong>
-              <span>资料完整</span>
-              <span>老板确认</span>
-              <span>客户签收</span>
-            </section>
-            <section className="boss-period-archive-targets" aria-label="老板期间报告归档去向">
-              <strong>归档去向</strong>
-              <span>报告附件</span>
-              <span>验收记录</span>
-              <span>复查跟进</span>
-            </section>
-            <section className="boss-period-review-cadence" aria-label="老板期间报告复查节奏">
-              <strong>复查节奏</strong>
-              <span>7日内确认</span>
-              <span>30日内复盘</span>
-              <span>下期对照</span>
-            </section>
-            <section className="boss-period-followup-evidence" aria-label="老板期间报告复查留痕">
-              <strong>复查留痕</strong>
-              <span>整改记录</span>
-              <span>补充资料</span>
-              <span>下期截图</span>
-            </section>
-            <section className="boss-period-handoff-owner" aria-label="老板期间报告交付责任">
-              <strong>交付责任</strong>
-              <span>负责人确认</span>
-              <span>截止日期</span>
-              <span>复查人</span>
-            </section>
-            <section className="boss-period-acceptance-materials" aria-label="老板期间报告验收材料">
-              <strong>验收材料</strong>
-              <span>报告PDF</span>
-              <span>签收页</span>
-              <span>复核纪要</span>
-            </section>
-            <section className="boss-period-deliverable-checklist" aria-label="老板期间报告交付清单">
-              <strong>交付清单</strong>
-              <span>风险摘要</span>
-              <span>问题清单</span>
-              <span>整改计划</span>
-            </section>
-            <section className="boss-period-acceptance-loop" aria-label="老板期间报告验收闭环">
-              <strong>验收闭环</strong>
-              <span>签收状态</span>
-              <span>复核结论</span>
-              <span>归档编号</span>
-            </section>
-            <section className="boss-period-decision-record" aria-label="老板期间报告决策记录">
-              <strong>决策记录</strong>
-              <span>老板确认</span>
-              <span>决策意见</span>
-              <span>执行口径</span>
-            </section>
-            <section className="boss-period-archive-handoff" aria-label="老板期间报告归档移交">
-              <strong>归档移交</strong>
-              <span>资料包</span>
-              <span>移交人</span>
-              <span>保存位置</span>
-            </section>
-            <section className="boss-period-archive-acceptance" aria-label="老板期间报告归档验收">
-              <strong>归档验收</strong>
-              <span>验收人</span>
-              <span>验收日期</span>
-              <span>缺件确认</span>
-            </section>
-            <section className="boss-period-archive-review" aria-label="老板期间报告归档复核">
-              <strong>归档复核</strong>
-              <span>复核人</span>
-              <span>复核日期</span>
-              <span>抽查结论</span>
-            </section>
-            <section className="boss-period-pilot-acceptance" aria-label="老板期间报告试点验收">
-              <strong>试点验收</strong>
-              <span>验收结论</span>
-              <span>上线确认</span>
-              <span>交付签收</span>
+            <section className="dashboard-next-step" aria-label="下一步处理">
+              <div className="dashboard-next-copy">
+                <p className="eyebrow">下一步处理</p>
+                <h3>
+                  {bossDashboard.missingDataClients > 0
+                    ? `先补齐 ${bossDashboard.missingDataClients} 家企业资料`
+                    : bossDashboard.topRisks.length > 0
+                      ? `先复核 ${bossDashboard.topRisks.length} 个重点风险`
+                      : reports.length > 0 ? '查看最新税务报告' : '生成第一份税务报告'}
+                </h3>
+                <p>{bossDashboard.actions[0]}</p>
+              </div>
+              <div className="dashboard-next-actions">
+                <button className="primary-button" onClick={bossDashboard.missingDataClients > 0 ? () => setPage('clients') : openRiskDetectionPage}>
+                  <Gauge /> {bossDashboard.missingDataClients > 0 ? '查看企业档案' : '继续检测'}
+                </button>
+                <button className="secondary-button" onClick={() => setPage(reports.length > 0 ? 'reports' : 'clients')}>
+                  <FileText /> {reports.length > 0 ? '查看报告' : '选择企业'}
+                </button>
+              </div>
+              <div className="dashboard-next-list">
+                {bossDashboard.actions.map((item) => <span key={item}>{item}</span>)}
+              </div>
             </section>
             <div className="analytics-grid executive-analytics">
               <EChartPanel
@@ -7310,24 +7251,31 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
       <section className="form-section intake-overview">
         <div className="intake-overview-main">
           <p className="eyebrow">录入路线</p>
-          <h3>先选择录入方式</h3>
-          <p className="section-helper">上传表格可快速预填；手动填写适合少量字段补录。保存后会形成企业期间快照，再进入企业档案和风险检测。</p>
+          <h3>优先从记账软件导入</h3>
+          <p className="section-helper">客户已经在金蝶、用友或其他记账软件里维护数据，优先上传导出表；系统自动预填企业和期间数据，缺什么再补什么。</p>
           <div className="intake-method-grid">
             <label className="intake-method-card file-import-button">
               <input type="file" accept=".json,.csv,.tsv,.txt,.xlsx,.xls" onChange={(event) => void importClientFile(event.target.files?.[0] || null)} />
               <FileText />
-              <strong>上传导入</strong>
-              <span>Excel、CSV、TSV、JSON 或 ERP 导出表</span>
+              <strong>从金蝶导入</strong>
+              <span>上传金蝶科目余额表、利润表、申报表等导出文件</span>
+            </label>
+            <label className="intake-method-card file-import-button">
+              <input type="file" accept=".json,.csv,.tsv,.txt,.xlsx,.xls" onChange={(event) => void importClientFile(event.target.files?.[0] || null)} />
+              <Download />
+              <strong>从用友导入</strong>
+              <span>上传用友 U8、好会计、YonSuite 等导出文件</span>
+            </label>
+            <label className="intake-method-card file-import-button">
+              <input type="file" accept=".json,.csv,.tsv,.txt,.xlsx,.xls" onChange={(event) => void importClientFile(event.target.files?.[0] || null)} />
+              <FileText />
+              <strong>上传通用财务表</strong>
+              <span>支持 Excel、CSV、TSV、JSON 和常见 ERP 导出表</span>
             </label>
             <button type="button" className="intake-method-card" onClick={() => jumpToSection('intake-basic')}>
               <Plus />
-              <strong>手动填写</strong>
-              <span>从企业识别、期间和经营金额开始录入</span>
-            </button>
-            <button type="button" className="intake-method-card" onClick={downloadClientImportTemplate}>
-              <Download />
-              <strong>下载模板</strong>
-              <span>按标准字段准备导入文件</span>
+              <strong>手工补录</strong>
+              <span>只补系统未识别的企业、期间和经营字段</span>
             </button>
             {firstMissingIssue && (
               <button type="button" className="intake-method-card attention" onClick={() => focusFieldByLabel(firstMissingIssue.label)}>
@@ -7336,6 +7284,12 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                 <span>跳到「{firstMissingIssue.label}」</span>
               </button>
             )}
+          </div>
+          <div className="intake-helper-actions">
+            <button type="button" className="secondary-button compact-button" onClick={downloadClientImportTemplate}>
+              <Download /> 下载标准模板
+            </button>
+            <span>没有标准导出表时再使用模板整理字段。</span>
           </div>
           <details className="intake-guide-details">
             <summary>导入说明和字段校验</summary>
