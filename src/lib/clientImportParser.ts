@@ -312,7 +312,10 @@ export function parseClientImportRows(rows: string[][]): ParsedClientImport {
     }
   }
 
-  const firstRowLooksLikeHeader = rows[0].length > 2
+  const firstRowFieldCount = rows[0].filter((cell) => resolveImportField(cell)).length
+  const firstRowLooksLikeHeader = rows[0].length > 2 || Boolean(
+    rows[1] && rows[0].length > 1 && firstRowFieldCount === rows[0].length && !resolveImportField(rows[1][0] || ''),
+  )
   if (firstRowLooksLikeHeader && rows[1]) {
     rows[0].forEach((header, index) => {
       mapValue(header, rows[1][index])
@@ -358,6 +361,21 @@ export function parseClientImportText(text: string): ParsedClientImport {
   if (!trimmed) return emptyParsedClientImport()
   if (trimmed.startsWith('{')) return parseClientImportObject(JSON.parse(trimmed) as Record<string, unknown>)
   return parseClientImportRows(parseDelimitedRows(trimmed))
+}
+
+function looksLikeMojibake(text: string) {
+  return text.includes('\uFFFD') || /[锟�]{2,}|[ÃÂ][\u0080-\u00ff]/.test(text)
+}
+
+export function decodeClientImportText(buffer: ArrayBuffer): string {
+  const utf8 = new TextDecoder('utf-8').decode(buffer)
+  if (!looksLikeMojibake(utf8)) return utf8
+  try {
+    const gb18030 = new TextDecoder('gb18030').decode(buffer)
+    return looksLikeMojibake(gb18030) ? utf8 : gb18030
+  } catch {
+    return utf8
+  }
 }
 
 export async function parseClientImportWorkbook(buffer: ArrayBuffer): Promise<ParsedClientImport> {

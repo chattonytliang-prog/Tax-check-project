@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseClientImportRows, parseClientImportText } from './clientImportParser'
+import { decodeClientImportText, parseClientImportRows, parseClientImportText } from './clientImportParser'
 
 describe('clientImportParser', () => {
   it('parses template-style CSV headers into client fields', () => {
@@ -44,6 +44,19 @@ describe('clientImportParser', () => {
       creditCode: '91310000JSONTEST',
       monthlyRevenue: 230000,
       dataBasis: '管理报表',
+    })
+  })
+
+  it('decodes GB18030 accounting CSV text before parsing', () => {
+    const gb18030Csv = new Uint8Array([
+      0xc6, 0xf3, 0xd2, 0xb5, 0xc3, 0xfb, 0xb3, 0xc6, 0x2c, 0xd4, 0xc2, 0xca, 0xd5, 0xc8, 0xeb, 0x0a,
+      0xc9, 0xcf, 0xba, 0xa3, 0x2c, 0x31, 0x30, 0x30, 0x30,
+    ])
+    const parsed = parseClientImportText(decodeClientImportText(gb18030Csv.buffer))
+
+    expect(parsed.patch).toMatchObject({
+      name: '上海',
+      monthlyRevenue: '1000',
     })
   })
 

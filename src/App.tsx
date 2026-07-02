@@ -59,6 +59,7 @@ import { reportScopeSummary } from './lib/reportScopeSummary'
 import { publicRiskBasis, publicRiskReason } from './lib/reportTextSanitizer'
 import {
   clientImportFieldLabels,
+  decodeClientImportText,
   parseClientImportText,
   parseClientImportWorkbook,
   type ImportMappingPreview,
@@ -6733,9 +6734,10 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
     if (!file) return
     try {
       const isExcelFile = /\.(xlsx|xls)$/i.test(file.name)
+      const fileBuffer = await file.arrayBuffer()
       const parsedImport = isExcelFile
-        ? await parseClientImportWorkbook(await file.arrayBuffer())
-        : parseClientImportText(await file.text())
+        ? await parseClientImportWorkbook(fileBuffer)
+        : parseClientImportText(decodeClientImportText(fileBuffer))
       const sourceType = parsedImport.detectedSourceType || (isExcelFile ? 'Excel/ERP 导出文件' : /\.json$/i.test(file.name) ? 'JSON 数据文件' : 'CSV/TSV/ERP 导出文件')
       const patchData = coerceImportedClientPatch(parsedImport.patch)
       const importedLabels = Object.keys(patchData).map(fieldLabel)
