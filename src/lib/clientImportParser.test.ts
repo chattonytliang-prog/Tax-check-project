@@ -135,6 +135,27 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('recognizes VAT declaration rows including ending credit', () => {
+    const parsed = parseClientImportRows([
+      ['项目', '金额'],
+      ['增值税纳税申报表', ''],
+      ['应税销售额', '2,800,000'],
+      ['销项税额', '364000'],
+      ['进项税额', '218000'],
+      ['增值税应纳税额', '146000'],
+      ['期末留抵税额', '72000'],
+    ])
+
+    expect(parsed.detectedTables).toContain('增值税数据')
+    expect(parsed.patch).toMatchObject({
+      taxableSales: 2800000,
+      outputTax: '364000',
+      inputTax: '218000',
+      vatTaxPayable: '146000',
+      endingVatCredit: '72000',
+    })
+  })
+
   it('recognizes Yonyou account balance exports', () => {
     const parsed = parseClientImportRows([
       ['科目编码', '科目名称', '期末余额'],

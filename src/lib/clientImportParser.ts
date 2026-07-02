@@ -76,6 +76,7 @@ export const importFieldAliases: Record<string, string> = {
   预算增值税税额: 'budgetVatTax',
   上期应税销售额: 'priorTaxableSales',
   上期增值税税额: 'priorVatTaxPayable',
+  期末留抵税额: 'endingVatCredit',
   业务招待费: 'entertainmentExpense',
   广告宣传费: 'adExpense',
   职工福利费: 'welfareExpense',
@@ -245,6 +246,7 @@ const financialRowFieldRules: Array<{ field: string; patterns: string[] }> = [
   { field: 'inputTax', patterns: ['进项税额', '应交增值税进项税额'] },
   { field: 'vatTaxPayable', patterns: ['应交增值税', '增值税应纳税额', '应纳税额合计'] },
   { field: 'taxableSales', patterns: ['应税销售额', '销售额合计', '货物及劳务销售额'] },
+  { field: 'endingVatCredit', patterns: ['期末留抵税额', '期末留抵', '留抵税额'] },
   { field: 'collectionFlow', patterns: ['银行存款', '收款流水', '现金及银行存款'] },
   { field: 'entertainmentExpense', patterns: ['业务招待费'] },
   { field: 'adExpense', patterns: ['广告费', '业务宣传费', '广告宣传费'] },
@@ -285,6 +287,7 @@ const fieldAmountHeaderPreferences: Record<string, string[]> = {
   ytdCostExpense: ['本年累计借方', '本年累计金额', '借方发生额', '本期借方', '金额'],
   inputTax: ['本期借方', '借方发生额', '进项税额', '税额', '期末余额', '金额'],
   outputTax: ['本期贷方', '贷方发生额', '销项税额', '税额', '期末余额', '金额'],
+  endingVatCredit: ['期末留抵税额', '期末留抵', '留抵税额', '税额', '金额'],
   collectionFlow: ['本期借方', '借方发生额', '期末余额', '金额'],
 }
 
