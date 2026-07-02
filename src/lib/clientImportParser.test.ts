@@ -31,6 +31,22 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('parses JSON object imports with Chinese field aliases', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      企业名称: '上海 JSON 导入测试有限公司',
+      统一社会信用代码: '91310000JSONTEST',
+      月收入: 230000,
+      数据来源: '管理报表',
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      name: '上海 JSON 导入测试有限公司',
+      creditCode: '91310000JSONTEST',
+      monthlyRevenue: 230000,
+      dataBasis: '管理报表',
+    })
+  })
+
   it('recognizes Kingdee profit statement row exports', () => {
     const parsed = parseClientImportRows([
       ['项目', '本期金额'],
@@ -58,6 +74,22 @@ describe('clientImportParser', () => {
       outputTax: '156000',
       inputTax: '98000',
       payrollTotal: 300000,
+    })
+  })
+
+  it('parses accounting exports with bracketed negative amounts', () => {
+    const parsed = parseClientImportRows([
+      ['项目', '本期金额'],
+      ['利润表', ''],
+      ['营业收入', '1,200,000'],
+      ['营业成本', '(820,000)'],
+      ['利润总额', '380,000'],
+    ])
+
+    expect(parsed.patch).toMatchObject({
+      mainBusinessRevenue: 1200000,
+      mainBusinessCost: -820000,
+      ytdProfit: 380000,
     })
   })
 
