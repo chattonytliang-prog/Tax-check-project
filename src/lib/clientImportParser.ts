@@ -258,8 +258,15 @@ function mergeParsedClientImports(base: ParsedClientImport, extra: ParsedClientI
     mappings,
     unmappedHeaders: Array.from(new Set([...base.unmappedHeaders, ...extra.unmappedHeaders])).slice(0, 12),
     detectedTables: Array.from(new Set([...base.detectedTables, ...extra.detectedTables])),
-    detectedSourceType: extra.detectedSourceType || base.detectedSourceType,
+    detectedSourceType: chooseImportSourceType(base.detectedSourceType, extra.detectedSourceType),
   }
+}
+
+function chooseImportSourceType(base?: string, extra?: string) {
+  if (!base) return extra
+  if (!extra) return base
+  if (base === '财务导出表' && extra !== base) return extra
+  return base
 }
 
 function parseFinancialExportRows(rows: string[][]): ParsedClientImport {
@@ -381,20 +388,19 @@ export function decodeClientImportText(buffer: ArrayBuffer): string {
 export async function parseClientImportWorkbook(buffer: ArrayBuffer): Promise<ParsedClientImport> {
   const XLSX = await import('@e965/xlsx')
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
-  const sheetName = workbook.SheetNames.find((name) => {
-    const sheet = workbook.Sheets[name]
-    return sheet && XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false }).length > 0
-  })
-  if (!sheetName) return emptyParsedClientImport()
+  return workbook.SheetNames.reduce<ParsedClientImport>((parsed, sheetName) => {
+    const sheet = workbook.Sheets[sheetName]
+    if (!sheet) return parsed
+    const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean | Date | null>>(sheet, {
+      header: 1,
+      blankrows: false,
+      defval: '',
+      raw: false,
+    })
+      .map((row) => row.map((cell) => String(cell ?? '').trim()))
+      .filter((row) => row.some(Boolean))
+    if (!rows.length) return parsed
 
-  const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean | Date | null>>(workbook.Sheets[sheetName], {
-    header: 1,
-    blankrows: false,
-    defval: '',
-    raw: false,
-  })
-    .map((row) => row.map((cell) => String(cell ?? '').trim()))
-    .filter((row) => row.some(Boolean))
-
-  return parseClientImportRows(rows)
+    return mergeParsedClientImports(parsed, parseClientImportRows(rows))
+  }, emptyParsedClientImport())
 }

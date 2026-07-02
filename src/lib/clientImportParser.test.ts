@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { decodeClientImportText, parseClientImportRows, parseClientImportText } from './clientImportParser'
+import {
+  decodeClientImportText,
+  parseClientImportRows,
+  parseClientImportText,
+  parseClientImportWorkbook,
+} from './clientImportParser'
 
 describe('clientImportParser', () => {
   it('parses template-style CSV headers into client fields', () => {
@@ -127,6 +132,38 @@ describe('clientImportParser', () => {
       entertainmentExpense: 18000,
       adExpense: 45000,
       payrollTotal: 280000,
+    })
+  })
+
+  it('merges recognizable rows across workbook sheets', async () => {
+    const XLSX = await import('@e965/xlsx')
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+      ['导出说明'],
+      ['本文件由财务软件导出'],
+    ]), '说明')
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+      ['项目', '本期金额'],
+      ['金蝶云星空 利润表', ''],
+      ['营业收入', '1,200,000'],
+      ['营业成本', '820000'],
+    ]), '利润表')
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+      ['科目编码', '科目名称', '期末余额'],
+      ['1002', '银行存款', '2,500,000'],
+      ['22210101', '应交增值税销项税额', '52000'],
+    ]), '科目余额表')
+    const buffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+
+    const parsed = await parseClientImportWorkbook(buffer)
+
+    expect(parsed.detectedSourceType).toBe('金蝶导出表')
+    expect(parsed.detectedTables).toEqual(expect.arrayContaining(['利润表', '科目余额表', '增值税数据']))
+    expect(parsed.patch).toMatchObject({
+      mainBusinessRevenue: 1200000,
+      mainBusinessCost: 820000,
+      collectionFlow: 2500000,
+      outputTax: 52000,
     })
   })
 })
