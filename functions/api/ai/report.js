@@ -67,7 +67,7 @@ function removeInternalReportArtifacts(content) {
 }
 
 function buildPrompt(client, risks, content, aiReview, establishmentFacts, structuredReport) {
-  return `请基于以下企业税务风险体检资料，重写一份专业、清晰、适合企业老板和财务负责人阅读的税务风险体检报告。
+  return `请基于以下企业税务风险体检资料，重写一份专业、清晰、适合企业管理层和财务负责人阅读的税务风险体检报告。
 
 要求：
 1. 只能基于输入资料分析，不要编造不存在的数据、政策或案例。
