@@ -2774,8 +2774,8 @@ const importHandoffSequenceItems = [
 
 const importReviewOwnershipItems = [
   '财务复核字段',
-  '老板查看结论',
-  '客户确认留痕',
+  '管理层查看结论',
+  '确认记录留痕',
 ]
 
 const importAcceptanceSummaryItems = [
@@ -2785,8 +2785,8 @@ const importAcceptanceSummaryItems = [
 ]
 
 const importAcceptanceMemoUsageItems = [
-  '老板摘要',
-  '客户验收',
+  '管理层摘要',
+  '交付确认',
   '档案留存',
 ]
 
@@ -2798,8 +2798,8 @@ const importAcceptanceNextActionItems = [
 
 const importAcceptanceSignoffItems = [
   '财务经办',
-  '老板确认',
-  '客户签收',
+  '管理层确认',
+  '交付确认',
 ]
 
 const importAcceptanceArchiveItems = [
@@ -4284,16 +4284,16 @@ function App() {
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'zh-Hans-CN'))
       .slice(0, 5)
     const conclusion = clients.length === 0
-      ? '当前还没有企业档案。建议先由财务录入企业和最近期间数据，再生成老板可读的税务健康结论。'
+      ? '当前还没有企业档案。建议先导入企业和最近期间数据，再生成管理层可读的税务健康结论。'
       : bossPeriodActive && bossStats.analysable === 0
         ? `${bossPeriodLabel} 暂无企业具备完整月度归档，建议先让财务补齐指定期间资料。`
         : bossStats.high > 0
-          ? `${bossPeriodLabel} 有 ${bossStats.high} 家企业处于高风险状态，建议老板先安排财务负责人和税务顾问处理重点事项。`
+          ? `${bossPeriodLabel} 有 ${bossStats.high} 家企业处于高风险状态，建议先安排财务负责人和税务顾问处理重点事项。`
           : bossStats.medium > 0
             ? `${bossPeriodLabel} 有 ${bossStats.medium} 家企业存在中风险提示，建议先补齐资料并安排顾问复核。`
             : `${bossPeriodLabel} 未发现高/中风险企业，可先归档本次初筛结果，并在下一期数据更新后复查。`
     const actions = clients.length === 0
-      ? ['安排财务录入第一家企业档案', '载入测试案例查看完整流程', '生成一份老板版报告样例']
+      ? ['导入第一家企业档案', '载入测试案例查看完整流程', '生成一份管理层摘要报告样例']
       : [
           bossPeriodActive && bossStats.missingPeriodClients > 0
             ? `先补齐 ${bossStats.missingPeriodClients} 家企业的指定期间月度归档`
@@ -4318,7 +4318,7 @@ function App() {
         tone: missingDataClients > 0 ? 'attention' : 'ready',
       },
       {
-        label: '老板报告',
+        label: '税务报告',
         value: reports.length > 0 ? '可查看' : '待生成',
         tone: reports.length > 0 ? 'ready' : 'attention',
       },
@@ -4516,7 +4516,7 @@ function App() {
       .sort((a, b) => riskRank(b.level) - riskRank(a.level) || b.risks.length - a.risks.length)
     const targetRow = rankedRows[0]
     if (!targetRow) {
-      window.alert(`当前老板查看期间「${bossPeriodLabel}」还没有企业具备完整月度归档。请先让财务补齐期间资料。`)
+      window.alert(`当前分析期间「${bossPeriodLabel}」还没有企业具备完整月度归档。请先让财务补齐期间资料。`)
       return
     }
     const entries = bossPeriodMonths
@@ -5317,13 +5317,13 @@ function App() {
                     setPage('form')
                   }}
                 >
-                  <Plus /> 交给财务录入
+                  <Plus /> 导入财务数据
                 </button>
               </div>
             </header>
-            <section className="boss-period-filter" aria-label="老板查看期间">
+            <section className="boss-period-filter" aria-label="分析期间">
               <div>
-                <p className="eyebrow">老板查看期间</p>
+                <p className="eyebrow">分析期间</p>
                 <h3>{bossPeriodLabel}</h3>
                 <p>
                   {bossPeriodInvalid
@@ -5351,7 +5351,7 @@ function App() {
                 >
                   全部期间
                 </button>
-                <div className="boss-period-mode-cue" aria-label="老板期间选择口径">
+                <div className="boss-period-mode-cue" aria-label="期间选择口径">
                   <span>全部期间</span>
                   <span>手动起止</span>
                   <span>连续月份</span>
@@ -5434,16 +5434,16 @@ function App() {
                 </div>
                 <div className="boss-actions">
                   <button className="primary-button boss-period-report-action" onClick={openBossPeriodReportFlow}>
-                    <FileText /> {bossPeriodActive ? '生成当前期间报告' : reports.length ? '查看老板报告' : '生成健康报告'}
+                    <FileText /> {bossPeriodActive ? '生成当前期间报告' : reports.length ? '查看税务报告' : '生成健康报告'}
                   </button>
                   <button className="secondary-button" onClick={() => setPage('clients')}>
-                    <Building2 /> 进入财务工作区
+                    <Building2 /> 进入企业档案
                   </button>
                 </div>
               </div>
               <div className="boss-panel">
                 <div className="panel-title">
-                  <h3>老板优先看</h3>
+                  <h3>优先处理事项</h3>
                 </div>
                 <div className="boss-risk-list">
                   {bossDashboard.topRisks.length ? bossDashboard.topRisks.map(({ client, risk, evidence, material }) => (
@@ -5457,7 +5457,7 @@ function App() {
                       <LevelBadge level={risk.level} />
                     </article>
                   )) : (
-                    <p className="section-helper">当前没有需要老板立即关注的中高风险事项。</p>
+                    <p className="section-helper">当前没有需要立即处理的中高风险事项。</p>
                   )}
                 </div>
               </div>
@@ -7257,13 +7257,13 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
             <label className="intake-method-card file-import-button">
               <input type="file" accept=".json,.csv,.tsv,.txt,.xlsx,.xls" onChange={(event) => void importClientFile(event.target.files?.[0] || null)} />
               <FileText />
-              <strong>从金蝶导入</strong>
+              <strong>导入金蝶导出表</strong>
               <span>上传金蝶科目余额表、利润表、申报表等导出文件</span>
             </label>
             <label className="intake-method-card file-import-button">
               <input type="file" accept=".json,.csv,.tsv,.txt,.xlsx,.xls" onChange={(event) => void importClientFile(event.target.files?.[0] || null)} />
               <Download />
-              <strong>从用友导入</strong>
+              <strong>导入用友导出表</strong>
               <span>上传用友 U8、好会计、YonSuite 等导出文件</span>
             </label>
             <label className="intake-method-card file-import-button">
@@ -7372,7 +7372,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                     <span key={item}>{item}</span>
                   ))}
                 </div>
-                <small>建议随本期档案一并留存，便于老板查看资料来源，也便于后续复核字段映射。</small>
+                <small>建议随本期档案一并留存，便于查看资料来源，也便于后续复核字段映射。</small>
                 <div className="import-archive-naming" aria-label="导入资料归档编号建议">
                   <strong>归档编号建议</strong>
                   <div>
@@ -7380,7 +7380,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                       <span key={item}>{item}</span>
                     ))}
                   </div>
-                  <small>建议命名为“企业简称-检查期间-导入批次”，方便老板报告和后续复盘快速追溯。</small>
+                  <small>建议命名为“企业简称-检查期间-导入批次”，方便税务报告和后续复盘快速追溯。</small>
                   <div className="import-delivery-packet" aria-label="导入交付包完整性">
                     <strong>交付包完整性</strong>
                     <div>
@@ -7389,23 +7389,23 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                       ))}
                     </div>
                   </div>
-                  <div className="import-boss-handoff" aria-label="导入老板报告引用口径">
-                    <strong>老板报告引用口径</strong>
+                  <div className="import-boss-handoff" aria-label="导入报告引用口径">
+                    <strong>报告引用口径</strong>
                     <div>
                       {importBossReportHandoffItems.map((item) => (
                         <span key={item}>{item}</span>
                       ))}
                     </div>
-                    <small>建议在老板版摘要中同步说明资料来源、检查期间和复核结论，避免只给风险结果不交代依据。</small>
+                    <small>建议在管理层摘要中同步说明资料来源、检查期间和复核结论，避免只给风险结果不交代依据。</small>
                   </div>
-                  <div className="import-client-acceptance" aria-label="导入客户验收检查口径">
-                    <strong>客户验收检查口径</strong>
+                  <div className="import-client-acceptance" aria-label="导入交付确认检查口径">
+                    <strong>交付确认口径</strong>
                     <div>
                       {importClientAcceptanceItems.map((item) => (
                         <span key={item}>{item}</span>
                       ))}
                     </div>
-                    <small>交付前按这四项快速确认，确保导入资料能被财务复核、老板看懂，并能进入报告附件口径。</small>
+                    <small>交付前按这四项快速确认，确保导入资料已复核、结论可解释，并能进入报告附件口径。</small>
                   </div>
                   <div className="import-pilot-handoff" aria-label="导入试点交付确认">
                     <strong>试点交付确认</strong>
@@ -7414,7 +7414,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                         <span key={item}>{item}</span>
                       ))}
                     </div>
-                    <small>用于把本次导入从财务复核推进到老板摘要和客户验收，避免资料包停留在上传记录。</small>
+                    <small>用于把本次导入从财务复核推进到管理层摘要和交付确认，避免资料包停留在上传记录。</small>
                   </div>
                   <div className="import-handoff-sequence" aria-label="导入资料交付顺序">
                     <strong>资料交付顺序</strong>
@@ -7423,7 +7423,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                         <span key={item}>{item}</span>
                       ))}
                     </div>
-                    <small>交付前按顺序走完留存、核对、摘要和交付，方便财务与老板在同一份资料口径上验收。</small>
+                    <small>交付前按顺序走完留存、核对、摘要和交付，方便各角色在同一份资料口径上确认。</small>
                   </div>
                   <div className="import-review-ownership" aria-label="导入复核责任分工">
                     <strong>复核责任分工</strong>
@@ -7441,7 +7441,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                         <span key={item}>{item}</span>
                       ))}
                     </div>
-                    <small>交付时可按这三句话复述本次导入状态，让老板和客户快速判断资料包能否进入报告。</small>
+                    <small>交付时可按这三句话复述本次导入状态，让管理层快速判断资料包能否进入报告。</small>
                     <div className="import-acceptance-usage" aria-label="导入验收纪要使用位置">
                       <strong>纪要使用位置</strong>
                       <div>
