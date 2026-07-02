@@ -2539,91 +2539,10 @@ const importArchiveNamingHints = [
   '导入批次',
 ]
 
-const importDeliveryPacketChecks = [
-  '源文件可追溯',
-  '映射口径可复核',
-  '人工确认可留痕',
-]
-
-const importBossReportHandoffItems = [
-  '资料来源',
-  '检查期间',
-  '复核结论',
-]
-
-const importClientAcceptanceItems = [
-  '来源可说明',
-  '字段可复核',
-  '确认人可追溯',
-  '报告可引用',
-]
-
-const importPilotHandoffItems = [
-  '资料已归档',
-  '复核已完成',
-  '摘要可引用',
-  '交付可验收',
-]
-
-const importHandoffSequenceItems = [
-  '先留源文件',
-  '再核字段',
-  '后写摘要',
-  '最后交付',
-]
-
-const importReviewOwnershipItems = [
-  '财务复核字段',
-  '管理层查看结论',
-  '确认记录留痕',
-]
-
 const importAcceptanceSummaryItems = [
   '来源已说明',
   '字段已核对',
   '结论已确认',
-]
-
-const importAcceptanceMemoUsageItems = [
-  '管理层摘要',
-  '交付确认',
-  '档案留存',
-]
-
-const importAcceptanceNextActionItems = [
-  '补齐缺口',
-  '保存快照',
-  '生成报告',
-]
-
-const importAcceptanceSignoffItems = [
-  '财务经办',
-  '管理层确认',
-  '交付确认',
-]
-
-const importAcceptanceArchiveItems = [
-  '源文件目录',
-  '验收纪要',
-  '报告附件',
-]
-
-const importAcceptanceReviewItems = [
-  '字段复核',
-  '缺口复核',
-  '结论复核',
-]
-
-const importAcceptancePositioningItems = [
-  '仅作预填',
-  '人工确认',
-  '规则为准',
-]
-
-const importAcceptanceDataScopeItems = [
-  '本地文件',
-  '脱敏样例',
-  '不连 ERP',
 ]
 
 const unmappedImportTemplateSuggestions = [
@@ -7188,128 +7107,19 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                     ))}
                   </div>
                   <small>建议命名为“企业简称-检查期间-导入批次”，方便税务报告和后续复盘快速追溯。</small>
-                  <div className="import-delivery-packet" aria-label="导入交付包完整性">
-                    <strong>交付包完整性</strong>
-                    <div>
-                      {importDeliveryPacketChecks.map((item) => (
-                        <span key={item}>{item}</span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="import-boss-handoff" aria-label="导入报告引用口径">
-                    <strong>报告引用口径</strong>
-                    <div>
-                      {importBossReportHandoffItems.map((item) => (
-                        <span key={item}>{item}</span>
-                      ))}
-                    </div>
-                    <small>建议在管理层摘要中同步说明资料来源、检查期间和复核结论，避免只给风险结果不交代依据。</small>
-                  </div>
-                  <div className="import-client-acceptance" aria-label="导入交付确认检查口径">
-                    <strong>交付确认口径</strong>
-                    <div>
-                      {importClientAcceptanceItems.map((item) => (
-                        <span key={item}>{item}</span>
-                      ))}
-                    </div>
-                    <small>交付前按这四项快速确认，确保导入资料已复核、结论可解释，并能进入报告附件口径。</small>
-                  </div>
-                  <div className="import-pilot-handoff" aria-label="导入试点交付确认">
-                    <strong>试点交付确认</strong>
-                    <div>
-                      {importPilotHandoffItems.map((item) => (
-                        <span key={item}>{item}</span>
-                      ))}
-                    </div>
-                    <small>用于把本次导入从财务复核推进到管理层摘要和交付确认，避免资料包停留在上传记录。</small>
-                  </div>
-                  <div className="import-handoff-sequence" aria-label="导入资料交付顺序">
-                    <strong>资料交付顺序</strong>
-                    <div>
-                      {importHandoffSequenceItems.map((item) => (
-                        <span key={item}>{item}</span>
-                      ))}
-                    </div>
-                    <small>交付前按顺序走完留存、核对、摘要和交付，方便各角色在同一份资料口径上确认。</small>
-                  </div>
-                  <div className="import-review-ownership" aria-label="导入复核责任分工">
-                    <strong>复核责任分工</strong>
-                    <div>
-                      {importReviewOwnershipItems.map((item) => (
-                        <span key={item}>{item}</span>
-                      ))}
-                    </div>
-                    <small>把字段、结论和确认动作拆给对应角色，避免试点交付时只知道资料已上传，却不知道谁已复核。</small>
-                  </div>
-                  <div className="import-acceptance-summary" aria-label="导入验收摘要口径">
-                    <strong>验收摘要口径</strong>
-                    <div>
-                      {importAcceptanceSummaryItems.map((item) => (
-                        <span key={item}>{item}</span>
-                      ))}
-                    </div>
-                    <small>交付时可按这三句话复述本次导入状态，让管理层快速判断资料包能否进入报告。</small>
-                    <div className="import-acceptance-usage" aria-label="导入验收纪要使用位置">
-                      <strong>纪要使用位置</strong>
-                      <div>
-                        {importAcceptanceMemoUsageItems.map((item) => (
-                          <span key={item}>{item}</span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="import-acceptance-next" aria-label="导入验收后动作">
-                      <strong>验收后动作</strong>
-                      <div>
-                        {importAcceptanceNextActionItems.map((item) => (
-                          <span key={item}>{item}</span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="import-acceptance-signoff" aria-label="导入验收签收角色">
-                      <strong>签收角色</strong>
-                      <div>
-                        {importAcceptanceSignoffItems.map((item) => (
-                          <span key={item}>{item}</span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="import-acceptance-archive" aria-label="导入验收归档去向">
-                      <strong>归档去向</strong>
-                      <div>
-                        {importAcceptanceArchiveItems.map((item) => (
-                          <span key={item}>{item}</span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="import-acceptance-review" aria-label="导入验收复核节点">
-                      <strong>复核节点</strong>
-                      <div>
-                        {importAcceptanceReviewItems.map((item) => (
-                          <span key={item}>{item}</span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="import-acceptance-positioning" aria-label="导入验收交付口径">
-                      <strong>交付口径</strong>
-                      <div>
-                        {importAcceptancePositioningItems.map((item) => (
-                          <span key={item}>{item}</span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="import-acceptance-data-scope" aria-label="导入验收资料范围">
-                      <strong>资料范围</strong>
-                      <div>
-                        {importAcceptanceDataScopeItems.map((item) => (
-                          <span key={item}>{item}</span>
-                        ))}
-                      </div>
-                    </div>
-                    <button type="button" className="import-acceptance-memo" onClick={copyImportAcceptanceMemo}>
-                      <ClipboardList /> 复制导入验收纪要
-                    </button>
-                  </div>
                 </div>
+              </div>
+              <div className="import-acceptance-summary" aria-label="导入验收摘要口径">
+                <strong>导入后复核</strong>
+                <div>
+                  {importAcceptanceSummaryItems.map((item) => (
+                    <span key={item}>{item}</span>
+                  ))}
+                </div>
+                <small>导入结果仅作预填，保存前仍需人工确认字段、期间和资料来源。</small>
+                <button type="button" className="import-acceptance-memo" onClick={copyImportAcceptanceMemo}>
+                  <ClipboardList /> 复制复核纪要
+                </button>
               </div>
               {importSummary.unmappedHeaders.length > 0 && (
                 <div>
