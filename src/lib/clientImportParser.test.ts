@@ -112,7 +112,7 @@ describe('clientImportParser', () => {
       mainBusinessRevenue: 1200000,
       mainBusinessCost: 820000,
       ytdProfit: 180000,
-      assetsTotal: 3600000,
+      assetsTotal: '3600000',
       outputTax: '156000',
       inputTax: '98000',
       payrollTotal: 300000,
@@ -153,6 +153,22 @@ describe('clientImportParser', () => {
       inputTax: '218000',
       vatTaxPayable: '146000',
       endingVatCredit: '72000',
+    })
+  })
+
+  it('recognizes balance sheet asset totals', () => {
+    const parsed = parseClientImportRows([
+      ['项目', '期末余额', '年初余额'],
+      ['资产负债表', '', ''],
+      ['流动资产合计', '1,800,000', '1,200,000'],
+      ['资产总计', '3,600,000', '2,900,000'],
+      ['负债合计', '1,100,000', '980,000'],
+      ['所有者权益合计', '2,500,000', '1,920,000'],
+    ])
+
+    expect(parsed.detectedTables).toContain('资产负债表')
+    expect(parsed.patch).toMatchObject({
+      assetsTotal: 3600000,
     })
   })
 
