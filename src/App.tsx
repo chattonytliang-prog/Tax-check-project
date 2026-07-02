@@ -59,6 +59,7 @@ import { reportScopeSummary } from './lib/reportScopeSummary'
 import { publicRiskBasis, publicRiskReason, sanitizePublicReportContent } from './lib/reportTextSanitizer'
 import {
   clientImportFieldLabels,
+  createClientImportTemplateCsv,
   decodeClientImportText,
   parseClientImportText,
   parseClientImportWorkbook,
@@ -2442,54 +2443,8 @@ function fieldLabel(field: string) {
   return conditionFields.find((item) => item.value === field)?.label || clientImportFieldLabels[field] || field
 }
 
-function csvCell(value: string | number) {
-  const text = String(value)
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
-}
-
 function downloadClientImportTemplate() {
-  const fields = [
-    'name',
-    'creditCode',
-    'region',
-    'industry',
-    'taxpayerType',
-    'analysisYear',
-    'analysisMonth',
-    'dataBasis',
-    'monthlyRevenue',
-    'monthlyCost',
-    'monthlyProfit',
-    'collectionFlow',
-    'monthlyInvoice',
-    'consecutive12MonthSales',
-    'employees',
-    'socialSecurityCount',
-    'salaryDeclaredCount',
-  ]
-  const sampleRow = [
-    '示例企业（请替换）',
-    '请填写统一社会信用代码',
-    '省市',
-    '行业',
-    '一般纳税人',
-    2024,
-    '2024-03',
-    '管理报表',
-    560000,
-    420000,
-    80000,
-    620000,
-    480000,
-    4200000,
-    35,
-    32,
-    35,
-  ]
-  const csv = [
-    fields.map(fieldLabel).map(csvCell).join(','),
-    sampleRow.map(csvCell).join(','),
-  ].join('\r\n')
+  const csv = createClientImportTemplateCsv()
   const blob = new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')

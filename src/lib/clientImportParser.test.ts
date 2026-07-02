@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  createClientImportTemplateCsv,
   decodeClientImportText,
   parseClientImportRows,
   parseClientImportText,
@@ -7,6 +8,17 @@ import {
 } from './clientImportParser'
 
 describe('clientImportParser', () => {
+  it('creates the client import CSV template with localized headers', () => {
+    const csv = createClientImportTemplateCsv()
+    const [header, sample] = csv.split('\r\n')
+
+    expect(header).toContain('企业名称')
+    expect(header).toContain('统一社会信用代码')
+    expect(header).toContain('月收入')
+    expect(sample).toContain('示例企业（请替换）')
+    expect(sample).toContain('管理报表')
+  })
+
   it('parses template-style CSV headers into client fields', () => {
     const parsed = parseClientImportText([
       '企业名称,统一社会信用代码,月收入,月成本费用,销项税额',
