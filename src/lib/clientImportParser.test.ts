@@ -103,12 +103,14 @@ describe('clientImportParser', () => {
     const parsed = parseClientImportText(JSON.stringify({
       资产总额期末余额: 4800000,
       资产合计期末余额: 3600000,
+      年平均从业人数: 28,
     }))
 
     expect(parsed.patch).toMatchObject({
       assetsTotal: 3600000,
+      employeeAnnualAvg: 28,
     })
-    expect(parsed.mappings.map((item) => item.field)).toContain('assetsTotal')
+    expect(parsed.mappings.map((item) => item.field)).toEqual(expect.arrayContaining(['assetsTotal', 'employeeAnnualAvg']))
   })
 
   it('decodes GB18030 accounting CSV text before parsing', () => {
