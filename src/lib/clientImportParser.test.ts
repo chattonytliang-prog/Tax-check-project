@@ -81,13 +81,22 @@ describe('clientImportParser', () => {
       销售额合计: 2800000,
       货物及劳务销售额: 1800000,
       应纳税额合计: 146000,
+      上期销售额: 2400000,
+      上期应纳税额: 120000,
     }))
 
     expect(parsed.patch).toMatchObject({
       taxableSales: 1800000,
       vatTaxPayable: 146000,
+      priorTaxableSales: 2400000,
+      priorVatTaxPayable: 120000,
     })
-    expect(parsed.mappings.map((item) => item.field)).toEqual(expect.arrayContaining(['taxableSales', 'vatTaxPayable']))
+    expect(parsed.mappings.map((item) => item.field)).toEqual(expect.arrayContaining([
+      'taxableSales',
+      'vatTaxPayable',
+      'priorTaxableSales',
+      'priorVatTaxPayable',
+    ]))
   })
 
   it('parses asset total balance aliases from object imports', () => {
@@ -194,6 +203,22 @@ describe('clientImportParser', () => {
       taxableSales: 2800000,
       vatTaxPayable: 146000,
     })
+  })
+
+  it('recognizes prior VAT declaration rows before current-period aliases', () => {
+    const parsed = parseClientImportRows([
+      ['项目', '税额', '销售额'],
+      ['上期应税销售额', '312000', '2,400,000'],
+      ['上期应纳税额', '120000', '2,400,000'],
+    ])
+
+    expect(parsed.detectedTables).toContain('增值税数据')
+    expect(parsed.patch).toMatchObject({
+      priorTaxableSales: 2400000,
+      priorVatTaxPayable: 120000,
+    })
+    expect(parsed.patch).not.toHaveProperty('taxableSales')
+    expect(parsed.patch).not.toHaveProperty('vatTaxPayable')
   })
 
   it('recognizes ending VAT credit total rows as VAT data', () => {
