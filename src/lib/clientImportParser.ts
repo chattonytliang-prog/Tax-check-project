@@ -142,6 +142,10 @@ export const importFieldAliases: Record<string, string> = {
   职工薪酬总额: 'payrollTotal',
   薪酬总额: 'payrollTotal',
   向个人支付非工资薪金所得: 'nonPayrollPersonalPayment',
+  非工资薪金所得: 'nonPayrollPersonalPayment',
+  劳务报酬: 'nonPayrollPersonalPayment',
+  劳务费: 'nonPayrollPersonalPayment',
+  个人劳务费: 'nonPayrollPersonalPayment',
 }
 
 export const clientImportFieldLabels = Object.entries(importFieldAliases).reduce<Record<string, string>>((labels, [label, field]) => {
