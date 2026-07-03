@@ -205,6 +205,34 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses period and data-basis aliases from object imports', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      会计年度: 2026,
+      报表季度: 'Q2',
+      报表月份: '2026-06',
+      起始日期: '2026-04-01',
+      截止日期: '2026-06-30',
+      取数口径: '客户财务系统导出',
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      analysisYear: 2026,
+      analysisQuarter: 'Q2',
+      analysisMonth: '2026-06',
+      periodStartDate: '2026-04-01',
+      periodEndDate: '2026-06-30',
+      dataBasis: '客户财务系统导出',
+    })
+    expect(parsed.mappings.map((item) => item.field)).toEqual(expect.arrayContaining([
+      'analysisYear',
+      'analysisQuarter',
+      'analysisMonth',
+      'periodStartDate',
+      'periodEndDate',
+      'dataBasis',
+    ]))
+  })
+
   it('parses VAT declaration aliases from object imports', () => {
     const parsed = parseClientImportText(JSON.stringify({
       销售额合计: 2800000,
