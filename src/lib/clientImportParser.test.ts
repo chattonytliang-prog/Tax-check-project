@@ -156,6 +156,18 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('recognizes ending VAT credit total rows as VAT data', () => {
+    const parsed = parseClientImportRows([
+      ['项目', '金额'],
+      ['期末留抵税额合计', '58,000'],
+    ])
+
+    expect(parsed.detectedTables).toContain('增值税数据')
+    expect(parsed.patch).toMatchObject({
+      endingVatCredit: '58,000',
+    })
+  })
+
   it('recognizes balance sheet asset totals', () => {
     const parsed = parseClientImportRows([
       ['项目', '期末余额', '年初余额'],

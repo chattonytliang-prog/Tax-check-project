@@ -77,6 +77,7 @@ export const importFieldAliases: Record<string, string> = {
   上期应税销售额: 'priorTaxableSales',
   上期增值税税额: 'priorVatTaxPayable',
   期末留抵税额: 'endingVatCredit',
+  期末留抵税额合计: 'endingVatCredit',
   业务招待费: 'entertainmentExpense',
   广告宣传费: 'adExpense',
   职工福利费: 'welfareExpense',
@@ -274,7 +275,7 @@ function detectImportTables(rows: string[][]) {
   if (/科目余额|科目编码|科目名称|期初余额|期末余额/.test(sample)) tables.push('科目余额表')
   if (/利润表|营业收入|营业成本|利润总额|净利润/.test(sample)) tables.push('利润表')
   if (/资产负债表|资产总计|资产总额|资产合计|负债合计|所有者权益/.test(sample)) tables.push('资产负债表')
-  if (/增值税|销项税额|进项税额|应税销售额|纳税申报/.test(sample)) tables.push('增值税数据')
+  if (/增值税|销项税额|进项税额|应税销售额|纳税申报|留抵税额/.test(sample)) tables.push('增值税数据')
   return Array.from(new Set(tables))
 }
 
@@ -289,7 +290,7 @@ const fieldAmountHeaderPreferences: Record<string, string[]> = {
   ytdCostExpense: ['本年累计借方', '本年累计金额', '借方发生额', '本期借方', '金额'],
   inputTax: ['本期借方', '借方发生额', '进项税额', '税额', '期末余额', '金额'],
   outputTax: ['本期贷方', '贷方发生额', '销项税额', '税额', '期末余额', '金额'],
-  endingVatCredit: ['期末留抵税额', '期末留抵', '留抵税额', '税额', '金额'],
+  endingVatCredit: ['期末留抵税额合计', '期末留抵税额', '期末留抵', '留抵税额', '税额', '金额'],
   collectionFlow: ['本期借方', '借方发生额', '期末余额', '金额'],
 }
 
