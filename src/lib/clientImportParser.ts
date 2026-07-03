@@ -137,6 +137,10 @@ export const importFieldAliases: Record<string, string> = {
   营业外收入发生额: 'nonOperatingIncome',
   其他应收代收代付余额: 'otherReceivableAgencyBalance',
   工资薪金总额: 'payrollTotal',
+  工资总额: 'payrollTotal',
+  应付职工薪酬: 'payrollTotal',
+  职工薪酬总额: 'payrollTotal',
+  薪酬总额: 'payrollTotal',
   向个人支付非工资薪金所得: 'nonPayrollPersonalPayment',
 }
 
