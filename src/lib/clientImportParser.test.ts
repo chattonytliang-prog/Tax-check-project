@@ -180,19 +180,28 @@ describe('clientImportParser', () => {
       客户名称: '上海代理客户测试有限公司',
       纳税人识别号: '91310000AGENCY',
       税号: '91310000AGENCY-ALT',
-      地区: '上海',
+      注册地址: '上海市浦东新区',
+      所属行业: '信息技术服务',
+      纳税人资格: '一般纳税人',
+      成立日期: '2023-05-18',
     }))
 
     expect(parsed.patch).toMatchObject({
       name: '上海代理客户测试有限公司',
       creditCode: '91310000AGENCY-ALT',
-      region: '上海',
+      region: '上海市浦东新区',
+      industry: '信息技术服务',
+      taxpayerType: '一般纳税人',
+      establishedAt: '2023-05-18',
     })
     expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
       '客户名称',
       '纳税人识别号',
       '税号',
-      '地区',
+      '注册地址',
+      '所属行业',
+      '纳税人资格',
+      '成立日期',
     ]))
   })
 
