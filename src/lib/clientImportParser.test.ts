@@ -76,6 +76,20 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('parses VAT declaration aliases from object imports', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      销售额合计: 2800000,
+      货物及劳务销售额: 1800000,
+      应纳税额合计: 146000,
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      taxableSales: 1800000,
+      vatTaxPayable: 146000,
+    })
+    expect(parsed.mappings.map((item) => item.field)).toEqual(expect.arrayContaining(['taxableSales', 'vatTaxPayable']))
+  })
+
   it('decodes GB18030 accounting CSV text before parsing', () => {
     const gb18030Csv = new Uint8Array([
       0xc6, 0xf3, 0xd2, 0xb5, 0xc3, 0xfb, 0xb3, 0xc6, 0x2c, 0xd4, 0xc2, 0xca, 0xd5, 0xc8, 0xeb, 0x0a,
