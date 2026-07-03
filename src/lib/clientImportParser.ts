@@ -540,6 +540,29 @@ function parseFinancialExportRows(rows: string[][]): ParsedClientImport {
   }
 }
 
+function countRecognizedHeaders(row: string[]) {
+  return row.filter((cell) => resolveImportField(cell)).length
+}
+
+function chooseTabularHeaderRows(rows: string[][]) {
+  const [firstRow, secondRow, thirdRow] = rows
+  if (!firstRow) return null
+
+  const secondRowFieldCount = secondRow ? countRecognizedHeaders(secondRow) : 0
+  if (secondRow && thirdRow && secondRow.length > 2 && secondRowFieldCount >= 2) {
+    return { headers: secondRow, values: thirdRow }
+  }
+
+  const firstRowFieldCount = countRecognizedHeaders(firstRow)
+  if (firstRow.length > 2 || Boolean(
+    secondRow && firstRow.length > 1 && firstRowFieldCount === firstRow.length && !resolveImportField(secondRow[0] || ''),
+  )) {
+    return secondRow ? { headers: firstRow, values: secondRow } : null
+  }
+
+  return null
+}
+
 export function parseClientImportRows(rows: string[][]): ParsedClientImport {
   const patch: Record<string, unknown> = {}
   const mappings: ImportMappingPreview[] = []
@@ -558,13 +581,10 @@ export function parseClientImportRows(rows: string[][]): ParsedClientImport {
     }
   }
 
-  const firstRowFieldCount = rows[0].filter((cell) => resolveImportField(cell)).length
-  const firstRowLooksLikeHeader = rows[0].length > 2 || Boolean(
-    rows[1] && rows[0].length > 1 && firstRowFieldCount === rows[0].length && !resolveImportField(rows[1][0] || ''),
-  )
-  if (firstRowLooksLikeHeader && rows[1]) {
-    rows[0].forEach((header, index) => {
-      mapValue(header, rows[1][index])
+  const tabularRows = chooseTabularHeaderRows(rows)
+  if (tabularRows) {
+    tabularRows.headers.forEach((header, index) => {
+      mapValue(header, tabularRows.values[index])
     })
   } else {
     rows.forEach(([key, value]) => {

@@ -123,6 +123,29 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('parses grouped two-line tabular headers', () => {
+    const parsed = parseClientImportRows([
+      ['基础信息', '基础信息', '经营数据', '经营数据', '风险事项'],
+      ['企业名称', '统一社会信用代码', '月收入', '月成本费用', '库存异常'],
+      ['上海两行表头测试有限公司', '91310000TWOLINE', '260000', '180000', '否'],
+    ])
+
+    expect(parsed.patch).toMatchObject({
+      name: '上海两行表头测试有限公司',
+      creditCode: '91310000TWOLINE',
+      monthlyRevenue: '260000',
+      monthlyCost: '180000',
+      inventoryAbnormal: '否',
+    })
+    expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '企业名称',
+      '统一社会信用代码',
+      '月收入',
+      '月成本费用',
+      '库存异常',
+    ]))
+  })
+
   it('keeps quoted CSV amounts with thousands separators in one cell', () => {
     const parsed = parseClientImportText([
       '企业名称,月收入,月成本费用',
