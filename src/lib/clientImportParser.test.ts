@@ -90,6 +90,18 @@ describe('clientImportParser', () => {
     expect(parsed.mappings.map((item) => item.field)).toEqual(expect.arrayContaining(['taxableSales', 'vatTaxPayable']))
   })
 
+  it('parses asset total balance aliases from object imports', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      资产总额期末余额: 4800000,
+      资产合计期末余额: 3600000,
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      assetsTotal: 3600000,
+    })
+    expect(parsed.mappings.map((item) => item.field)).toContain('assetsTotal')
+  })
+
   it('decodes GB18030 accounting CSV text before parsing', () => {
     const gb18030Csv = new Uint8Array([
       0xc6, 0xf3, 0xd2, 0xb5, 0xc3, 0xfb, 0xb3, 0xc6, 0x2c, 0xd4, 0xc2, 0xca, 0xd5, 0xc8, 0xeb, 0x0a,
