@@ -175,6 +175,27 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('parses agency client list name and tax id aliases', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      客户名称: '上海代理客户测试有限公司',
+      纳税人识别号: '91310000AGENCY',
+      税号: '91310000AGENCY-ALT',
+      地区: '上海',
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      name: '上海代理客户测试有限公司',
+      creditCode: '91310000AGENCY-ALT',
+      region: '上海',
+    })
+    expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '客户名称',
+      '纳税人识别号',
+      '税号',
+      '地区',
+    ]))
+  })
+
   it('parses VAT declaration aliases from object imports', () => {
     const parsed = parseClientImportText(JSON.stringify({
       销售额合计: 2800000,

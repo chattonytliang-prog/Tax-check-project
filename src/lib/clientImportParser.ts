@@ -16,7 +16,14 @@ export type ParsedClientImport = {
 
 export const importFieldAliases: Record<string, string> = {
   企业名称: 'name',
+  公司名称: 'name',
+  客户名称: 'name',
+  纳税人名称: 'name',
+  单位名称: 'name',
   统一社会信用代码: 'creditCode',
+  纳税人识别号: 'creditCode',
+  税号: 'creditCode',
+  税务登记号: 'creditCode',
   地区: 'region',
   行业: 'industry',
   纳税人类型: 'taxpayerType',
@@ -252,10 +259,18 @@ export const importFieldAliases: Record<string, string> = {
   个人劳务费: 'nonPayrollPersonalPayment',
 }
 
-export const clientImportFieldLabels = Object.entries(importFieldAliases).reduce<Record<string, string>>((labels, [label, field]) => {
-  if (!labels[field] || label.length < labels[field].length) labels[field] = label
-  return labels
-}, {})
+const preferredImportFieldLabels: Record<string, string> = {
+  name: '企业名称',
+  creditCode: '统一社会信用代码',
+}
+
+export const clientImportFieldLabels = {
+  ...Object.entries(importFieldAliases).reduce<Record<string, string>>((labels, [label, field]) => {
+    if (!labels[field] || label.length < labels[field].length) labels[field] = label
+    return labels
+  }, {}),
+  ...preferredImportFieldLabels,
+}
 
 const importTemplateFields = [
   'name',
