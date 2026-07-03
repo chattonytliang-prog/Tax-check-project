@@ -21,8 +21,8 @@ describe('clientImportParser', () => {
 
   it('parses template-style CSV headers into client fields', () => {
     const parsed = parseClientImportText([
-      '企业名称,统一社会信用代码,月收入,月成本费用,销项税额,银行收款流水,本月开票金额,未开票收入,连续零申报,预收账款长期挂账,大额无票费用,咨询服务费发票,关联交易,供应商无进项,发票品名异常,进销不匹配,资金回流,异常发票,民间借贷利息异常,集团管理费,关联定价异常,工资拆分,未代扣个税,关联个人独资,近12个月销售额,电商平台收入,私户收款,红字发票金额,职工人数,外包人数,参保人数,个税申报人数,应付职工薪酬,个人劳务费',
-      '上海模板测试有限公司,91310000TEMPLATE,100000,60000,13000,280000,96000,是,否,是,是,是,否,是,否,是,否,否,否,是,否,是,否,是,1180000,420000,是,18000,36,8,32,35,310000,42000',
+      '企业名称,统一社会信用代码,月收入,月成本费用,销项税额,银行收款流水,本月开票金额,未开票收入,连续零申报,预收账款长期挂账,大额无票费用,咨询服务费发票,关联交易,供应商无进项,发票品名异常,进销不匹配,资金回流,异常发票,民间借贷利息异常,集团管理费,关联定价异常,工资拆分,未代扣个税,关联个人独资,享受小型微利优惠,长期亏损,优惠资料不足,研发加计扣除,库存异常,研发资料不足,代理记账合规风险,近12个月销售额,电商平台收入,私户收款,红字发票金额,职工人数,外包人数,参保人数,个税申报人数,应付职工薪酬,个人劳务费',
+      '上海模板测试有限公司,91310000TEMPLATE,100000,60000,13000,280000,96000,是,否,是,是,是,否,是,否,是,否,否,否,是,否,是,否,是,是,否,是,是,否,否,是,1180000,420000,是,18000,36,8,32,35,310000,42000',
     ].join('\n'))
 
     expect(parsed.patch).toMatchObject({
@@ -50,6 +50,13 @@ describe('clientImportParser', () => {
       salarySplit: '是',
       noIitWithholding: '否',
       individualVendorRelated: '是',
+      smallProfitEnjoyed: '是',
+      longTermLoss: '否',
+      taxBenefitDataMissing: '是',
+      rdDeductionEnjoyed: '是',
+      inventoryAbnormal: '否',
+      rdDocsInsufficient: '否',
+      agencyComplianceRisk: '是',
       consecutive12MonthSales: '1180000',
       platformRevenue: '420000',
       privateAccountCollection: '是',
@@ -84,6 +91,13 @@ describe('clientImportParser', () => {
       'salarySplit',
       'noIitWithholding',
       'individualVendorRelated',
+      'smallProfitEnjoyed',
+      'longTermLoss',
+      'taxBenefitDataMissing',
+      'rdDeductionEnjoyed',
+      'inventoryAbnormal',
+      'rdDocsInsufficient',
+      'agencyComplianceRisk',
       'consecutive12MonthSales',
       'platformRevenue',
       'privateAccountCollection',
