@@ -172,6 +172,18 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('recognizes asset total labels without an explicit balance sheet title', () => {
+    const parsed = parseClientImportRows([
+      ['项目', '期末余额'],
+      ['资产总额', '4,800,000'],
+    ])
+
+    expect(parsed.detectedTables).toContain('资产负债表')
+    expect(parsed.patch).toMatchObject({
+      assetsTotal: '4,800,000',
+    })
+  })
+
   it('recognizes Yonyou account balance exports', () => {
     const parsed = parseClientImportRows([
       ['科目编码', '科目名称', '期末余额'],

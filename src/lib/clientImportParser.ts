@@ -273,7 +273,7 @@ function detectImportTables(rows: string[][]) {
   const tables: string[] = []
   if (/科目余额|科目编码|科目名称|期初余额|期末余额/.test(sample)) tables.push('科目余额表')
   if (/利润表|营业收入|营业成本|利润总额|净利润/.test(sample)) tables.push('利润表')
-  if (/资产负债表|资产总计|负债合计|所有者权益/.test(sample)) tables.push('资产负债表')
+  if (/资产负债表|资产总计|资产总额|资产合计|负债合计|所有者权益/.test(sample)) tables.push('资产负债表')
   if (/增值税|销项税额|进项税额|应税销售额|纳税申报/.test(sample)) tables.push('增值税数据')
   return Array.from(new Set(tables))
 }
