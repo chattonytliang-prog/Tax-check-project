@@ -21,8 +21,8 @@ describe('clientImportParser', () => {
 
   it('parses template-style CSV headers into client fields', () => {
     const parsed = parseClientImportText([
-      '企业名称,统一社会信用代码,月收入,月成本费用,销项税额',
-      '上海模板测试有限公司,91310000TEMPLATE,100000,60000,13000',
+      '企业名称,统一社会信用代码,月收入,月成本费用,销项税额,银行收款流水',
+      '上海模板测试有限公司,91310000TEMPLATE,100000,60000,13000,280000',
     ].join('\n'))
 
     expect(parsed.patch).toMatchObject({
@@ -31,8 +31,14 @@ describe('clientImportParser', () => {
       monthlyRevenue: '100000',
       monthlyCost: '60000',
       outputTax: '13000',
+      collectionFlow: '280000',
     })
-    expect(parsed.mappings.map((item) => item.field)).toEqual(expect.arrayContaining(['name', 'monthlyRevenue', 'outputTax']))
+    expect(parsed.mappings.map((item) => item.field)).toEqual(expect.arrayContaining([
+      'name',
+      'monthlyRevenue',
+      'outputTax',
+      'collectionFlow',
+    ]))
   })
 
   it('ignores a UTF-8 BOM before the first CSV header', () => {
