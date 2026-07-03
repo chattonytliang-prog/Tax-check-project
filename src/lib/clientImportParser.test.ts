@@ -233,6 +233,43 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses operating performance aliases from object imports', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      营业收入本月: 260000,
+      成本费用本月: 180000,
+      本月利润总额: 80000,
+      年收入总额: 3120000,
+      营业收入本年累计: 1560000,
+      成本费用本年累计: 1080000,
+      净利润: 320000,
+      销售收入: 1580000,
+      成本费用合计: 980000,
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      monthlyRevenue: 260000,
+      monthlyCost: 180000,
+      monthlyProfit: 80000,
+      annualRevenue: 3120000,
+      ytdRevenue: 1560000,
+      ytdCostExpense: 1080000,
+      ytdProfit: 320000,
+      mainBusinessRevenue: 1580000,
+      mainBusinessCost: 980000,
+    })
+    expect(parsed.mappings.map((item) => item.field)).toEqual(expect.arrayContaining([
+      'monthlyRevenue',
+      'monthlyCost',
+      'monthlyProfit',
+      'annualRevenue',
+      'ytdRevenue',
+      'ytdCostExpense',
+      'ytdProfit',
+      'mainBusinessRevenue',
+      'mainBusinessCost',
+    ]))
+  })
+
   it('parses VAT declaration aliases from object imports', () => {
     const parsed = parseClientImportText(JSON.stringify({
       销售额合计: 2800000,

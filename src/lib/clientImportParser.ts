@@ -78,9 +78,21 @@ export const importFieldAliases: Record<string, string> = {
   数据提供方: 'dataBasis',
   对比期间: 'comparisonPeriod',
   月收入: 'monthlyRevenue',
+  本月收入: 'monthlyRevenue',
+  营业收入本月: 'monthlyRevenue',
+  收入本月: 'monthlyRevenue',
   月成本费用: 'monthlyCost',
+  本月成本费用: 'monthlyCost',
+  本月成本: 'monthlyCost',
+  营业成本本月: 'monthlyCost',
+  成本费用本月: 'monthlyCost',
   月利润: 'monthlyProfit',
+  本月利润: 'monthlyProfit',
+  本月利润总额: 'monthlyProfit',
   年销售收入: 'annualRevenue',
+  年营业收入: 'annualRevenue',
+  年收入总额: 'annualRevenue',
+  全年销售收入: 'annualRevenue',
   收款流水: 'collectionFlow',
   银行流水: 'collectionFlow',
   银行收款流水: 'collectionFlow',
@@ -108,12 +120,27 @@ export const importFieldAliases: Record<string, string> = {
   本季度成本费用: 'quarterCostExpense',
   上季度成本费用: 'previousQuarterCostExpense',
   本年累计收入: 'ytdRevenue',
+  营业收入本年累计: 'ytdRevenue',
+  收入本年累计: 'ytdRevenue',
+  本年收入累计: 'ytdRevenue',
   本年累计成本费用: 'ytdCostExpense',
+  营业成本本年累计: 'ytdCostExpense',
+  成本费用本年累计: 'ytdCostExpense',
+  本年成本累计: 'ytdCostExpense',
   本年累计利润: 'ytdProfit',
+  利润总额: 'ytdProfit',
+  净利润: 'ytdProfit',
+  营业利润: 'ytdProfit',
   预算收入: 'budgetRevenue',
   上年同期收入: 'previousYearRevenue',
   主营业务收入: 'mainBusinessRevenue',
+  营业收入: 'mainBusinessRevenue',
+  销售收入: 'mainBusinessRevenue',
+  收入总额: 'mainBusinessRevenue',
   主营业务成本: 'mainBusinessCost',
+  营业成本: 'mainBusinessCost',
+  销售成本: 'mainBusinessCost',
+  成本费用合计: 'mainBusinessCost',
   人员相关成本费用: 'peopleRelatedExpense',
   承租面积: 'rentalArea',
   转租面积: 'subleaseArea',
@@ -608,11 +635,21 @@ function chooseTabularHeaderRows(rows: string[][]) {
   return null
 }
 
+function resolveFinancialRowField(label: string) {
+  const rowLabel = normalizeFinancialLabel(label)
+  if (!rowLabel) return null
+  return financialRowFieldRules.find((item) => (
+    item.patterns.some((pattern) => rowLabel.includes(normalizeFinancialLabel(pattern)))
+  ))?.field || null
+}
+
 export function parseClientImportRows(rows: string[][]): ParsedClientImport {
   const patch: Record<string, unknown> = {}
   const mappings: ImportMappingPreview[] = []
   const unmappedHeaders: string[] = []
   if (!rows.length) return emptyParsedClientImport()
+  const detectedTables = detectImportTables(rows)
+  const detectedSourceType = detectImportSourceType(rows)
 
   const mapValue = (source: string, value: string) => {
     const normalizedSource = source.trim()
@@ -633,6 +670,8 @@ export function parseClientImportRows(rows: string[][]): ParsedClientImport {
     })
   } else {
     rows.forEach(([key, value]) => {
+      const financialField = detectedTables.length ? resolveFinancialRowField(key) : null
+      if (financialField && ['mainBusinessRevenue', 'mainBusinessCost', 'ytdProfit'].includes(financialField)) return
       mapValue(key, value)
     })
   }
@@ -641,8 +680,8 @@ export function parseClientImportRows(rows: string[][]): ParsedClientImport {
     patch,
     mappings,
     unmappedHeaders: Array.from(new Set(unmappedHeaders)).slice(0, 12),
-    detectedTables: detectImportTables(rows),
-    detectedSourceType: detectImportSourceType(rows),
+    detectedTables,
+    detectedSourceType,
   }, parseFinancialExportRows(rows))
 }
 
