@@ -182,6 +182,20 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('prefers sales columns for taxable sales rows', () => {
+    const parsed = parseClientImportRows([
+      ['项目', '税额', '销售额'],
+      ['应税销售额', '364000', '2,800,000'],
+      ['应纳税额合计', '146000', '2,800,000'],
+    ])
+
+    expect(parsed.detectedTables).toContain('增值税数据')
+    expect(parsed.patch).toMatchObject({
+      taxableSales: 2800000,
+      vatTaxPayable: 146000,
+    })
+  })
+
   it('recognizes ending VAT credit total rows as VAT data', () => {
     const parsed = parseClientImportRows([
       ['项目', '金额'],
