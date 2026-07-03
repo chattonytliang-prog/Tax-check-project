@@ -21,8 +21,8 @@ describe('clientImportParser', () => {
 
   it('parses template-style CSV headers into client fields', () => {
     const parsed = parseClientImportText([
-      '企业名称,统一社会信用代码,月收入,月成本费用,销项税额,银行收款流水,本月开票金额,未开票收入,连续零申报,预收账款长期挂账,大额无票费用,咨询服务费发票,关联交易,供应商无进项,发票品名异常,进销不匹配,资金回流,异常发票,民间借贷利息异常,集团管理费,关联定价异常,近12个月销售额,电商平台收入,私户收款,红字发票金额,职工人数,外包人数,参保人数,个税申报人数,应付职工薪酬,个人劳务费',
-      '上海模板测试有限公司,91310000TEMPLATE,100000,60000,13000,280000,96000,是,否,是,是,是,否,是,否,是,否,否,否,是,否,1180000,420000,是,18000,36,8,32,35,310000,42000',
+      '企业名称,统一社会信用代码,月收入,月成本费用,销项税额,银行收款流水,本月开票金额,未开票收入,连续零申报,预收账款长期挂账,大额无票费用,咨询服务费发票,关联交易,供应商无进项,发票品名异常,进销不匹配,资金回流,异常发票,民间借贷利息异常,集团管理费,关联定价异常,工资拆分,未代扣个税,关联个人独资,近12个月销售额,电商平台收入,私户收款,红字发票金额,职工人数,外包人数,参保人数,个税申报人数,应付职工薪酬,个人劳务费',
+      '上海模板测试有限公司,91310000TEMPLATE,100000,60000,13000,280000,96000,是,否,是,是,是,否,是,否,是,否,否,否,是,否,是,否,是,1180000,420000,是,18000,36,8,32,35,310000,42000',
     ].join('\n'))
 
     expect(parsed.patch).toMatchObject({
@@ -47,6 +47,9 @@ describe('clientImportParser', () => {
       nonFinancialInterestAbnormal: '否',
       intercompanyManagementFee: '是',
       relatedPricingAbnormal: '否',
+      salarySplit: '是',
+      noIitWithholding: '否',
+      individualVendorRelated: '是',
       consecutive12MonthSales: '1180000',
       platformRevenue: '420000',
       privateAccountCollection: '是',
@@ -78,6 +81,9 @@ describe('clientImportParser', () => {
       'nonFinancialInterestAbnormal',
       'intercompanyManagementFee',
       'relatedPricingAbnormal',
+      'salarySplit',
+      'noIitWithholding',
+      'individualVendorRelated',
       'consecutive12MonthSales',
       'platformRevenue',
       'privateAccountCollection',
