@@ -104,13 +104,19 @@ describe('clientImportParser', () => {
       资产总额期末余额: 4800000,
       资产合计期末余额: 3600000,
       年平均从业人数: 28,
+      年度应纳税所得额: 860000,
     }))
 
     expect(parsed.patch).toMatchObject({
       assetsTotal: 3600000,
       employeeAnnualAvg: 28,
+      taxableIncome: 860000,
     })
-    expect(parsed.mappings.map((item) => item.field)).toEqual(expect.arrayContaining(['assetsTotal', 'employeeAnnualAvg']))
+    expect(parsed.mappings.map((item) => item.field)).toEqual(expect.arrayContaining([
+      'assetsTotal',
+      'employeeAnnualAvg',
+      'taxableIncome',
+    ]))
   })
 
   it('decodes GB18030 accounting CSV text before parsing', () => {
