@@ -21,8 +21,8 @@ describe('clientImportParser', () => {
 
   it('parses template-style CSV headers into client fields', () => {
     const parsed = parseClientImportText([
-      '企业名称,统一社会信用代码,月收入,月成本费用,销项税额,银行收款流水,本月开票金额,近12个月销售额,电商平台收入,红字发票金额',
-      '上海模板测试有限公司,91310000TEMPLATE,100000,60000,13000,280000,96000,1180000,420000,18000',
+      '企业名称,统一社会信用代码,月收入,月成本费用,销项税额,银行收款流水,本月开票金额,近12个月销售额,电商平台收入,红字发票金额,职工人数,参保人数,个税申报人数',
+      '上海模板测试有限公司,91310000TEMPLATE,100000,60000,13000,280000,96000,1180000,420000,18000,36,32,35',
     ].join('\n'))
 
     expect(parsed.patch).toMatchObject({
@@ -36,6 +36,9 @@ describe('clientImportParser', () => {
       consecutive12MonthSales: '1180000',
       platformRevenue: '420000',
       redVatSpecialInvoiceAmount: '18000',
+      employees: '36',
+      socialSecurityCount: '32',
+      salaryDeclaredCount: '35',
     })
     expect(parsed.mappings.map((item) => item.field)).toEqual(expect.arrayContaining([
       'name',
@@ -46,6 +49,9 @@ describe('clientImportParser', () => {
       'consecutive12MonthSales',
       'platformRevenue',
       'redVatSpecialInvoiceAmount',
+      'employees',
+      'socialSecurityCount',
+      'salaryDeclaredCount',
     ]))
   })
 
