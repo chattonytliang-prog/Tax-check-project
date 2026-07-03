@@ -298,6 +298,7 @@ const fieldAmountHeaderPreferences: Record<string, string[]> = {
   outputTax: ['本期贷方', '贷方发生额', '销项税额', '税额', '期末余额', '金额'],
   endingVatCredit: ['期末留抵税额合计', '期末留抵税额', '期末留抵', '留抵税额', '税额', '金额'],
   collectionFlow: ['本期借方', '借方发生额', '期末余额', '金额'],
+  assetsTotal: ['期末余额', '期末数', '期末金额', '资产总额期末余额', '资产总计期末余额', '金额'],
 }
 
 function findFinancialAmount(row: string[], headerRow?: string[], field?: string) {

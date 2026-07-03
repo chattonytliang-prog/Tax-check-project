@@ -210,6 +210,18 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('prefers ending balance columns for asset totals', () => {
+    const parsed = parseClientImportRows([
+      ['项目', '年初余额', '期末余额'],
+      ['资产合计', '2,900,000', '3,600,000'],
+    ])
+
+    expect(parsed.detectedTables).toContain('资产负债表')
+    expect(parsed.patch).toMatchObject({
+      assetsTotal: 3600000,
+    })
+  })
+
   it('recognizes asset total labels without an explicit balance sheet title', () => {
     const parsed = parseClientImportRows([
       ['项目', '期末余额'],
