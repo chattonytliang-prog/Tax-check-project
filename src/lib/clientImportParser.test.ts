@@ -230,6 +230,19 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('parses pipe-delimited client exports', () => {
+    const parsed = parseClientImportText([
+      'monthlyRevenue|monthlyCost|outputTax',
+      '910000|580000|118300',
+    ].join('\n'))
+
+    expect(parsed.patch).toMatchObject({
+      monthlyRevenue: '910000',
+      monthlyCost: '580000',
+      outputTax: '118300',
+    })
+  })
+
   it('parses JSON object imports with Chinese field aliases', () => {
     const parsed = parseClientImportText(JSON.stringify({
       企业名称: '上海 JSON 导入测试有限公司',
