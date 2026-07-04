@@ -233,6 +233,38 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses tax period and source aliases from agency exports', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      申报年度: 2026,
+      税款所属季度: 'Q3',
+      所属期间: '2026-09',
+      账期: '2026-10',
+      所属期起: '2026-10-01',
+      税款所属期止: '2026-10-31',
+      申报口径: '纳税申报表',
+      账套来源: '代理记账系统',
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      analysisYear: 2026,
+      analysisQuarter: 'Q3',
+      analysisMonth: '2026-10',
+      periodStartDate: '2026-10-01',
+      periodEndDate: '2026-10-31',
+      dataBasis: '代理记账系统',
+    })
+    expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '申报年度',
+      '税款所属季度',
+      '所属期间',
+      '账期',
+      '所属期起',
+      '税款所属期止',
+      '申报口径',
+      '账套来源',
+    ]))
+  })
+
   it('parses operating performance aliases from object imports', () => {
     const parsed = parseClientImportText(JSON.stringify({
       营业收入本月: 260000,
