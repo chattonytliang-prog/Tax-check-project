@@ -123,6 +123,28 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('matches headers with punctuation spaces and unit suffixes', () => {
+    const parsed = parseClientImportText([
+      '企业名称：,统一社会信用代码（必填）,月收入 / 元,销项税额_元,业务招待费（本年累计）',
+      '上海表头格式测试有限公司,91310000HEADER,260000,33800,12000',
+    ].join('\n'))
+
+    expect(parsed.patch).toMatchObject({
+      name: '上海表头格式测试有限公司',
+      creditCode: '91310000HEADER',
+      monthlyRevenue: '260000',
+      outputTax: '33800',
+      entertainmentExpense: '12000',
+    })
+    expect(parsed.mappings.map((item) => item.field)).toEqual(expect.arrayContaining([
+      'name',
+      'creditCode',
+      'monthlyRevenue',
+      'outputTax',
+      'entertainmentExpense',
+    ]))
+  })
+
   it('parses grouped two-line tabular headers', () => {
     const parsed = parseClientImportRows([
       ['基础信息', '基础信息', '经营数据', '经营数据', '风险事项'],

@@ -678,11 +678,19 @@ function normalizeImportKey(key: string) {
   return key.replace(/^\uFEFF/, '').replace(/[：:\s（）()_/-]/g, '').trim()
 }
 
-function resolveImportField(key: string) {
+function importKeyCandidates(key: string) {
   const normalized = normalizeImportKey(key)
-  const direct = importFieldAliases[key] || importFieldAliases[normalized]
+  return Array.from(new Set([
+    normalized,
+    normalized.replace(/(必填|选填|可选|人民币|金额|元|万元|数量|人数|人)+$/g, ''),
+  ].filter(Boolean)))
+}
+
+function resolveImportField(key: string) {
+  const candidates = importKeyCandidates(key)
+  const direct = importFieldAliases[key] || candidates.map((candidate) => importFieldAliases[candidate]).find(Boolean)
   if (direct) return direct
-  const matched = Object.entries(importFieldAliases).find(([label]) => normalizeImportKey(label) === normalized)
+  const matched = Object.entries(importFieldAliases).find(([label]) => candidates.includes(normalizeImportKey(label)))
   if (matched) return matched[1]
   return conditionFields.some((field) => field.value === key) ? key : null
 }
