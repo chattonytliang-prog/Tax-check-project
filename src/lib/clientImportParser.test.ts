@@ -203,6 +203,20 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('parses tab-delimited client exports', () => {
+    const parsed = parseClientImportText([
+      '企业名称\t统一社会信用代码\t月收入\t月成本费用',
+      '上海 TSV 导入测试有限公司\t91310000TSV\t360000\t240000',
+    ].join('\n'))
+
+    expect(parsed.patch).toMatchObject({
+      name: '上海 TSV 导入测试有限公司',
+      creditCode: '91310000TSV',
+      monthlyRevenue: '360000',
+      monthlyCost: '240000',
+    })
+  })
+
   it('parses JSON object imports with Chinese field aliases', () => {
     const parsed = parseClientImportText(JSON.stringify({
       企业名称: '上海 JSON 导入测试有限公司',
