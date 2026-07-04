@@ -470,6 +470,36 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses invoice content mismatch flow-back and abnormal invoice aliases', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      发票货物名称不一致: '是',
+      商品服务名称不符: '否',
+      进项销项不符: '是',
+      购销品类不符: '否',
+      资金回流闭环: '是',
+      付款后回流: '否',
+      异常凭证: '是',
+      涉嫌虚开: '否',
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      invoiceNameMismatch: '否',
+      purchaseSalesMismatch: '否',
+      fundsReturn: '否',
+      abnormalInvoice: '否',
+    })
+    expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '发票货物名称不一致',
+      '商品服务名称不符',
+      '进项销项不符',
+      '购销品类不符',
+      '资金回流闭环',
+      '付款后回流',
+      '异常凭证',
+      '涉嫌虚开',
+    ]))
+  })
+
   it('parses VAT declaration aliases from object imports', () => {
     const parsed = parseClientImportText(JSON.stringify({
       销售额合计: 2800000,
