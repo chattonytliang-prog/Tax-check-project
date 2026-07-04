@@ -304,6 +304,21 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('parses JSON wrapper object headers and rows', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      headers: ['monthlyRevenue', 'monthlyCost', 'outputTax'],
+      rows: [
+        [710000, 450000, 92300],
+      ],
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      monthlyRevenue: '710000',
+      monthlyCost: '450000',
+      outputTax: '92300',
+    })
+  })
+
   it('parses agency client list name and tax id aliases', () => {
     const parsed = parseClientImportText(JSON.stringify({
       客户名称: '上海代理客户测试有限公司',
