@@ -367,6 +367,36 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('parses JSON wrapper object list arrays', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      list: [
+        { monthlyRevenue: 540000 },
+        { monthlyCost: 360000, outputTax: 70200 },
+      ],
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      monthlyRevenue: 540000,
+      monthlyCost: 360000,
+      outputTax: 70200,
+    })
+  })
+
+  it('parses JSON wrapper object results arrays', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      results: [
+        { monthlyRevenue: 550000 },
+        { monthlyCost: 370000, outputTax: 71500 },
+      ],
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      monthlyRevenue: 550000,
+      monthlyCost: 370000,
+      outputTax: 71500,
+    })
+  })
+
   it('parses JSON wrapper object row arrays', () => {
     const parsed = parseClientImportText(JSON.stringify({
       rows: [
