@@ -709,7 +709,7 @@ function parseDelimitedRows(text: string) {
         index += 1
       } else if (char === '"') {
         quoted = !quoted
-      } else if (!quoted && (char === ',' || char === '\t')) {
+      } else if (!quoted && (char === ',' || char === '\t' || char === ';')) {
         cells.push(cell.trim())
         cell = ''
       } else {

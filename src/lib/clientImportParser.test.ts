@@ -217,6 +217,19 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('parses semicolon-delimited client exports', () => {
+    const parsed = parseClientImportText([
+      'monthlyRevenue;monthlyCost;outputTax',
+      '810000;520000;105300',
+    ].join('\n'))
+
+    expect(parsed.patch).toMatchObject({
+      monthlyRevenue: '810000',
+      monthlyCost: '520000',
+      outputTax: '105300',
+    })
+  })
+
   it('parses JSON object imports with Chinese field aliases', () => {
     const parsed = parseClientImportText(JSON.stringify({
       企业名称: '上海 JSON 导入测试有限公司',
