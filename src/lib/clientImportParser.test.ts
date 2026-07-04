@@ -422,6 +422,29 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses unbilled zero-declaration and prepaid balance aliases', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      未开票销售额: '是',
+      无票销售额: '否',
+      连续多月零申报: '是',
+      预收账款挂账余额: '否',
+      合同负债挂账余额: '是',
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      unbilledIncome: '否',
+      longTermZeroDeclaration: '是',
+      prepaidLongTerm: '是',
+    })
+    expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '未开票销售额',
+      '无票销售额',
+      '连续多月零申报',
+      '预收账款挂账余额',
+      '合同负债挂账余额',
+    ]))
+  })
+
   it('parses VAT declaration aliases from object imports', () => {
     const parsed = parseClientImportText(JSON.stringify({
       销售额合计: 2800000,
