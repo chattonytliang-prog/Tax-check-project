@@ -290,6 +290,28 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses employee social security and payroll count aliases', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      在职人数: 42,
+      外包人员数: 7,
+      参保员工数: 38,
+      申报工资人数: 40,
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      employees: 42,
+      laborCount: 7,
+      socialSecurityCount: 38,
+      salaryDeclaredCount: 40,
+    })
+    expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '在职人数',
+      '外包人员数',
+      '参保员工数',
+      '申报工资人数',
+    ]))
+  })
+
   it('parses VAT declaration aliases from object imports', () => {
     const parsed = parseClientImportText(JSON.stringify({
       销售额合计: 2800000,
