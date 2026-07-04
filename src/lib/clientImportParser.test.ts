@@ -337,6 +337,51 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses accumulated expense and non-operating aliases', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      业务招待费本年累计: 21000,
+      业务招待费累计发生额: 23000,
+      广告宣传费发生额: 46000,
+      广宣费: 48000,
+      职工福利费发生额: 27000,
+      福利费发生额: 29000,
+      工会经费计提额: 8200,
+      工会经费本年累计: 8600,
+      教育培训经费: 12500,
+      职工教育经费本年累计: 13800,
+      营业外支出本年累计: 9000,
+      非经营支出: 11000,
+      营业外收入本年累计: 6000,
+      非经营收入: 7000,
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      entertainmentExpense: 23000,
+      adExpense: 48000,
+      welfareExpense: 29000,
+      unionExpense: 8600,
+      educationExpense: 13800,
+      nonOperatingExpense: 11000,
+      nonOperatingIncome: 7000,
+    })
+    expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '业务招待费本年累计',
+      '业务招待费累计发生额',
+      '广告宣传费发生额',
+      '广宣费',
+      '职工福利费发生额',
+      '福利费发生额',
+      '工会经费计提额',
+      '工会经费本年累计',
+      '教育培训经费',
+      '职工教育经费本年累计',
+      '营业外支出本年累计',
+      '非经营支出',
+      '营业外收入本年累计',
+      '非经营收入',
+    ]))
+  })
+
   it('parses small-profit qualification amount aliases', () => {
     const parsed = parseClientImportText(JSON.stringify({
       纳税调整后所得: 1180000,
