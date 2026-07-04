@@ -598,6 +598,41 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses current-period VAT declaration aliases from object imports', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      本期销项税额: 156000,
+      当期销项税额: 158000,
+      本期进项税额: 98000,
+      应交增值税进项税额: 96000,
+      本期应税销售额: 1200000,
+      一般项目销售额: 1180000,
+      本期应纳税额: 60000,
+      本期增值税入库税额: 62000,
+      增值税留抵税额: 32000,
+      留抵税额期末余额: 28000,
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      outputTax: 158000,
+      inputTax: 96000,
+      taxableSales: 1180000,
+      vatTaxPayable: 62000,
+      endingVatCredit: 28000,
+    })
+    expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '本期销项税额',
+      '当期销项税额',
+      '本期进项税额',
+      '应交增值税进项税额',
+      '本期应税销售额',
+      '一般项目销售额',
+      '本期应纳税额',
+      '本期增值税入库税额',
+      '增值税留抵税额',
+      '留抵税额期末余额',
+    ]))
+  })
+
   it('parses asset total balance aliases from object imports', () => {
     const parsed = parseClientImportText(JSON.stringify({
       资产总额期末余额: 4800000,
