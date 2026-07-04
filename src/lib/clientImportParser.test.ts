@@ -181,6 +181,19 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('parses escaped quotes inside quoted CSV cells', () => {
+    const parsed = parseClientImportText([
+      '企业名称,统一社会信用代码,数据来源',
+      '"上海""引号""测试有限公司",91310000QUOTE,客户导出CSV',
+    ].join('\n'))
+
+    expect(parsed.patch).toMatchObject({
+      name: '上海"引号"测试有限公司',
+      creditCode: '91310000QUOTE',
+      dataBasis: '客户导出CSV',
+    })
+  })
+
   it('parses JSON object imports with Chinese field aliases', () => {
     const parsed = parseClientImportText(JSON.stringify({
       企业名称: '上海 JSON 导入测试有限公司',
