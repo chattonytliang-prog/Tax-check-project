@@ -505,6 +505,10 @@ export const importFieldAliases: Record<string, string> = {
   代收代付余额: 'otherReceivableAgencyBalance',
   代垫款余额: 'otherReceivableAgencyBalance',
   往来款余额: 'otherReceivableAgencyBalance',
+  个人代收款余额: 'otherReceivableAgencyBalance',
+  老板代收款: 'otherReceivableAgencyBalance',
+  股东代收款: 'otherReceivableAgencyBalance',
+  员工借款余额: 'otherReceivableAgencyBalance',
   工资薪金总额: 'payrollTotal',
   工资总额: 'payrollTotal',
   应付职工薪酬: 'payrollTotal',
@@ -514,6 +518,10 @@ export const importFieldAliases: Record<string, string> = {
   计税工资总额: 'payrollTotal',
   应发工资总额: 'payrollTotal',
   工资薪酬合计: 'payrollTotal',
+  应付工资: 'payrollTotal',
+  本期工资薪金: 'payrollTotal',
+  工资薪金支出: 'payrollTotal',
+  职工薪酬发生额: 'payrollTotal',
   向个人支付非工资薪金所得: 'nonPayrollPersonalPayment',
   非工资薪金所得: 'nonPayrollPersonalPayment',
   劳务报酬: 'nonPayrollPersonalPayment',
@@ -523,6 +531,10 @@ export const importFieldAliases: Record<string, string> = {
   个人劳务报酬: 'nonPayrollPersonalPayment',
   临时工劳务费: 'nonPayrollPersonalPayment',
   非雇员劳务费: 'nonPayrollPersonalPayment',
+  灵活用工劳务费: 'nonPayrollPersonalPayment',
+  个人服务费: 'nonPayrollPersonalPayment',
+  自然人劳务费: 'nonPayrollPersonalPayment',
+  非员工劳务报酬: 'nonPayrollPersonalPayment',
 }
 
 const preferredImportFieldLabels: Record<string, string> = {

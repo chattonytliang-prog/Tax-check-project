@@ -442,6 +442,31 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses agency receivable payroll and flexible labor aliases', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      老板代收款: 56000,
+      员工借款余额: 64000,
+      应付工资: 280000,
+      职工薪酬发生额: 295000,
+      灵活用工劳务费: 42000,
+      非员工劳务报酬: 48000,
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      otherReceivableAgencyBalance: 64000,
+      payrollTotal: 295000,
+      nonPayrollPersonalPayment: 48000,
+    })
+    expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '老板代收款',
+      '员工借款余额',
+      '应付工资',
+      '职工薪酬发生额',
+      '灵活用工劳务费',
+      '非员工劳务报酬',
+    ]))
+  })
+
   it('parses platform private-account and red invoice aliases', () => {
     const parsed = parseClientImportText(JSON.stringify({
       第三方平台收入: 420000,
