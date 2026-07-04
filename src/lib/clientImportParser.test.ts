@@ -270,6 +270,26 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses cash collection and invoice amount aliases', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      银行收款金额: 280000,
+      对公收款金额: 310000,
+      本期开票金额: 260000,
+      含税开票金额: 286000,
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      collectionFlow: 310000,
+      monthlyInvoice: 286000,
+    })
+    expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '银行收款金额',
+      '对公收款金额',
+      '本期开票金额',
+      '含税开票金额',
+    ]))
+  })
+
   it('parses VAT declaration aliases from object imports', () => {
     const parsed = parseClientImportText(JSON.stringify({
       销售额合计: 2800000,
