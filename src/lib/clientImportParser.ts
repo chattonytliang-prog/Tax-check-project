@@ -1001,6 +1001,9 @@ function parseClientImportObject(raw: Record<string, unknown>): ParsedClientImpo
 
 function parseClientImportJson(raw: unknown): ParsedClientImport {
   if (!Array.isArray(raw)) return parseClientImportObject(raw as Record<string, unknown>)
+  if (raw.every(Array.isArray)) {
+    return parseClientImportRows(raw.map((row) => row.map((cell) => (cell == null ? '' : String(cell)))))
+  }
   return raw.reduce<ParsedClientImport>((parsed, item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return parsed
     return mergeParsedClientImports(parsed, parseClientImportObject(item as Record<string, unknown>))
