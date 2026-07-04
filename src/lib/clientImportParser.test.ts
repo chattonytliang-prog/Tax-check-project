@@ -914,6 +914,22 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('parses accounting export amounts with currency symbols units and full-width commas', () => {
+    const parsed = parseClientImportRows([
+      ['项目', '本期金额'],
+      ['利润表', ''],
+      ['营业收入', '￥1，200，000 元'],
+      ['营业成本', ' 820，000元 '],
+      ['利润总额', '¥380,000元'],
+    ])
+
+    expect(parsed.patch).toMatchObject({
+      mainBusinessRevenue: 1200000,
+      mainBusinessCost: 820000,
+      ytdProfit: 380000,
+    })
+  })
+
   it('recognizes VAT declaration rows including ending credit', () => {
     const parsed = parseClientImportRows([
       ['项目', '金额'],
