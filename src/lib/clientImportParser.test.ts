@@ -356,6 +356,27 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses non-operating and agency receivable aliases', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      非经营性支出: 12000,
+      非经营性收入: 5000,
+      代收代付余额: 68000,
+      代垫款余额: 72000,
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      nonOperatingExpense: 12000,
+      nonOperatingIncome: 5000,
+      otherReceivableAgencyBalance: 72000,
+    })
+    expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '非经营性支出',
+      '非经营性收入',
+      '代收代付余额',
+      '代垫款余额',
+    ]))
+  })
+
   it('parses VAT declaration aliases from object imports', () => {
     const parsed = parseClientImportText(JSON.stringify({
       销售额合计: 2800000,
