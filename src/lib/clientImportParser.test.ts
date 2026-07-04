@@ -445,6 +445,31 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses no-invoice service-fee and supplier input aliases', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      无票报销: '是',
+      大额费用未取得发票: '否',
+      服务类发票: '是',
+      咨询费发票: '否',
+      供应商进项票缺失: '是',
+      采购未取得进项发票: '否',
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      largeExpenseNoInvoice: '否',
+      serviceFeeInvoices: '否',
+      supplierNoInput: '否',
+    })
+    expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '无票报销',
+      '大额费用未取得发票',
+      '服务类发票',
+      '咨询费发票',
+      '供应商进项票缺失',
+      '采购未取得进项发票',
+    ]))
+  })
+
   it('parses VAT declaration aliases from object imports', () => {
     const parsed = parseClientImportText(JSON.stringify({
       销售额合计: 2800000,
