@@ -492,6 +492,33 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses online platform private account and red invoice aliases', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      抖店收入: 210000,
+      美团平台收入: 230000,
+      微信收款: 250000,
+      老板账户收款: '是',
+      个人微信收款: '否',
+      红字普票金额: 9000,
+      销售折让红票金额: 12000,
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      platformRevenue: 250000,
+      privateAccountCollection: '否',
+      redVatSpecialInvoiceAmount: 12000,
+    })
+    expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '抖店收入',
+      '美团平台收入',
+      '微信收款',
+      '老板账户收款',
+      '个人微信收款',
+      '红字普票金额',
+      '销售折让红票金额',
+    ]))
+  })
+
   it('parses unbilled zero-declaration and prepaid balance aliases', () => {
     const parsed = parseClientImportText(JSON.stringify({
       未开票销售额: '是',
