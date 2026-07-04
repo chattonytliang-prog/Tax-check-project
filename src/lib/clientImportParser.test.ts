@@ -205,6 +205,46 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses agency client profile aliases from account exports', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      企业全称: '上海客户清单测试有限公司',
+      纳税主体名称: '上海客户清单测试二有限公司',
+      统一信用代码: '91310000PROFILE',
+      客户税号: '91310000PROFILE-ALT',
+      生产经营地址: '上海市徐汇区',
+      登记注册地址: '上海市长宁区',
+      行业名称: '商务服务业',
+      主营行业: '现代服务业',
+      登记注册类型: '有限责任公司',
+      纳税人状态: '正常',
+      开业日期: '2021-03-15',
+      登记日期: '2021-03-20',
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      name: '上海客户清单测试二有限公司',
+      creditCode: '91310000PROFILE-ALT',
+      region: '上海市长宁区',
+      industry: '现代服务业',
+      taxpayerType: '正常',
+      establishedAt: '2021-03-20',
+    })
+    expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '企业全称',
+      '纳税主体名称',
+      '统一信用代码',
+      '客户税号',
+      '生产经营地址',
+      '登记注册地址',
+      '行业名称',
+      '主营行业',
+      '登记注册类型',
+      '纳税人状态',
+      '开业日期',
+      '登记日期',
+    ]))
+  })
+
   it('parses period and data-basis aliases from object imports', () => {
     const parsed = parseClientImportText(JSON.stringify({
       会计年度: 2026,
