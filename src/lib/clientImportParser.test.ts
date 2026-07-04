@@ -500,6 +500,41 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses related loss inventory R&D and agency compliance aliases', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      关联采购: '是',
+      关联往来交易: '否',
+      连续多年亏损: '是',
+      连续年度亏损: '否',
+      存货账实异常: '是',
+      存货盘点差异: '否',
+      研发备查资料缺失: '是',
+      研发辅助账资料不足: '否',
+      代理记账风险: '是',
+      涉税代理合规风险: '否',
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      relatedTransactions: '否',
+      longTermLoss: '否',
+      inventoryAbnormal: '否',
+      rdDocsInsufficient: '否',
+      agencyComplianceRisk: '否',
+    })
+    expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '关联采购',
+      '关联往来交易',
+      '连续多年亏损',
+      '连续年度亏损',
+      '存货账实异常',
+      '存货盘点差异',
+      '研发备查资料缺失',
+      '研发辅助账资料不足',
+      '代理记账风险',
+      '涉税代理合规风险',
+    ]))
+  })
+
   it('parses VAT declaration aliases from object imports', () => {
     const parsed = parseClientImportText(JSON.stringify({
       销售额合计: 2800000,
