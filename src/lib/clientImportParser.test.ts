@@ -312,6 +312,31 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses common expense amount aliases', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      招待费支出: 18000,
+      广告及业务宣传费: 45000,
+      福利费: 26000,
+      工会经费发生额: 8000,
+      培训费: 12000,
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      entertainmentExpense: 18000,
+      adExpense: 45000,
+      welfareExpense: 26000,
+      unionExpense: 8000,
+      educationExpense: 12000,
+    })
+    expect(parsed.mappings.map((item) => item.field)).toEqual(expect.arrayContaining([
+      'entertainmentExpense',
+      'adExpense',
+      'welfareExpense',
+      'unionExpense',
+      'educationExpense',
+    ]))
+  })
+
   it('parses VAT declaration aliases from object imports', () => {
     const parsed = parseClientImportText(JSON.stringify({
       销售额合计: 2800000,
