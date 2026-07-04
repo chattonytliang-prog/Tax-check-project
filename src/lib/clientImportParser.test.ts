@@ -243,6 +243,28 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('keeps semicolon and pipe delimiters inside quoted cells', () => {
+    const semicolonParsed = parseClientImportText([
+      'monthlyRevenue;monthlyCost;outputTax',
+      '810000;"client;system export";105300',
+    ].join('\n'))
+    const pipeParsed = parseClientImportText([
+      'monthlyRevenue|monthlyCost|outputTax',
+      '910000|"client|system export"|118300',
+    ].join('\n'))
+
+    expect(semicolonParsed.patch).toMatchObject({
+      monthlyRevenue: '810000',
+      monthlyCost: 'client;system export',
+      outputTax: '105300',
+    })
+    expect(pipeParsed.patch).toMatchObject({
+      monthlyRevenue: '910000',
+      monthlyCost: 'client|system export',
+      outputTax: '118300',
+    })
+  })
+
   it('parses JSON object imports with Chinese field aliases', () => {
     const parsed = parseClientImportText(JSON.stringify({
       企业名称: '上海 JSON 导入测试有限公司',
