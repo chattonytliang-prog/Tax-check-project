@@ -722,7 +722,7 @@ function parseDelimitedRows(text: string) {
   }
 
   return text
-    .split(/\r?\n/)
+    .split(/\r\n|\n|\r/)
     .map((line) => line.trim())
     .filter(Boolean)
     .map(parseLine)

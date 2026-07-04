@@ -194,6 +194,15 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('parses CSV text with carriage-return-only line endings', () => {
+    const parsed = parseClientImportText('企业名称,月收入\r上海 CR 换行测试有限公司,180000')
+
+    expect(parsed.patch).toMatchObject({
+      name: '上海 CR 换行测试有限公司',
+      monthlyRevenue: '180000',
+    })
+  })
+
   it('parses JSON object imports with Chinese field aliases', () => {
     const parsed = parseClientImportText(JSON.stringify({
       企业名称: '上海 JSON 导入测试有限公司',
