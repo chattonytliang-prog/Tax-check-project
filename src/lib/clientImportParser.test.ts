@@ -337,6 +337,25 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses small-profit qualification amount aliases', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      纳税调整后所得: 1180000,
+      平均资产总额: 36000000,
+      从业人员年平均数: 86,
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      taxableIncome: 1180000,
+      assetsTotal: 36000000,
+      employeeAnnualAvg: 86,
+    })
+    expect(parsed.mappings.map((item) => item.field)).toEqual(expect.arrayContaining([
+      'taxableIncome',
+      'assetsTotal',
+      'employeeAnnualAvg',
+    ]))
+  })
+
   it('parses VAT declaration aliases from object imports', () => {
     const parsed = parseClientImportText(JSON.stringify({
       销售额合计: 2800000,
