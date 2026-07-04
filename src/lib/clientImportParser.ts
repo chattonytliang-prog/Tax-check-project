@@ -1000,7 +1000,12 @@ function parseClientImportObject(raw: Record<string, unknown>): ParsedClientImpo
 }
 
 function parseClientImportJson(raw: unknown): ParsedClientImport {
-  if (!Array.isArray(raw)) return parseClientImportObject(raw as Record<string, unknown>)
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const wrappedRows = ['rows', 'data'].map((key) => (raw as Record<string, unknown>)[key]).find(Array.isArray)
+    if (wrappedRows) return parseClientImportJson(wrappedRows)
+    return parseClientImportObject(raw as Record<string, unknown>)
+  }
+  if (!Array.isArray(raw)) return emptyParsedClientImport()
   if (raw.every(Array.isArray)) {
     return parseClientImportRows(raw.map((row) => row.map((cell) => (cell == null ? '' : String(cell)))))
   }
