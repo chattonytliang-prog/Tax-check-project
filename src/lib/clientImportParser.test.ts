@@ -247,6 +247,7 @@ describe('clientImportParser', () => {
 
   it('parses period and data-basis aliases from object imports', () => {
     const parsed = parseClientImportText(JSON.stringify({
+      分析口径: '月度',
       会计年度: 2026,
       报表季度: 'Q2',
       报表月份: '2026-06',
@@ -256,6 +257,7 @@ describe('clientImportParser', () => {
     }))
 
     expect(parsed.patch).toMatchObject({
+      analysisPeriodType: '月度',
       analysisYear: 2026,
       analysisQuarter: 'Q2',
       analysisMonth: '2026-06',
@@ -264,6 +266,7 @@ describe('clientImportParser', () => {
       dataBasis: '客户财务系统导出',
     })
     expect(parsed.mappings.map((item) => item.field)).toEqual(expect.arrayContaining([
+      'analysisPeriodType',
       'analysisYear',
       'analysisQuarter',
       'analysisMonth',
@@ -275,6 +278,8 @@ describe('clientImportParser', () => {
 
   it('parses tax period and source aliases from agency exports', () => {
     const parsed = parseClientImportText(JSON.stringify({
+      检查期间类型: '季度',
+      申报期间类型: '月度',
       申报年度: 2026,
       税款所属季度: 'Q3',
       所属期间: '2026-09',
@@ -286,6 +291,7 @@ describe('clientImportParser', () => {
     }))
 
     expect(parsed.patch).toMatchObject({
+      analysisPeriodType: '月度',
       analysisYear: 2026,
       analysisQuarter: 'Q3',
       analysisMonth: '2026-10',
@@ -294,6 +300,8 @@ describe('clientImportParser', () => {
       dataBasis: '代理记账系统',
     })
     expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '检查期间类型',
+      '申报期间类型',
       '申报年度',
       '税款所属季度',
       '所属期间',
