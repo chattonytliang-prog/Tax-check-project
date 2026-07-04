@@ -653,6 +653,31 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses small-profit qualification aliases from tax worksheets', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      纳税调整后所得额: 780000,
+      本年累计应纳税所得额: 820000,
+      季末资产总计: 32000000,
+      年度平均资产总额: 34000000,
+      从业人员平均人数: 72,
+      年度从业人员平均数: 68,
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      taxableIncome: 820000,
+      assetsTotal: 34000000,
+      employeeAnnualAvg: 68,
+    })
+    expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '纳税调整后所得额',
+      '本年累计应纳税所得额',
+      '季末资产总计',
+      '年度平均资产总额',
+      '从业人员平均人数',
+      '年度从业人员平均数',
+    ]))
+  })
+
   it('decodes GB18030 accounting CSV text before parsing', () => {
     const gb18030Csv = new Uint8Array([
       0xc6, 0xf3, 0xd2, 0xb5, 0xc3, 0xfb, 0xb3, 0xc6, 0x2c, 0xd4, 0xc2, 0xca, 0xd5, 0xc8, 0xeb, 0x0a,
