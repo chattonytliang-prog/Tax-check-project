@@ -999,10 +999,18 @@ function parseClientImportObject(raw: Record<string, unknown>): ParsedClientImpo
   }
 }
 
+function parseClientImportJson(raw: unknown): ParsedClientImport {
+  if (!Array.isArray(raw)) return parseClientImportObject(raw as Record<string, unknown>)
+  return raw.reduce<ParsedClientImport>((parsed, item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return parsed
+    return mergeParsedClientImports(parsed, parseClientImportObject(item as Record<string, unknown>))
+  }, emptyParsedClientImport())
+}
+
 export function parseClientImportText(text: string): ParsedClientImport {
   const trimmed = text.trim()
   if (!trimmed) return emptyParsedClientImport()
-  if (trimmed.startsWith('{')) return parseClientImportObject(JSON.parse(trimmed) as Record<string, unknown>)
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) return parseClientImportJson(JSON.parse(trimmed))
   return parseClientImportRows(parseDelimitedRows(trimmed))
 }
 
