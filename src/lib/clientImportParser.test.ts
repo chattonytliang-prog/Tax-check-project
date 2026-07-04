@@ -397,6 +397,31 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses platform private-account and red invoice aliases', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      第三方平台收入: 420000,
+      平台结算额: 460000,
+      个人账户收款金额: '是',
+      私户收款金额: '否',
+      红冲金额: 12000,
+      负数发票金额: 18000,
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      platformRevenue: 460000,
+      privateAccountCollection: '否',
+      redVatSpecialInvoiceAmount: 18000,
+    })
+    expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '第三方平台收入',
+      '平台结算额',
+      '个人账户收款金额',
+      '私户收款金额',
+      '红冲金额',
+      '负数发票金额',
+    ]))
+  })
+
   it('parses VAT declaration aliases from object imports', () => {
     const parsed = parseClientImportText(JSON.stringify({
       销售额合计: 2800000,
