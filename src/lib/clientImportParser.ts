@@ -363,11 +363,19 @@ export const importFieldAliases: Record<string, string> = {
   应付职工薪酬: 'payrollTotal',
   职工薪酬总额: 'payrollTotal',
   薪酬总额: 'payrollTotal',
+  工资薪金发生额: 'payrollTotal',
+  计税工资总额: 'payrollTotal',
+  应发工资总额: 'payrollTotal',
+  工资薪酬合计: 'payrollTotal',
   向个人支付非工资薪金所得: 'nonPayrollPersonalPayment',
   非工资薪金所得: 'nonPayrollPersonalPayment',
   劳务报酬: 'nonPayrollPersonalPayment',
   劳务费: 'nonPayrollPersonalPayment',
   个人劳务费: 'nonPayrollPersonalPayment',
+  劳务报酬支出: 'nonPayrollPersonalPayment',
+  个人劳务报酬: 'nonPayrollPersonalPayment',
+  临时工劳务费: 'nonPayrollPersonalPayment',
+  非雇员劳务费: 'nonPayrollPersonalPayment',
 }
 
 const preferredImportFieldLabels: Record<string, string> = {

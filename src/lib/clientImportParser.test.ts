@@ -377,6 +377,26 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses payroll and personal service payment aliases', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      工资薪金发生额: 320000,
+      应发工资总额: 340000,
+      劳务报酬支出: 26000,
+      临时工劳务费: 18000,
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      payrollTotal: 340000,
+      nonPayrollPersonalPayment: 18000,
+    })
+    expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '工资薪金发生额',
+      '应发工资总额',
+      '劳务报酬支出',
+      '临时工劳务费',
+    ]))
+  })
+
   it('parses VAT declaration aliases from object imports', () => {
     const parsed = parseClientImportText(JSON.stringify({
       销售额合计: 2800000,
