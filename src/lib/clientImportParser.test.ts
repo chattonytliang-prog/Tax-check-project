@@ -535,6 +535,46 @@ describe('clientImportParser', () => {
     ]))
   })
 
+  it('parses payroll tax benefit and individual vendor aliases', () => {
+    const parsed = parseClientImportText(JSON.stringify({
+      拆分工资: '是',
+      多人拆分发薪: '否',
+      个税未代扣代缴: '是',
+      未申报工资薪金个税: '否',
+      关联自然人商户: '是',
+      关联个人供应商: '否',
+      小型微利减免: '是',
+      享受小型微利企业所得税优惠: '否',
+      优惠备查资料缺失: '是',
+      税收优惠留存资料不足: '否',
+      享受研发费用加计扣除: '是',
+      研发加计扣除优惠: '否',
+    }))
+
+    expect(parsed.patch).toMatchObject({
+      salarySplit: '否',
+      noIitWithholding: '否',
+      individualVendorRelated: '否',
+      smallProfitEnjoyed: '否',
+      taxBenefitDataMissing: '否',
+      rdDeductionEnjoyed: '否',
+    })
+    expect(parsed.mappings.map((item) => item.source)).toEqual(expect.arrayContaining([
+      '拆分工资',
+      '多人拆分发薪',
+      '个税未代扣代缴',
+      '未申报工资薪金个税',
+      '关联自然人商户',
+      '关联个人供应商',
+      '小型微利减免',
+      '享受小型微利企业所得税优惠',
+      '优惠备查资料缺失',
+      '税收优惠留存资料不足',
+      '享受研发费用加计扣除',
+      '研发加计扣除优惠',
+    ]))
+  })
+
   it('parses VAT declaration aliases from object imports', () => {
     const parsed = parseClientImportText(JSON.stringify({
       销售额合计: 2800000,
