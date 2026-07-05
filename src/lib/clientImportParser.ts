@@ -695,6 +695,12 @@ function resolveImportField(key: string) {
   return conditionFields.some((field) => field.value === key) ? key : null
 }
 
+const delimitedTextSeparators = new Set([',', '\t', ';', '|'])
+
+function isDelimitedTextSeparator(char: string) {
+  return delimitedTextSeparators.has(char)
+}
+
 function parseDelimitedRows(text: string) {
   const parseLine = (line: string) => {
     const cells: string[] = []
@@ -709,7 +715,7 @@ function parseDelimitedRows(text: string) {
         index += 1
       } else if (char === '"') {
         quoted = !quoted
-      } else if (!quoted && (char === ',' || char === '\t' || char === ';' || char === '|')) {
+      } else if (!quoted && isDelimitedTextSeparator(char)) {
         cells.push(cell.trim())
         cell = ''
       } else {
