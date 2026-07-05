@@ -230,6 +230,20 @@ describe('clientImportParser', () => {
     })
   })
 
+  it('ignores Excel separator declaration before semicolon exports', () => {
+    const parsed = parseClientImportText([
+      'sep=;',
+      'monthlyRevenue;monthlyCost;outputTax',
+      '820000;530000;106600',
+    ].join('\n'))
+
+    expect(parsed.patch).toMatchObject({
+      monthlyRevenue: '820000',
+      monthlyCost: '530000',
+      outputTax: '106600',
+    })
+  })
+
   it('parses pipe-delimited client exports', () => {
     const parsed = parseClientImportText([
       'monthlyRevenue|monthlyCost|outputTax',
