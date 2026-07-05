@@ -69,17 +69,29 @@ function normalizeStringArray(value) {
     : []
 }
 
-function buildPrompt({ message, client, risks, report }) {
+function normalizeHistory(value) {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => ({
+      role: item?.role === 'assistant' ? 'assistant' : 'user',
+      content: String(item?.content || '').trim().slice(0, 2000),
+    }))
+    .filter((item) => item.content)
+    .slice(-10)
+}
+
+function buildPrompt({ message, history, client, clientVerified, risks, report }) {
   return `You are an AI tax workbench assistant embedded in a Chinese tax risk checking product.
 
 Rules:
 1. Answer in Chinese.
-2. You may explain, summarize, classify pasted data, and draft field updates.
+2. You are the main conversational assistant. Treat the tax product context as your knowledge base and skill context.
 3. Do not claim that a tax conclusion is final.
 4. Do not add or remove rule-engine findings. Treat risk findings as system facts.
 5. Do not say you have written to the database. You can only propose a draft.
 6. If the user pasted financial data, extract it into structured suggestions.
-7. Return strict JSON only, no Markdown.
+7. If the current client is not verified in the database, say you can still analyze the pasted content and temporary page context, but the user should save or select an archived client before applying drafts.
+8. Return strict JSON only, no Markdown.
 
 JSON shape:
 {
@@ -98,8 +110,11 @@ JSON shape:
   "followUps": ["questions or materials to ask from the client"]
 }
 
+Conversation history:
+${JSON.stringify(history, null, 2)}
+
 Current client:
-${JSON.stringify(compactClient(client), null, 2)}
+${JSON.stringify({ verifiedInDatabase: clientVerified, ...compactClient(client) }, null, 2)}
 
 Risk findings:
 ${JSON.stringify((risks || []).slice(0, 20).map(compactRisk), null, 2)}
@@ -125,8 +140,9 @@ export async function onRequestPost({ request, env }) {
     const auth = await requireUser(request, db)
     if (auth.response) return auth.response
 
-    const { message = '', client = null, risks = [], report = null } = await readJson(request)
+    const { message = '', history = [], client = null, risks = [], report = null } = await readJson(request)
     const cleanMessage = String(message || '').trim()
+    const cleanHistory = normalizeHistory(history)
     if (!cleanMessage) return badRequest('Message is required')
     if (!client?.id || !client?.name) return badRequest('Client id and name are required')
 
@@ -134,9 +150,7 @@ export async function onRequestPost({ request, env }) {
       .prepare('SELECT id FROM clients WHERE id = ? AND owner_user_id = ?')
       .bind(client.id, auth.user.id)
       .first()
-    if (!ownedClient) {
-      return json({ error: 'Client not found' }, { status: 404 })
-    }
+    const clientVerified = Boolean(ownedClient)
 
     const model = env.DEEPSEEK_MODEL || DEFAULT_MODEL
     const response = await fetch(DEEPSEEK_API_URL, {
@@ -154,7 +168,7 @@ export async function onRequestPost({ request, env }) {
           },
           {
             role: 'user',
-            content: buildPrompt({ message: cleanMessage, client, risks, report }),
+            content: buildPrompt({ message: cleanMessage, history: cleanHistory, client, clientVerified, risks, report }),
           },
         ],
         temperature: 0.2,
@@ -185,6 +199,7 @@ export async function onRequestPost({ request, env }) {
       answer: String(parsed.answer || '').trim() || '我已完成初步分析，请查看下方建议。',
       suggestions: normalizeSuggestions(parsed.suggestions),
       followUps: normalizeStringArray(parsed.followUps),
+      clientVerified,
       model,
       usage: data.usage || null,
     })

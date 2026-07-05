@@ -297,8 +297,16 @@ type AiAssistantResponse = {
   answer: string
   suggestions: AiAssistantSuggestion[]
   followUps: string[]
+  clientVerified?: boolean
   model: string
   usage?: unknown
+}
+
+type AiAssistantMessage = {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  response?: AiAssistantResponse
 }
 
 type ManagedRule = {
@@ -7375,7 +7383,7 @@ function AiAssistantPage({
     selectedClient ? reports.find((item) => item.clientId === selectedClient.id) : undefined
   ), [reports, selectedClient])
   const [assistantInput, setAssistantInput] = useState('')
-  const [assistantResponse, setAssistantResponse] = useState<AiAssistantResponse | null>(null)
+  const [assistantMessages, setAssistantMessages] = useState<AiAssistantMessage[]>([])
   const [assistantLoading, setAssistantLoading] = useState(false)
   const [assistantError, setAssistantError] = useState('')
   const assistantExamples = [
@@ -7386,17 +7394,27 @@ function AiAssistantPage({
   const askAssistant = async (message = assistantInput) => {
     const cleanMessage = message.trim()
     if (!selectedClient || !cleanMessage || assistantLoading) return
+    const nextMessages: AiAssistantMessage[] = [
+      ...assistantMessages,
+      { id: crypto.randomUUID(), role: 'user', content: cleanMessage },
+    ]
     setAssistantInput(cleanMessage)
+    setAssistantMessages(nextMessages)
     setAssistantLoading(true)
     setAssistantError('')
     try {
       const response = await apiSend<AiAssistantResponse>('/api/ai/assistant', 'POST', {
         message: cleanMessage,
+        history: assistantMessages.map((item) => ({ role: item.role, content: item.content })),
         client: selectedClient,
         risks,
         report,
       })
-      setAssistantResponse(response)
+      setAssistantMessages([
+        ...nextMessages,
+        { id: crypto.randomUUID(), role: 'assistant', content: response.answer, response },
+      ])
+      setAssistantInput('')
     } catch (error) {
       setAssistantError(error instanceof Error ? error.message : String(error))
     } finally {
@@ -7416,7 +7434,7 @@ function AiAssistantPage({
         <div className="ai-assistant-header">
           <div>
             <p className="eyebrow">企业资料处理</p>
-            <h3>把数据、问题或客户文字发给 AI，先生成待确认建议</h3>
+            <h3>直接和 DeepSeek 对话，系统档案、风险线索和报告上下文会作为知识库提供给它</h3>
           </div>
           <span>不自动写入数据</span>
         </div>
@@ -7433,7 +7451,7 @@ function AiAssistantPage({
               </label>
               <div>
                 <strong>{risks.length} 项风险线索</strong>
-                <small>{report ? '已带入最近报告上下文' : '暂无报告上下文，仅基于企业档案和粘贴内容处理'}</small>
+                <small>{report ? '已带入最近报告上下文' : '暂无报告上下文，将基于企业档案和粘贴内容处理'}</small>
               </div>
             </div>
             <div className="ai-assistant-examples">
@@ -7443,6 +7461,47 @@ function AiAssistantPage({
                 </button>
               ))}
             </div>
+            <div className="ai-assistant-chat" aria-live="polite">
+              {assistantMessages.length ? (
+                assistantMessages.map((item) => (
+                  <article key={item.id} className={`ai-assistant-message ${item.role}`}>
+                    <strong>{item.role === 'user' ? '你' : 'DeepSeek 财税助手'}</strong>
+                    <p>{item.content}</p>
+                    {item.response?.clientVerified === false ? (
+                      <small>当前企业未通过后端入库校验，本轮仅按页面临时上下文和粘贴内容分析。</small>
+                    ) : null}
+                    {item.response?.suggestions.length ? (
+                      <div className="ai-assistant-suggestions">
+                        {item.response.suggestions.map((suggestion, index) => (
+                          <div key={`${suggestion.field}-${index}`}>
+                            <strong>{suggestion.label || suggestion.field}</strong>
+                            <span>{String(suggestion.value ?? '')}</span>
+                            <small>{suggestion.target} / {suggestion.confidence} / {suggestion.source || 'AI 识别'}</small>
+                            {suggestion.note ? <p>{suggestion.note}</p> : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {item.response?.followUps.length ? (
+                      <ul>
+                        {item.response.followUps.map((followUp) => <li key={followUp}>{followUp}</li>)}
+                      </ul>
+                    ) : null}
+                  </article>
+                ))
+              ) : (
+                <div className="ai-assistant-empty-chat">
+                  <strong>这是一个对话式 DeepSeek 工作台</strong>
+                  <p>它会读取当前企业档案、规则命中风险、最近报告摘要和你粘贴的资料，生成解释、待填字段草稿和补资料问题。</p>
+                </div>
+              )}
+              {assistantLoading ? (
+                <article className="ai-assistant-message assistant">
+                  <strong>DeepSeek 财税助手</strong>
+                  <p>正在结合系统知识库和当前企业上下文处理...</p>
+                </article>
+              ) : null}
+            </div>
             <textarea
               value={assistantInput}
               onChange={(event) => setAssistantInput(event.target.value)}
@@ -7450,42 +7509,11 @@ function AiAssistantPage({
             />
             <div className="ai-assistant-actions">
               <button type="button" className="primary-button" onClick={() => void askAssistant()} disabled={assistantLoading || !assistantInput.trim()}>
-                <Sparkles /> {assistantLoading ? 'AI 正在处理...' : '发送给 AI 助手'}
+                <Sparkles /> {assistantLoading ? 'DeepSeek 正在处理...' : '发送给 DeepSeek'}
               </button>
-              <small>AI 只生成解释、字段草稿和补资料建议；录入系统前仍需要人工确认。</small>
+              <small>AI 可以帮你整理和预填字段草稿；真正录入系统前仍需要人工确认。</small>
             </div>
             {assistantError ? <div className="ai-assistant-error">{assistantError}</div> : null}
-            {assistantResponse ? (
-              <div className="ai-assistant-result">
-                <article>
-                  <h4>AI 回复</h4>
-                  <p>{assistantResponse.answer}</p>
-                </article>
-                {assistantResponse.suggestions.length ? (
-                  <article>
-                    <h4>待确认字段草稿</h4>
-                    <div className="ai-assistant-suggestions">
-                      {assistantResponse.suggestions.map((item, index) => (
-                        <div key={`${item.field}-${index}`}>
-                          <strong>{item.label || item.field}</strong>
-                          <span>{String(item.value ?? '')}</span>
-                          <small>{item.target} · {item.confidence} · {item.source || 'AI 识别'}</small>
-                          {item.note ? <p>{item.note}</p> : null}
-                        </div>
-                      ))}
-                    </div>
-                  </article>
-                ) : null}
-                {assistantResponse.followUps.length ? (
-                  <article>
-                    <h4>建议补充资料</h4>
-                    <ul>
-                      {assistantResponse.followUps.map((item) => <li key={item}>{item}</li>)}
-                    </ul>
-                  </article>
-                ) : null}
-              </div>
-            ) : null}
           </>
         ) : (
           <div className="ai-review-empty">
