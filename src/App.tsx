@@ -87,7 +87,7 @@ import {
 import { apiDelete, apiGet, apiSend } from './lib/apiClient'
 import './App.css'
 
-type Page = 'dashboard' | 'clients' | 'form' | 'result' | 'report' | 'reports' | 'rules' | 'admin'
+type Page = 'dashboard' | 'assistant' | 'clients' | 'form' | 'result' | 'report' | 'reports' | 'rules' | 'admin'
 type RiskDetectionStep = 'client' | 'period' | 'confirm' | 'result'
 type TaxpayerType = '' | '小规模纳税人' | '一般纳税人' | '个体工商户'
 type ProjectScope = '单主体' | '集团项目'
@@ -4550,7 +4550,10 @@ function App() {
             </button>
           </div>
           <div className="nav-group">
-            <span className="nav-group-label">财务工作区</span>
+            <span className="nav-group-label">工作区</span>
+            <button className={page === 'assistant' ? 'active' : ''} onClick={() => setPage('assistant')}>
+              <Sparkles /> AI 财税助手
+            </button>
             <button
               className={page === 'form' ? 'active' : ''}
               onClick={() => {
@@ -4850,6 +4853,16 @@ function App() {
               </section>
             )}
           </section>
+        )}
+
+        {page === 'assistant' && (
+          <AiAssistantPage
+            clients={clients}
+            selectedClientId={selectedClientId}
+            onSelectClient={setSelectedClientId}
+            managedRules={managedRules}
+            reports={reports}
+          />
         )}
 
         {page === 'clients' && (
@@ -7340,6 +7353,148 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
         </ol>
       </section>
     </div>
+  )
+}
+
+function AiAssistantPage({
+  clients,
+  selectedClientId,
+  onSelectClient,
+  managedRules,
+  reports,
+}: {
+  clients: Client[]
+  selectedClientId: string
+  onSelectClient: (clientId: string) => void
+  managedRules: ManagedRule[]
+  reports: Report[]
+}) {
+  const selectedClient = clients.find((client) => client.id === selectedClientId) || clients[0]
+  const risks = useMemo(() => (selectedClient ? detectRisks(selectedClient, managedRules) : []), [selectedClient, managedRules])
+  const report = useMemo(() => (
+    selectedClient ? reports.find((item) => item.clientId === selectedClient.id) : undefined
+  ), [reports, selectedClient])
+  const [assistantInput, setAssistantInput] = useState('')
+  const [assistantResponse, setAssistantResponse] = useState<AiAssistantResponse | null>(null)
+  const [assistantLoading, setAssistantLoading] = useState(false)
+  const [assistantError, setAssistantError] = useState('')
+  const assistantExamples = [
+    '请根据当前企业数据，告诉我最应该先补哪些资料。',
+    '我把客户发来的利润表粘贴给你，请识别能填入系统的字段。',
+    '帮我生成一段发给客户的补资料微信话术。',
+  ]
+  const askAssistant = async (message = assistantInput) => {
+    const cleanMessage = message.trim()
+    if (!selectedClient || !cleanMessage || assistantLoading) return
+    setAssistantInput(cleanMessage)
+    setAssistantLoading(true)
+    setAssistantError('')
+    try {
+      const response = await apiSend<AiAssistantResponse>('/api/ai/assistant', 'POST', {
+        message: cleanMessage,
+        client: selectedClient,
+        risks,
+        report,
+      })
+      setAssistantResponse(response)
+    } catch (error) {
+      setAssistantError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setAssistantLoading(false)
+    }
+  }
+
+  return (
+    <section className="page">
+      <header className="page-header">
+        <div>
+          <p className="eyebrow">AI 工作台</p>
+          <h2>AI 财税助手</h2>
+        </div>
+      </header>
+      <section className="ai-assistant-panel assistant-page-panel">
+        <div className="ai-assistant-header">
+          <div>
+            <p className="eyebrow">企业资料处理</p>
+            <h3>把数据、问题或客户文字发给 AI，先生成待确认建议</h3>
+          </div>
+          <span>不自动写入数据</span>
+        </div>
+        {selectedClient ? (
+          <>
+            <div className="assistant-context-row">
+              <label>
+                当前企业
+                <select value={selectedClient.id} onChange={(event) => onSelectClient(event.target.value)}>
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.id}>{client.name}</option>
+                  ))}
+                </select>
+              </label>
+              <div>
+                <strong>{risks.length} 项风险线索</strong>
+                <small>{report ? '已带入最近报告上下文' : '暂无报告上下文，仅基于企业档案和粘贴内容处理'}</small>
+              </div>
+            </div>
+            <div className="ai-assistant-examples">
+              {assistantExamples.map((example) => (
+                <button type="button" key={example} onClick={() => void askAssistant(example)} disabled={assistantLoading}>
+                  {example}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={assistantInput}
+              onChange={(event) => setAssistantInput(event.target.value)}
+              placeholder="可以直接粘贴利润表、资产负债表、客户微信文字，或问：这个客户下一步应该补什么资料？"
+            />
+            <div className="ai-assistant-actions">
+              <button type="button" className="primary-button" onClick={() => void askAssistant()} disabled={assistantLoading || !assistantInput.trim()}>
+                <Sparkles /> {assistantLoading ? 'AI 正在处理...' : '发送给 AI 助手'}
+              </button>
+              <small>AI 只生成解释、字段草稿和补资料建议；录入系统前仍需要人工确认。</small>
+            </div>
+            {assistantError ? <div className="ai-assistant-error">{assistantError}</div> : null}
+            {assistantResponse ? (
+              <div className="ai-assistant-result">
+                <article>
+                  <h4>AI 回复</h4>
+                  <p>{assistantResponse.answer}</p>
+                </article>
+                {assistantResponse.suggestions.length ? (
+                  <article>
+                    <h4>待确认字段草稿</h4>
+                    <div className="ai-assistant-suggestions">
+                      {assistantResponse.suggestions.map((item, index) => (
+                        <div key={`${item.field}-${index}`}>
+                          <strong>{item.label || item.field}</strong>
+                          <span>{String(item.value ?? '')}</span>
+                          <small>{item.target} · {item.confidence} · {item.source || 'AI 识别'}</small>
+                          {item.note ? <p>{item.note}</p> : null}
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ) : null}
+                {assistantResponse.followUps.length ? (
+                  <article>
+                    <h4>建议补充资料</h4>
+                    <ul>
+                      {assistantResponse.followUps.map((item) => <li key={item}>{item}</li>)}
+                    </ul>
+                  </article>
+                ) : null}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="ai-review-empty">
+            <Info />
+            <p>请先建立企业档案，再使用 AI 财税助手处理资料。</p>
+          </div>
+        )}
+      </section>
+    </section>
   )
 }
 

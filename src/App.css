@@ -3388,6 +3388,51 @@ textarea:focus {
   line-height: 1.7;
 }
 
+.assistant-page-panel {
+  max-width: 980px;
+}
+
+.assistant-context-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(220px, 0.6fr);
+  gap: 12px;
+  align-items: end;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.assistant-context-row label,
+.assistant-context-row div {
+  min-width: 0;
+}
+
+.assistant-context-row label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.assistant-context-row strong,
+.assistant-context-row small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.assistant-context-row strong {
+  color: var(--ink);
+}
+
+.assistant-context-row small {
+  margin-top: 5px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
 .ai-assistant-actions {
   margin-top: 10px;
   align-items: center;
@@ -4046,6 +4091,8 @@ textarea:focus {
 
   .page-header,
   .ai-review-header,
+  .ai-assistant-header,
+  .ai-assistant-actions,
   .section-title-row,
   .rule-filter-footer,
   .compact-row {
@@ -4118,6 +4165,8 @@ textarea:focus {
   }
 
   .report-fact-grid,
+  .assistant-context-row,
+  .ai-assistant-suggestions,
   .executive-summary,
   .report-two-col,
   .finding-summary-list article {
