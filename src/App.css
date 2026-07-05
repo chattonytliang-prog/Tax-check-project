@@ -3454,7 +3454,7 @@ textarea:focus {
 
 .assistant-context-row {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(220px, 0.6fr);
+  grid-template-columns: minmax(180px, 0.7fr) minmax(260px, 1fr) minmax(220px, 0.6fr);
   gap: 12px;
   align-items: end;
   margin-top: 16px;
@@ -3493,6 +3493,79 @@ textarea:focus {
   line-height: 1.55;
 }
 
+.assistant-upload-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  margin-top: 12px;
+  border: 1px solid rgba(18, 174, 234, 0.22);
+  border-radius: 6px;
+  padding: 9px 12px;
+  background: rgba(255, 255, 255, 0.84);
+  color: #087a7a;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.assistant-upload-control input {
+  display: none;
+}
+
+.assistant-upload-control svg {
+  width: 17px;
+  height: 17px;
+}
+
+.assistant-draft-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.assistant-draft-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(12, 140, 130, 0.18);
+  border-radius: 8px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.assistant-draft-card h4,
+.assistant-draft-card p {
+  margin: 0;
+}
+
+.assistant-draft-card small,
+.assistant-draft-card p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.assistant-draft-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.assistant-draft-fields span {
+  border: 1px solid rgba(18, 174, 234, 0.18);
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: rgba(18, 174, 234, 0.07);
+  color: #087a7a;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.assistant-draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .ai-assistant-actions {
   margin-top: 10px;
   align-items: center;
@@ -3510,6 +3583,16 @@ textarea:focus {
   padding: 10px 12px;
   background: rgba(143, 61, 66, 0.08);
   color: #8f3d42;
+  font-weight: 800;
+}
+
+.ai-assistant-notice {
+  margin-top: 12px;
+  border: 1px solid rgba(12, 140, 130, 0.2);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(12, 140, 130, 0.08);
+  color: #087a7a;
   font-weight: 800;
 }
 
@@ -4192,6 +4275,7 @@ textarea:focus {
   .intake-requirement-panel,
   .intake-method-grid,
   .intake-status-bar,
+  .assistant-context-row,
   .sidebar nav {
     grid-template-columns: 1fr;
   }

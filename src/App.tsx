@@ -309,6 +309,26 @@ type AiAssistantMessage = {
   response?: AiAssistantResponse
 }
 
+type AiAssistantTargetMode = 'auto' | 'new' | 'existing'
+
+type AiAssistantDraft = {
+  id: string
+  targetMode: Exclude<AiAssistantTargetMode, 'auto'>
+  client: Client
+  labels: string[]
+  mappings: ImportMappingPreview[]
+  unmappedHeaders: string[]
+  detectedTables: string[]
+  sourceType: string
+  fileName?: string
+  missingSaveLabels: string[]
+}
+
+type AssistantDraftApplyResult = {
+  status: 'saved' | 'draft'
+  message: string
+}
+
 type ManagedRule = {
   code: string
   name: string
@@ -3963,6 +3983,74 @@ function App() {
     }
   }
 
+  const applyAssistantClientDraft = async (draftClient: Client): Promise<AssistantDraftApplyResult> => {
+    const normalizedName = draftClient.name.trim()
+    const normalizedBase: Client = deriveClientMetrics({
+      ...normalizePeriodDraft(normalizeClient(draftClient)),
+      name: normalizedName,
+      projectScope: getProjectScope(draftClient),
+      groupName: getProjectScope(draftClient) === '集团项目' ? draftClient.groupName.trim() : '',
+      entityRole: getProjectScope(draftClient) === '集团项目' ? getEntityRole(draftClient) : '单体企业',
+    })
+    const saveIssues = validateClientForSave(normalizedBase)
+    const periodEntry = createPeriodEntry(
+      normalizedBase,
+      {
+        ...normalizedBase,
+        periodEntries: [],
+        manualDerivedFields: { ...(normalizedBase.manualDerivedFields || {}) },
+        manualDerivedReasons: { ...(normalizedBase.manualDerivedReasons || {}) },
+      },
+      formatDate(),
+    )
+
+    if (saveIssues.length > 0 || !periodEntry.months.length) {
+      setEditingClient(normalizedBase)
+      setSelectedClientId(normalizedBase.id)
+      setPage('form')
+      return {
+        status: 'draft',
+        message: saveIssues.length
+          ? `已填入数据录入草稿，请补齐：${saveIssues.map((issue) => issue.label).slice(0, 6).join('、')}`
+          : '已填入数据录入草稿，请补齐数据期间后保存。',
+      }
+    }
+
+    const periodEntries = upsertPeriodEntry(normalizedBase.periodEntries, periodEntry)
+    const consistencyWarnings = findPeriodConsistencyWarnings(periodEntries)
+    if (consistencyWarnings.length > 0) {
+      const confirmed = window.confirm(`发现期间数据差异：\n\n${consistencyWarnings.join('\n')}\n\n是否继续导入？`)
+      if (!confirmed) {
+        setEditingClient(normalizedBase)
+        setSelectedClientId(normalizedBase.id)
+        setPage('form')
+        return { status: 'draft', message: '已转入数据录入草稿，暂未保存。' }
+      }
+    }
+
+    const normalized: Client = { ...normalizedBase, periodEntries }
+    setClients((current) => {
+      const exists = current.some((client) => client.id === normalized.id)
+      return exists ? current.map((client) => (client.id === normalized.id ? normalized : client)) : [normalized, ...current]
+    })
+    setSelectedClientId(normalized.id)
+    setSelectedPeriodEntryIds([periodEntry.id])
+    setPage('clients')
+
+    try {
+      await apiSend<{ client: Client }>('/api/clients', 'POST', {
+        ...normalized,
+        riskLevel: getOverallLevel(detectRisks(normalized, managedRules)),
+      })
+      setDataStatus('connected')
+      return { status: 'saved', message: `已导入「${normalized.name}」并保存 1 条期间数据。` }
+    } catch (error) {
+      console.warn('Assistant draft saved locally only.', error)
+      setDataStatus('fallback')
+      return { status: 'saved', message: `已在本地导入「${normalized.name}」，当前后端不可用。` }
+    }
+  }
+
   const loadRiskDemoCases = async () => {
     const existingByCreditCode = new Map(clients.map((client) => [client.creditCode, client]))
     const demoCases = createDemoClients().map((client) => {
@@ -4870,6 +4958,7 @@ function App() {
             onSelectClient={setSelectedClientId}
             managedRules={managedRules}
             reports={reports}
+            onApplyClientDraft={(draftClient) => applyAssistantClientDraft(draftClient)}
           />
         )}
 
@@ -7370,12 +7459,14 @@ function AiAssistantPage({
   onSelectClient,
   managedRules,
   reports,
+  onApplyClientDraft,
 }: {
   clients: Client[]
   selectedClientId: string
   onSelectClient: (clientId: string) => void
   managedRules: ManagedRule[]
   reports: Report[]
+  onApplyClientDraft: (draftClient: Client) => Promise<AssistantDraftApplyResult>
 }) {
   const selectedClient = clients.find((client) => client.id === selectedClientId) || clients[0]
   const risks = useMemo(() => (selectedClient ? detectRisks(selectedClient, managedRules) : []), [selectedClient, managedRules])
@@ -7384,22 +7475,152 @@ function AiAssistantPage({
   ), [reports, selectedClient])
   const [assistantInput, setAssistantInput] = useState('')
   const [assistantMessages, setAssistantMessages] = useState<AiAssistantMessage[]>([])
+  const [assistantTargetMode, setAssistantTargetMode] = useState<AiAssistantTargetMode>('auto')
+  const [assistantDrafts, setAssistantDrafts] = useState<AiAssistantDraft[]>([])
   const [assistantLoading, setAssistantLoading] = useState(false)
   const [assistantError, setAssistantError] = useState('')
+  const [assistantNotice, setAssistantNotice] = useState('')
   const assistantExamples = [
     '请根据当前企业数据，告诉我最应该先补哪些资料。',
     '我把客户发来的利润表粘贴给你，请识别能填入系统的字段。',
     '帮我生成一段发给客户的补资料微信话术。',
   ]
+  const buildAssistantDraft = (
+    patchData: Partial<Client>,
+    options: {
+      fileName?: string
+      mappings: ImportMappingPreview[]
+      unmappedHeaders: string[]
+      detectedTables: string[]
+      sourceType: string
+    },
+  ) => {
+    const targetMode: Exclude<AiAssistantTargetMode, 'auto'> = assistantTargetMode === 'new'
+      ? 'new'
+      : assistantTargetMode === 'existing'
+        ? 'existing'
+        : patchData.name && !clients.some((client) => (
+          client.creditCode && patchData.creditCode
+            ? client.creditCode === patchData.creditCode
+            : client.name === patchData.name
+        ))
+          ? 'new'
+          : 'existing'
+    const matchedClient = targetMode === 'existing'
+      ? clients.find((client) => (
+        patchData.creditCode && client.creditCode === patchData.creditCode
+      )) || selectedClient
+      : null
+    const baseClient = targetMode === 'existing' && matchedClient
+      ? matchedClient
+      : blankDraftClient()
+    const draftClient = deriveClientMetrics({
+      ...baseClient,
+      ...patchData,
+      id: baseClient.id,
+      periodEntries: baseClient.periodEntries,
+    })
+    const labels = Object.keys(patchData).map(fieldLabel)
+    return {
+      id: crypto.randomUUID(),
+      targetMode,
+      client: draftClient,
+      labels,
+      mappings: options.mappings.filter((item) => Object.prototype.hasOwnProperty.call(patchData, item.field)),
+      unmappedHeaders: options.unmappedHeaders,
+      detectedTables: options.detectedTables,
+      sourceType: options.sourceType,
+      fileName: options.fileName,
+      missingSaveLabels: validateClientForSave(draftClient).map((issue) => issue.label).slice(0, 6),
+    }
+  }
+  const addAssistantDraftFromParsedImport = (parsedImport: {
+    patch: Record<string, unknown>
+    mappings: ImportMappingPreview[]
+    unmappedHeaders: string[]
+    detectedTables: string[]
+    detectedSourceType?: string
+  }, fileName?: string) => {
+    const patchData = coerceImportedClientPatch(parsedImport.patch)
+    const labels = Object.keys(patchData).map(fieldLabel)
+    if (!labels.length) return null
+    const draft = buildAssistantDraft(patchData, {
+      fileName,
+      mappings: parsedImport.mappings,
+      unmappedHeaders: parsedImport.unmappedHeaders,
+      detectedTables: parsedImport.detectedTables,
+      sourceType: parsedImport.detectedSourceType || (fileName ? '上传资料' : '粘贴资料'),
+    })
+    setAssistantDrafts((current) => [draft, ...current].slice(0, 5))
+    return draft
+  }
+  const importAssistantFile = async (file: File | null) => {
+    if (!file) return
+    setAssistantError('')
+    setAssistantNotice('')
+    try {
+      const fileBuffer = await file.arrayBuffer()
+      const isExcelFile = /\.(xlsx|xls)$/i.test(file.name)
+      const parsedImport = isExcelFile
+        ? await parseClientImportWorkbook(fileBuffer)
+        : parseClientImportText(decodeClientImportText(fileBuffer))
+      const draft = addAssistantDraftFromParsedImport(parsedImport, file.name)
+      if (!draft) {
+        setAssistantError('未识别到可填入系统的字段。')
+        return
+      }
+      setAssistantMessages((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: `已读取「${file.name}」，整理出 ${draft.labels.length} 个可填字段。请确认后导入。`,
+        },
+      ])
+    } catch (error) {
+      console.warn('Failed to import assistant file.', error)
+      setAssistantError('文件解析失败，请换一个 Excel、CSV、TSV、JSON 或文本文件。')
+    }
+  }
+  const applyAssistantDraft = async (draft: AiAssistantDraft) => {
+    setAssistantError('')
+    setAssistantNotice('')
+    const result = await onApplyClientDraft(draft.client)
+    setAssistantNotice(result.message)
+    setAssistantDrafts((current) => current.filter((item) => item.id !== draft.id))
+    setAssistantMessages((current) => [
+      ...current,
+      { id: crypto.randomUUID(), role: 'assistant', content: result.message },
+    ])
+  }
   const askAssistant = async (message = assistantInput) => {
     const cleanMessage = message.trim()
     if (!selectedClient || !cleanMessage || assistantLoading) return
+    const parsedTextDraft: AiAssistantDraft | null = (() => {
+      try {
+        return addAssistantDraftFromParsedImport(parseClientImportText(cleanMessage))
+      } catch {
+        return null
+      }
+    })()
     const nextMessages: AiAssistantMessage[] = [
       ...assistantMessages,
       { id: crypto.randomUUID(), role: 'user', content: cleanMessage },
     ]
     setAssistantInput(cleanMessage)
     setAssistantMessages(nextMessages)
+    if (parsedTextDraft) {
+      setAssistantMessages([
+        ...nextMessages,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: `已整理出 ${parsedTextDraft.labels.length} 个可填字段，请在下方确认是否导入。`,
+        },
+      ])
+      setAssistantInput('')
+      return
+    }
     setAssistantLoading(true)
     setAssistantError('')
     try {
@@ -7412,7 +7633,12 @@ function AiAssistantPage({
       })
       setAssistantMessages([
         ...nextMessages,
-        { id: crypto.randomUUID(), role: 'assistant', content: response.answer, response },
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: response.answer,
+          response,
+        },
       ])
       setAssistantInput('')
     } catch (error) {
@@ -7441,18 +7667,37 @@ function AiAssistantPage({
           <>
             <div className="assistant-context-row">
               <label>
-                当前企业
-                <select value={selectedClient.id} onChange={(event) => onSelectClient(event.target.value)}>
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>{client.name}</option>
-                  ))}
+                录入方式
+                <select value={assistantTargetMode} onChange={(event) => setAssistantTargetMode(event.target.value as AiAssistantTargetMode)}>
+                  <option value="auto">让 AI 判断</option>
+                  <option value="new">新建企业</option>
+                  <option value="existing">补充已有企业</option>
                 </select>
               </label>
+              {assistantTargetMode !== 'new' ? (
+                <label>
+                  当前企业
+                  <select value={selectedClient.id} onChange={(event) => onSelectClient(event.target.value)}>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>{client.name}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               <div>
                 <strong>{risks.length} 项风险线索</strong>
                 <small>{report ? '已带入最近报告上下文' : '暂无报告上下文，将基于企业档案和粘贴内容处理'}</small>
               </div>
             </div>
+            <label className="assistant-upload-control">
+              <input
+                type="file"
+                accept=".json,.csv,.tsv,.txt,.xlsx,.xls"
+                onChange={(event) => void importAssistantFile(event.target.files?.[0] || null)}
+              />
+              <FileText />
+              <span>上传资料</span>
+            </label>
             <div className="ai-assistant-examples">
               {assistantExamples.map((example) => (
                 <button type="button" key={example} onClick={() => void askAssistant(example)} disabled={assistantLoading}>
@@ -7510,6 +7755,38 @@ function AiAssistantPage({
                 <Sparkles /> {assistantLoading ? '正在处理...' : '发送'}
               </button>
             </div>
+            {assistantDrafts.length ? (
+              <div className="assistant-draft-list">
+                {assistantDrafts.map((draft) => (
+                  <article key={draft.id} className="assistant-draft-card">
+                    <div>
+                      <p className="eyebrow">{draft.targetMode === 'new' ? '新建企业草稿' : '补充已有企业草稿'}</p>
+                      <h4>{draft.client.name || '待命名企业'}</h4>
+                      <small>{draft.fileName || draft.sourceType}</small>
+                    </div>
+                    <div className="assistant-draft-fields">
+                      {draft.labels.slice(0, 10).map((label) => <span key={label}>{label}</span>)}
+                      {draft.labels.length > 10 ? <span>等 {draft.labels.length} 项</span> : null}
+                    </div>
+                    {draft.detectedTables.length ? (
+                      <p>识别资料：{draft.detectedTables.join('、')}</p>
+                    ) : null}
+                    {draft.missingSaveLabels.length ? (
+                      <p>还需确认：{draft.missingSaveLabels.join('、')}</p>
+                    ) : null}
+                    <div className="assistant-draft-actions">
+                      <button type="button" className="primary-button compact-button" onClick={() => void applyAssistantDraft(draft)}>
+                        <CheckCircle2 /> 确认导入
+                      </button>
+                      <button type="button" className="secondary-button compact-button" onClick={() => setAssistantDrafts((current) => current.filter((item) => item.id !== draft.id))}>
+                        取消
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : null}
+            {assistantNotice ? <div className="ai-assistant-notice">{assistantNotice}</div> : null}
             {assistantError ? <div className="ai-assistant-error">{assistantError}</div> : null}
           </>
         ) : (
