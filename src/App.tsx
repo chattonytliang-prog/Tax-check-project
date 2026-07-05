@@ -4236,29 +4236,25 @@ function App() {
     }))
     try {
       setAiReportStage('reviewing')
-      const reviewStartedAt = Date.now()
-      const reviewResponse = await apiSend<{ review: AiReview; model: string; usage?: unknown }>('/api/ai/review', 'POST', {
-        client: reportClient,
-        risks: risksForAi,
-      })
-      const reviewElapsed = Date.now() - reviewStartedAt
-      if (reviewElapsed < 2000) {
-        await wait(2000 - reviewElapsed)
-      }
+      const [reviewResponse] = await Promise.all([
+        apiSend<{ review: AiReview; model: string; usage?: unknown }>('/api/ai/review', 'POST', {
+          client: reportClient,
+          risks: risksForAi,
+        }),
+        wait(2000),
+      ])
 
       setAiReportStage('generating')
-      const reportStartedAt = Date.now()
-      const reportResponse = await apiSend<{ content: string; model: string; usage?: unknown }>('/api/ai/report', 'POST', {
-        client: reportClient,
-        risks: risksForAi,
-        content: baseReport.content,
-        structuredReport: buildStructuredReport(reportClient, risks, reviewResponse.review),
-        aiReview: reviewResponse.review,
-      })
-      const reportElapsed = Date.now() - reportStartedAt
-      if (reportElapsed < 2000) {
-        await wait(2000 - reportElapsed)
-      }
+      const [reportResponse] = await Promise.all([
+        apiSend<{ content: string; model: string; usage?: unknown }>('/api/ai/report', 'POST', {
+          client: reportClient,
+          risks: risksForAi,
+          content: baseReport.content,
+          structuredReport: buildStructuredReport(reportClient, risks, reviewResponse.review),
+          aiReview: reviewResponse.review,
+        }),
+        wait(2000),
+      ])
       const reviewedStructuredReport = buildStructuredReport(reportClient, risks, reviewResponse.review)
 
       report = {
