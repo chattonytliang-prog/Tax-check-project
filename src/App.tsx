@@ -7433,10 +7433,9 @@ function AiAssistantPage({
       <section className="ai-assistant-panel assistant-page-panel">
         <div className="ai-assistant-header">
           <div>
-            <p className="eyebrow">企业资料处理</p>
-            <h3>直接和 DeepSeek 对话，系统档案、风险线索和报告上下文会作为知识库提供给它</h3>
+            <p className="eyebrow">AI 助手</p>
+            <h3>把资料或问题发给 AI</h3>
           </div>
-          <span>不自动写入数据</span>
         </div>
         {selectedClient ? (
           <>
@@ -7465,10 +7464,10 @@ function AiAssistantPage({
               {assistantMessages.length ? (
                 assistantMessages.map((item) => (
                   <article key={item.id} className={`ai-assistant-message ${item.role}`}>
-                    <strong>{item.role === 'user' ? '你' : 'DeepSeek 财税助手'}</strong>
+                    <strong>{item.role === 'user' ? '你' : 'AI 助手'}</strong>
                     <p>{item.content}</p>
                     {item.response?.clientVerified === false ? (
-                      <small>当前企业未通过后端入库校验，本轮仅按页面临时上下文和粘贴内容分析。</small>
+                      <small>当前企业尚未入库，本轮先按临时内容处理。</small>
                     ) : null}
                     {item.response?.suggestions.length ? (
                       <div className="ai-assistant-suggestions">
@@ -7491,14 +7490,13 @@ function AiAssistantPage({
                 ))
               ) : (
                 <div className="ai-assistant-empty-chat">
-                  <strong>这是一个对话式 DeepSeek 工作台</strong>
-                  <p>它会读取当前企业档案、规则命中风险、最近报告摘要和你粘贴的资料，生成解释、待填字段草稿和补资料问题。</p>
+                  <strong>可以直接提问，也可以粘贴客户资料。</strong>
                 </div>
               )}
               {assistantLoading ? (
                 <article className="ai-assistant-message assistant">
-                  <strong>DeepSeek 财税助手</strong>
-                  <p>正在结合系统知识库和当前企业上下文处理...</p>
+                  <strong>AI 助手</strong>
+                  <p>正在处理...</p>
                 </article>
               ) : null}
             </div>
@@ -7509,9 +7507,8 @@ function AiAssistantPage({
             />
             <div className="ai-assistant-actions">
               <button type="button" className="primary-button" onClick={() => void askAssistant()} disabled={assistantLoading || !assistantInput.trim()}>
-                <Sparkles /> {assistantLoading ? 'DeepSeek 正在处理...' : '发送给 DeepSeek'}
+                <Sparkles /> {assistantLoading ? '正在处理...' : '发送'}
               </button>
-              <small>AI 可以帮你整理和预填字段草稿；真正录入系统前仍需要人工确认。</small>
             </div>
             {assistantError ? <div className="ai-assistant-error">{assistantError}</div> : null}
           </>

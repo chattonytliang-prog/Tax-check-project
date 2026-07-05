@@ -133,7 +133,7 @@ ${message}`
 export async function onRequestPost({ request, env }) {
   try {
     if (!env.DEEPSEEK_API_KEY) {
-      return json({ error: 'DeepSeek API key is not configured' }, { status: 503 })
+      return json({ error: 'AI model is not configured' }, { status: 503 })
     }
 
     const db = requireDb(env)
@@ -181,7 +181,7 @@ export async function onRequestPost({ request, env }) {
       const detail = await response.text()
       return json(
         {
-          error: 'DeepSeek assistant request failed',
+          error: 'AI assistant request failed',
           detail: detail.slice(0, 500),
         },
         { status: 502 },
@@ -192,7 +192,7 @@ export async function onRequestPost({ request, env }) {
     const content = data?.choices?.[0]?.message?.content?.trim() || ''
     const parsed = parseJsonObject(content)
     if (!parsed) {
-      return json({ error: 'DeepSeek returned invalid assistant JSON' }, { status: 502 })
+      return json({ error: 'AI assistant returned invalid JSON' }, { status: 502 })
     }
 
     return json({
