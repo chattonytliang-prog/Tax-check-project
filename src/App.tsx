@@ -283,6 +283,24 @@ type AiReview = {
   riskReviewNotes: string[]
 }
 
+type AiAssistantSuggestion = {
+  target: string
+  field: string
+  label: string
+  value: unknown
+  confidence: string
+  source: string
+  note: string
+}
+
+type AiAssistantResponse = {
+  answer: string
+  suggestions: AiAssistantSuggestion[]
+  followUps: string[]
+  model: string
+  usage?: unknown
+}
+
 type ManagedRule = {
   code: string
   name: string
@@ -7354,6 +7372,35 @@ function ReportPage({
   const aiStepText = aiStage === 'reviewing'
     ? '正在比对企业输入数据、规则条件和命中结果，识别字段冲突、边界值和需要人工复核的事项。'
     : '正在把确定性规则结果和数据复核意见整合成正式税务风险体检报告。'
+  const [assistantInput, setAssistantInput] = useState('')
+  const [assistantResponse, setAssistantResponse] = useState<AiAssistantResponse | null>(null)
+  const [assistantLoading, setAssistantLoading] = useState(false)
+  const [assistantError, setAssistantError] = useState('')
+  const assistantExamples = [
+    '解释当前报告，告诉我应该先和客户沟通什么。',
+    '我把客户发来的利润表粘贴给你，请识别能填入系统的字段。',
+    '帮我生成一段发给客户的补资料微信话术。',
+  ]
+  const askAssistant = async (message = assistantInput) => {
+    const cleanMessage = message.trim()
+    if (!cleanMessage || assistantLoading) return
+    setAssistantInput(cleanMessage)
+    setAssistantLoading(true)
+    setAssistantError('')
+    try {
+      const response = await apiSend<AiAssistantResponse>('/api/ai/assistant', 'POST', {
+        message: cleanMessage,
+        client,
+        risks: safeRisks,
+        report,
+      })
+      setAssistantResponse(response)
+    } catch (error) {
+      setAssistantError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setAssistantLoading(false)
+    }
+  }
   const reviewGroups = [
     {
       title: '输入数据疑点',
@@ -7465,6 +7512,65 @@ function ReportPage({
                 <p>当前报告没有可展示的 AI 复核明细。重新生成报告后，系统会自动调用 AI 复核并在此展示数据疑点、阈值提醒和风险复核说明。</p>
               </div>
             )}
+          </section>
+          <section className="ai-assistant-panel">
+            <div className="ai-assistant-header">
+              <div>
+                <p className="eyebrow">AI 财税工作助理</p>
+                <h3>可以解释报告，也可以把粘贴资料整理成待确认草稿</h3>
+              </div>
+              <span>不会自动写入数据</span>
+            </div>
+            <div className="ai-assistant-examples">
+              {assistantExamples.map((example) => (
+                <button type="button" key={example} onClick={() => void askAssistant(example)} disabled={assistantLoading}>
+                  {example}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={assistantInput}
+              onChange={(event) => setAssistantInput(event.target.value)}
+              placeholder="可以直接粘贴利润表、资产负债表、客户微信文字，或问：这份报告怎么和客户解释？"
+            />
+            <div className="ai-assistant-actions">
+              <button type="button" className="primary-button" onClick={() => void askAssistant()} disabled={assistantLoading || !assistantInput.trim()}>
+                <Sparkles /> {assistantLoading ? 'AI 正在处理...' : '发送给 AI 助手'}
+              </button>
+              <small>AI 只生成建议和预填草稿，应用到系统前需要人工确认。</small>
+            </div>
+            {assistantError ? <div className="ai-assistant-error">{assistantError}</div> : null}
+            {assistantResponse ? (
+              <div className="ai-assistant-result">
+                <article>
+                  <h4>AI 回复</h4>
+                  <p>{assistantResponse.answer}</p>
+                </article>
+                {assistantResponse.suggestions.length ? (
+                  <article>
+                    <h4>待确认字段草稿</h4>
+                    <div className="ai-assistant-suggestions">
+                      {assistantResponse.suggestions.map((item, index) => (
+                        <div key={`${item.field}-${index}`}>
+                          <strong>{item.label || item.field}</strong>
+                          <span>{String(item.value ?? '')}</span>
+                          <small>{item.target} · {item.confidence} · {item.source || 'AI 识别'}</small>
+                          {item.note ? <p>{item.note}</p> : null}
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ) : null}
+                {assistantResponse.followUps.length ? (
+                  <article>
+                    <h4>建议补充资料</h4>
+                    <ul>
+                      {assistantResponse.followUps.map((item) => <li key={item}>{item}</li>)}
+                    </ul>
+                  </article>
+                ) : null}
+              </div>
+            ) : null}
           </section>
           <div className="professional-report-layout">
             <aside>
