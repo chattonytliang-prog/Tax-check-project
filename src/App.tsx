@@ -4247,6 +4247,7 @@ function App() {
       }
 
       setAiReportStage('generating')
+      const reportStartedAt = Date.now()
       const reportResponse = await apiSend<{ content: string; model: string; usage?: unknown }>('/api/ai/report', 'POST', {
         client: reportClient,
         risks: risksForAi,
@@ -4254,6 +4255,10 @@ function App() {
         structuredReport: buildStructuredReport(reportClient, risks, reviewResponse.review),
         aiReview: reviewResponse.review,
       })
+      const reportElapsed = Date.now() - reportStartedAt
+      if (reportElapsed < 2000) {
+        await wait(2000 - reportElapsed)
+      }
       const reviewedStructuredReport = buildStructuredReport(reportClient, risks, reviewResponse.review)
 
       report = {
