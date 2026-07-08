@@ -8498,6 +8498,11 @@ function AiAssistantPage({
             <textarea
               value={assistantInput}
               onChange={(event) => setAssistantInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+                event.preventDefault()
+                void askAssistant()
+              }}
               placeholder="可以直接粘贴利润表、资产负债表、客户微信文字，或问：这个客户下一步应该补什么资料？"
             />
             <div className="ai-assistant-actions">
