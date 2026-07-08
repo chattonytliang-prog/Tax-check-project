@@ -7626,6 +7626,7 @@ function AiAssistantPage({
   const [assistantError, setAssistantError] = useState('')
   const [assistantNotice, setAssistantNotice] = useState('')
   const [assistantDragActive, setAssistantDragActive] = useState(false)
+  const [assistantThreadsHydrated, setAssistantThreadsHydrated] = useState(false)
   const assistantFileInputRef = useRef<HTMLInputElement | null>(null)
   const activeAssistantThread = assistantThreads.find((thread) => thread.id === activeAssistantThreadId) || assistantThreads[0]
   const assistantMessages = activeAssistantThread?.messages || []
@@ -7633,6 +7634,38 @@ function AiAssistantPage({
   useEffect(() => {
     window.localStorage.setItem(assistantThreadsStorageKey, JSON.stringify(assistantThreads.slice(0, 20)))
   }, [assistantThreads])
+  useEffect(() => {
+    let active = true
+    async function loadPersistedThreads() {
+      try {
+        const response = await apiGet<{ threads: AssistantThread[] }>('/api/assistant/threads')
+        if (!active || !response.threads?.length) return
+        setAssistantThreadState({
+          threads: response.threads,
+          activeId: response.threads[0].id,
+        })
+      } catch (error) {
+        console.warn('Using local assistant threads.', error)
+      } finally {
+        if (active) setAssistantThreadsHydrated(true)
+      }
+    }
+    void loadPersistedThreads()
+    return () => {
+      active = false
+    }
+  }, [])
+  useEffect(() => {
+    if (!assistantThreadsHydrated) return
+    const timeout = window.setTimeout(() => {
+      apiSend<{ threads: AssistantThread[] }>('/api/assistant/threads', 'POST', {
+        threads: assistantThreads.slice(0, 20),
+      }).catch((error) => {
+        console.warn('Assistant threads saved locally only.', error)
+      })
+    }, 700)
+    return () => window.clearTimeout(timeout)
+  }, [assistantThreads, assistantThreadsHydrated])
   const updateActiveAssistantThread = (updater: (thread: AssistantThread) => AssistantThread) => {
     if (!activeAssistantThread) return
     setAssistantThreads((current) => current.map((thread) => (
@@ -7676,6 +7709,9 @@ function AiAssistantPage({
         threads,
         activeId: threadId === current.activeId ? threads[0].id : current.activeId,
       }
+    })
+    apiDelete<{ ok: boolean }>(`/api/assistant/threads?id=${encodeURIComponent(threadId)}`).catch((error) => {
+      console.warn('Assistant thread delete saved locally only.', error)
     })
   }
   const buildAssistantDraft = (
