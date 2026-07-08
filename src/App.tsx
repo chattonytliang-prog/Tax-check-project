@@ -7497,7 +7497,10 @@ function AiAssistantPage({
   reports: Report[]
   onApplyClientDraft: (draftClient: Client) => Promise<AssistantDraftApplyResult>
 }) {
-  const selectedClient = clients.find((client) => client.id === selectedClientId) || clients[0]
+  const temporaryAssistantClient = useMemo(() => (
+    deriveClientMetrics({ ...blankClient, id: 'assistant-temp-client', name: '待录入企业' })
+  ), [])
+  const selectedClient = clients.find((client) => client.id === selectedClientId) || clients[0] || temporaryAssistantClient
   const risks = useMemo(() => (selectedClient ? detectRisks(selectedClient, managedRules) : []), [selectedClient, managedRules])
   const report = useMemo(() => (
     selectedClient ? reports.find((item) => item.clientId === selectedClient.id) : undefined
@@ -7526,7 +7529,9 @@ function AiAssistantPage({
       sourceType: string
     },
   ) => {
-    const targetMode: Exclude<AiAssistantTargetMode, 'auto'> = assistantTargetMode === 'new'
+    const targetMode: Exclude<AiAssistantTargetMode, 'auto'> = clients.length === 0
+      ? 'new'
+      : assistantTargetMode === 'new'
       ? 'new'
       : assistantTargetMode === 'existing'
         ? 'existing'
@@ -7649,7 +7654,7 @@ function AiAssistantPage({
   }
   const askAssistant = async (message = assistantInput) => {
     const cleanMessage = message.trim()
-    if (!selectedClient || !cleanMessage || assistantLoading) return
+    if (!cleanMessage || assistantLoading) return
     const parsedTextDraft: AiAssistantDraft | null = (() => {
       try {
         return addAssistantDraftFromParsedImport(parseClientImportText(cleanMessage))
@@ -7717,18 +7722,17 @@ function AiAssistantPage({
             <h3>把资料或问题发给 AI</h3>
           </div>
         </div>
-        {selectedClient ? (
-          <>
+        <>
             <div className="assistant-context-row">
               <label>
                 录入方式
                 <select value={assistantTargetMode} onChange={(event) => setAssistantTargetMode(event.target.value as AiAssistantTargetMode)}>
                   <option value="auto">让 AI 判断</option>
                   <option value="new">新建企业</option>
-                  <option value="existing">补充已有企业</option>
+                  <option value="existing" disabled={clients.length === 0}>补充已有企业</option>
                 </select>
               </label>
-              {assistantTargetMode !== 'new' ? (
+              {assistantTargetMode !== 'new' && clients.length > 0 ? (
                 <label>
                   当前企业
                   <select value={selectedClient.id} onChange={(event) => onSelectClient(event.target.value)}>
@@ -7740,7 +7744,13 @@ function AiAssistantPage({
               ) : null}
               <div>
                 <strong>{risks.length} 项风险线索</strong>
-                <small>{report ? '已带入最近报告上下文' : '暂无报告上下文，将基于企业档案和粘贴内容处理'}</small>
+                <small>
+                  {clients.length === 0
+                    ? '暂无企业档案，可上传资料创建新企业草稿'
+                    : report
+                      ? '已带入最近报告上下文'
+                      : '暂无报告上下文，将基于企业档案和粘贴内容处理'}
+                </small>
               </div>
             </div>
             <label className="assistant-upload-control">
@@ -7857,13 +7867,7 @@ function AiAssistantPage({
             ) : null}
             {assistantNotice ? <div className="ai-assistant-notice">{assistantNotice}</div> : null}
             {assistantError ? <div className="ai-assistant-error">{assistantError}</div> : null}
-          </>
-        ) : (
-          <div className="ai-review-empty">
-            <Info />
-            <p>请先建立企业档案，再使用 AI 财税助手处理资料。</p>
-          </div>
-        )}
+        </>
       </section>
     </section>
   )
