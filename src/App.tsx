@@ -2262,13 +2262,6 @@ function deriveClientMetrics(client: Client): Client {
 
 const demoClients: Client[] = createDemoClients()
 const demoCaseCreditCodes = new Set(demoClients.map((client) => client.creditCode))
-const demoClientsByCreditCode = new Map(demoClients.map((client) => [client.creditCode, client]))
-
-function refreshDemoClientTemplate(client: Client): Client {
-  const demoClient = demoClientsByCreditCode.get(client.creditCode)
-  if (!demoClient || client.periodEntries.length >= demoPeriodMonths.length) return client
-  return deriveClientMetrics({ ...demoClient, id: client.id })
-}
 
 function applyAutoDerivedMetrics(_previous: Client, next: Client) {
   return deriveClientMetrics(next)
@@ -3366,8 +3359,8 @@ function App() {
   const [authError, setAuthError] = useState('')
   const [authLoading, setAuthLoading] = useState(true)
   const [page, setPage] = useState<Page>('dashboard')
-  const [clients, setClients] = useState<Client[]>(demoClients)
-  const [selectedClientId, setSelectedClientId] = useState(demoClients[0].id)
+  const [clients, setClients] = useState<Client[]>([])
+  const [selectedClientId, setSelectedClientId] = useState('')
   const [selectedReportId, setSelectedReportId] = useState('')
   const [editingClient, setEditingClient] = useState<Client>(blankDraftClient())
   const [reports, setReports] = useState<Report[]>([])
@@ -3444,12 +3437,16 @@ function App() {
 
         if (!active) return
 
-        const normalizedClients = clientsResponse.clients.map((client) => refreshDemoClientTemplate(deriveClientMetrics(normalizeClient(client))))
-        const visibleClients = normalizedClients.length ? normalizedClients : createDemoClients()
+        const visibleClients = clientsResponse.clients
+          .filter((client) => !demoCaseCreditCodes.has(client.creditCode))
+          .map((client) => deriveClientMetrics(normalizeClient(client)))
         setClients(visibleClients)
         setReports(reportsResponse.reports)
         if (visibleClients[0]) {
           setSelectedClientId(visibleClients[0].id)
+          setSelectedPeriodEntryIds([])
+        } else {
+          setSelectedClientId('')
           setSelectedPeriodEntryIds([])
         }
         setDataStatus('connected')
@@ -4160,7 +4157,7 @@ function App() {
     }
   }
 
-  const loadRiskDemoCases = async () => {
+  const loadRiskDemoCases = () => {
     const existingByCreditCode = new Map(clients.map((client) => [client.creditCode, client]))
     const demoCases = createDemoClients().map((client) => {
       const existingClient = existingByCreditCode.get(client.creditCode)
@@ -4174,23 +4171,7 @@ function App() {
     setSelectedClientId(demoCases[0].id)
     setSelectedPeriodEntryIds(demoCases[0].periodEntries[0] ? [demoCases[0].periodEntries[0].id] : [])
     setPage('clients')
-
-    try {
-      await Promise.all(
-        demoCases.map((client) =>
-          apiSend<{ client: Client }>('/api/clients', 'POST', {
-            ...client,
-            riskLevel: getOverallLevel(detectRisks(client, managedRules)),
-          }),
-        ),
-      )
-      setDataStatus('connected')
-      window.alert('已载入低风险、中风险、高风险 3 个测试案例，每个案例包含 2024-01 至 2025-12 共 24 期月度数据。')
-    } catch (error) {
-      console.warn('Demo cases saved locally only.', error)
-      setDataStatus('fallback')
-      window.alert('已在本地载入测试案例；当前环境未连接后端，刷新后可能不会保留。')
-    }
+    window.alert('已临时载入低风险、中风险、高风险 3 个测试案例，每个案例包含 2024-01 至 2025-12 共 24 期月度数据。测试案例不会保存到正式企业档案，刷新后会隐藏。')
   }
 
   const editPeriodEntry = (entry: ClientPeriodEntry) => {
@@ -5082,7 +5063,7 @@ function App() {
                   <button type="button" className="secondary-button" onClick={loadRiskDemoCases}>
                     <ClipboardList /> 载入测试案例
                   </button>
-                  <small>演示数据，仅用于试算流程验证；同编号测试案例会被更新。</small>
+                  <small>演示数据，仅用于试算流程验证；点击后临时显示，刷新后隐藏。</small>
                 </div>
                 <button
                   className="primary-button"
