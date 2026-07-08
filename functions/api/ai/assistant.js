@@ -142,7 +142,16 @@ function normalizeHistory(value) {
     .slice(-10)
 }
 
-function buildPrompt({ message, history, client, clientVerified, risks, report }) {
+function normalizeAssistantContext(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return {
+    activeThread: value.activeThread || null,
+    currentDraft: value.currentDraft || null,
+    latestMaterialSummary: value.latestMaterialSummary || null,
+  }
+}
+
+function buildPrompt({ message, history, client, clientVerified, risks, report, assistantContext }) {
   return `You are an AI tax workbench assistant embedded in a Chinese tax risk checking product.
 
 Software capabilities you may use as skills:
@@ -217,6 +226,9 @@ ${JSON.stringify(history, null, 2)}
 Current client:
 ${JSON.stringify({ verifiedInDatabase: clientVerified, ...compactClient(client) }, null, 2)}
 
+Assistant workspace context:
+${JSON.stringify(assistantContext, null, 2)}
+
 Risk findings:
 ${JSON.stringify((risks || []).slice(0, 20).map(compactRisk), null, 2)}
 
@@ -241,9 +253,10 @@ export async function onRequestPost({ request, env }) {
     const auth = await requireUser(request, db)
     if (auth.response) return auth.response
 
-    const { message = '', history = [], client = null, risks = [], report = null } = await readJson(request)
+    const { message = '', history = [], client = null, risks = [], report = null, assistantContext = null } = await readJson(request)
     const cleanMessage = String(message || '').trim()
     const cleanHistory = normalizeHistory(history)
+    const cleanAssistantContext = normalizeAssistantContext(assistantContext)
     if (!cleanMessage) return badRequest('Message is required')
     if (!client?.id || !client?.name) return badRequest('Client id and name are required')
 
@@ -269,7 +282,15 @@ export async function onRequestPost({ request, env }) {
           },
           {
             role: 'user',
-            content: buildPrompt({ message: cleanMessage, history: cleanHistory, client, clientVerified, risks, report }),
+            content: buildPrompt({
+              message: cleanMessage,
+              history: cleanHistory,
+              client,
+              clientVerified,
+              risks,
+              report,
+              assistantContext: cleanAssistantContext,
+            }),
           },
         ],
         temperature: 0.2,

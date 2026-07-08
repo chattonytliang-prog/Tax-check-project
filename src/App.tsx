@@ -363,8 +363,18 @@ type AssistantThread = {
   title: string
   messages: AiAssistantMessage[]
   drafts: AiAssistantDraft[]
+  latestMaterialSummary?: AssistantMaterialSummary
   createdAt: string
   updatedAt: string
+}
+
+type AssistantMaterialSummary = {
+  fileName?: string
+  sourceType: string
+  detectedTables: string[]
+  mappedFields: Array<{ source: string; field: string; label: string }>
+  unmappedHeaders: string[]
+  patchPreview: Record<string, unknown>
 }
 
 type AssistantDraftApplyResult = {
@@ -2646,6 +2656,54 @@ function assistantThreadTitleFromText(text: string) {
   const cleanText = text.replace(/\s+/g, ' ').trim()
   if (!cleanText) return '新对话'
   return cleanText.length > 18 ? `${cleanText.slice(0, 18)}...` : cleanText
+}
+
+function compactAssistantDraftForModel(draft?: AiAssistantDraft) {
+  if (!draft) return null
+  return {
+    id: draft.id,
+    targetMode: draft.targetMode,
+    client: {
+      name: draft.client.name,
+      creditCode: draft.client.creditCode,
+      region: draft.client.region,
+      industry: draft.client.industry,
+      taxpayerType: draft.client.taxpayerType,
+      establishedAt: draft.client.establishedAt,
+      analysisPeriodType: draft.client.analysisPeriodType,
+      analysisYear: draft.client.analysisYear,
+      analysisQuarter: draft.client.analysisQuarter,
+      analysisMonth: draft.client.analysisMonth,
+      periodStartDate: draft.client.periodStartDate,
+      periodEndDate: draft.client.periodEndDate,
+      dataBasis: draft.client.dataBasis,
+      monthlyRevenue: draft.client.monthlyRevenue,
+      monthlyCost: draft.client.monthlyCost,
+      monthlyProfit: draft.client.monthlyProfit,
+      mainBusinessRevenue: draft.client.mainBusinessRevenue,
+      mainBusinessCost: draft.client.mainBusinessCost,
+      outputTax: draft.client.outputTax,
+      inputTax: draft.client.inputTax,
+      assetsTotal: draft.client.assetsTotal,
+      payrollTotal: draft.client.payrollTotal,
+    },
+    labels: draft.labels.slice(0, 30),
+    missingSaveLabels: draft.missingSaveLabels,
+    rawMaterials: draft.rawMaterials.map((material) => ({
+      name: material.name,
+      sourceType: material.sourceType,
+      size: material.size,
+      uploadedAt: material.uploadedAt,
+    })),
+    mappings: draft.mappings.slice(0, 30),
+    unmappedHeaders: draft.unmappedHeaders.slice(0, 30),
+    detectedTables: draft.detectedTables,
+    changeLog: draft.changeLog.slice(0, 6).map((change) => ({
+      source: change.source,
+      detail: change.detail,
+      at: change.at,
+    })),
+  }
 }
 
 function sanitizeAssistantAnswer(answer: string) {
@@ -7731,6 +7789,13 @@ function AiAssistantPage({
       updatedAt: formatDate(),
     }))
   }
+  const setActiveAssistantMaterialSummary = (summary: AssistantMaterialSummary) => {
+    updateActiveAssistantThread((thread) => ({
+      ...thread,
+      latestMaterialSummary: summary,
+      updatedAt: formatDate(),
+    }))
+  }
   const updateAssistantThreadTitle = (title: string) => {
     updateActiveAssistantThread((thread) => (
       thread.title === '新对话'
@@ -7843,6 +7908,14 @@ function AiAssistantPage({
       sourceType: parsedImport.detectedSourceType || (fileName ? '上传资料' : '粘贴资料'),
     })
     setActiveAssistantDrafts((current) => [draft, ...current].slice(0, 5))
+    setActiveAssistantMaterialSummary({
+      fileName,
+      sourceType: parsedImport.detectedSourceType || (fileName ? '上传资料' : '粘贴资料'),
+      detectedTables: parsedImport.detectedTables,
+      mappedFields: parsedImport.mappings.slice(0, 40),
+      unmappedHeaders: parsedImport.unmappedHeaders.slice(0, 40),
+      patchPreview: patchData,
+    })
     return draft
   }
   const importAssistantFile = async (file: File | null) => {
@@ -8074,6 +8147,18 @@ function AiAssistantPage({
         client: selectedClient,
         risks,
         report,
+        assistantContext: {
+          activeThread: activeAssistantThread
+            ? {
+              id: activeAssistantThread.id,
+              title: activeAssistantThread.title,
+              messageCount: activeAssistantThread.messages.length,
+              draftCount: activeAssistantThread.drafts.length,
+            }
+            : null,
+          currentDraft: compactAssistantDraftForModel(assistantDrafts[0]),
+          latestMaterialSummary: activeAssistantThread?.latestMaterialSummary || null,
+        },
       })
       setActiveAssistantMessages([
         ...nextMessages,
