@@ -311,6 +311,21 @@ type AiAssistantMessage = {
 
 type AiAssistantTargetMode = 'auto' | 'new' | 'existing'
 
+type AssistantRawMaterial = {
+  id: string
+  name: string
+  sourceType: string
+  size?: number
+  uploadedAt: string
+}
+
+type AssistantDraftChange = {
+  id: string
+  at: string
+  source: string
+  detail: string
+}
+
 type AiAssistantDraft = {
   id: string
   targetMode: Exclude<AiAssistantTargetMode, 'auto'>
@@ -321,6 +336,9 @@ type AiAssistantDraft = {
   detectedTables: string[]
   sourceType: string
   fileName?: string
+  rawMaterials: AssistantRawMaterial[]
+  changeLog: AssistantDraftChange[]
+  updatedAt: string
   missingSaveLabels: string[]
 }
 
@@ -2514,6 +2532,71 @@ function getSkippedRules(client: Client, managed: ManagedRule[] = []): SkippedRu
 
 function fieldLabel(field: string) {
   return conditionFields.find((item) => item.value === field)?.label || clientImportFieldLabels[field] || field
+}
+
+function formatFileSize(size?: number) {
+  if (!size) return ''
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
+}
+
+function uniqueLabels(labels: string[]) {
+  return Array.from(new Set(labels.filter(Boolean)))
+}
+
+function cleanAssistantValue(value: string) {
+  return value.replace(/[，。；;：:\s]+$/g, '').trim()
+}
+
+function inferAssistantCleaningPatch(message: string): { patch: Partial<Client>; changes: string[] } | null {
+  const patch: Partial<Client> = {}
+  const changes: string[] = []
+  const companyMatch = message.match(/(?:这是|这个是|客户是|公司是|企业是|名称是|企业名称是)\s*([^，。；;\n]+?(?:有限责任公司|股份有限公司|有限公司|公司|集团|工作室|中心|店|个体工商户))/)
+    || message.match(/([^，。；;\s]+?(?:有限责任公司|股份有限公司|有限公司|公司|集团|工作室|中心|店|个体工商户))/)
+  if (companyMatch?.[1]) {
+    patch.name = cleanAssistantValue(companyMatch[1])
+    changes.push(`企业名称：${patch.name}`)
+  }
+
+  const creditCodeMatch = message.match(/(?:统一社会信用代码|信用代码|税号)[是为:：\s]*([0-9A-Z]{15,20})/i)
+  if (creditCodeMatch?.[1]) {
+    patch.creditCode = creditCodeMatch[1].toUpperCase()
+    changes.push(`统一社会信用代码：${patch.creditCode}`)
+  }
+
+  const periodMatch = message.match(/(20\d{2})\s*年\s*(1[0-2]|0?[1-9])\s*月/)
+  if (periodMatch) {
+    patch.analysisPeriodType = '月度'
+    patch.analysisYear = periodMatch[1]
+    patch.analysisMonth = `${Number(periodMatch[2])}月`
+    changes.push(`所属期间：${patch.analysisYear}年${patch.analysisMonth}`)
+  }
+
+  if (/一般纳税人/.test(message)) {
+    patch.taxpayerType = '一般纳税人'
+    changes.push('纳税人类型：一般纳税人')
+  } else if (/小规模/.test(message)) {
+    patch.taxpayerType = '小规模纳税人'
+    changes.push('纳税人类型：小规模纳税人')
+  } else if (/个体工商户|个体户/.test(message)) {
+    patch.taxpayerType = '个体工商户'
+    changes.push('纳税人类型：个体工商户')
+  }
+
+  const regionMatch = message.match(/(?:地区|所在地|注册地|城市)[是为:：\s]*([^，。；;\n]{2,20})/)
+  if (regionMatch?.[1]) {
+    patch.region = cleanAssistantValue(regionMatch[1])
+    changes.push(`地区：${patch.region}`)
+  }
+
+  const industryMatch = message.match(/(?:行业|所属行业)[是为:：\s]*([^，。；;\n]{2,24})/)
+  if (industryMatch?.[1]) {
+    patch.industry = cleanAssistantValue(industryMatch[1])
+    changes.push(`行业：${patch.industry}`)
+  }
+
+  return changes.length ? { patch, changes } : null
 }
 
 function downloadClientImportTemplate() {
@@ -7514,6 +7597,7 @@ function AiAssistantPage({
     patchData: Partial<Client>,
     options: {
       fileName?: string
+      rawMaterial?: AssistantRawMaterial
       mappings: ImportMappingPreview[]
       unmappedHeaders: string[]
       detectedTables: string[]
@@ -7544,16 +7628,30 @@ function AiAssistantPage({
       periodEntries: baseClient.periodEntries,
     })
     const labels = Object.keys(patchData).map(fieldLabel)
+    const now = formatDate()
+    const rawMaterials = options.rawMaterial ? [options.rawMaterial] : []
     return {
       id: crypto.randomUUID(),
       targetMode,
       client: draftClient,
-      labels,
+      labels: uniqueLabels(labels),
       mappings: options.mappings.filter((item) => Object.prototype.hasOwnProperty.call(patchData, item.field)),
       unmappedHeaders: options.unmappedHeaders,
       detectedTables: options.detectedTables,
       sourceType: options.sourceType,
       fileName: options.fileName,
+      rawMaterials,
+      changeLog: [
+        {
+          id: crypto.randomUUID(),
+          at: now,
+          source: 'AI 清洗',
+          detail: rawMaterials.length
+            ? `从原始资料「${rawMaterials[0].name}」生成清洗后数据草稿`
+            : '从粘贴内容生成清洗后数据草稿',
+        },
+      ],
+      updatedAt: now,
       missingSaveLabels: validateClientForSave(draftClient).map((issue) => issue.label).slice(0, 6),
     }
   }
@@ -7563,7 +7661,7 @@ function AiAssistantPage({
     unmappedHeaders: string[]
     detectedTables: string[]
     detectedSourceType?: string
-  }, fileName?: string) => {
+  }, fileName?: string, rawMaterial?: AssistantRawMaterial) => {
     const patchData = {
       ...(fileName ? inferClientPatchFromFileName(fileName) : {}),
       ...coerceImportedClientPatch(parsedImport.patch),
@@ -7572,6 +7670,7 @@ function AiAssistantPage({
     if (!labels.length) return null
     const draft = buildAssistantDraft(patchData, {
       fileName,
+      rawMaterial,
       mappings: parsedImport.mappings,
       unmappedHeaders: parsedImport.unmappedHeaders,
       detectedTables: parsedImport.detectedTables,
@@ -7590,7 +7689,13 @@ function AiAssistantPage({
       const parsedImport = isExcelFile
         ? await parseClientImportWorkbook(fileBuffer)
         : parseClientImportText(decodeClientImportText(fileBuffer))
-      const draft = addAssistantDraftFromParsedImport(parsedImport, file.name)
+      const draft = addAssistantDraftFromParsedImport(parsedImport, file.name, {
+        id: crypto.randomUUID(),
+        name: file.name,
+        size: file.size,
+        sourceType: parsedImport.detectedSourceType || '上传资料',
+        uploadedAt: formatDate(),
+      })
       if (!draft) {
         setAssistantError('未识别到可填入系统的字段。')
         return
@@ -7639,6 +7744,49 @@ function AiAssistantPage({
       { id: crypto.randomUUID(), role: 'assistant', content: result.message },
     ])
   }
+  const applyCleaningMessageToDraft = (message: string) => {
+    const inferred = inferAssistantCleaningPatch(message)
+    if (!inferred) return null
+    const labels = Object.keys(inferred.patch).map(fieldLabel)
+    const changeDetail = inferred.changes.join('、')
+    const now = formatDate()
+
+    if (!assistantDrafts.length) {
+      const draft = buildAssistantDraft(inferred.patch, {
+        mappings: [],
+        unmappedHeaders: [],
+        detectedTables: [],
+        sourceType: '对话确认',
+      })
+      draft.changeLog = [
+        ...draft.changeLog,
+        { id: crypto.randomUUID(), at: now, source: '用户确认', detail: changeDetail },
+      ]
+      draft.updatedAt = now
+      setAssistantDrafts([draft])
+      return { labels, detail: changeDetail }
+    }
+
+    setAssistantDrafts((current) => current.map((draft, index) => {
+      if (index !== 0) return draft
+      const client = deriveClientMetrics({
+        ...draft.client,
+        ...inferred.patch,
+      })
+      return {
+        ...draft,
+        client,
+        labels: uniqueLabels([...draft.labels, ...labels]),
+        changeLog: [
+          { id: crypto.randomUUID(), at: now, source: '用户确认', detail: changeDetail },
+          ...draft.changeLog,
+        ].slice(0, 8),
+        updatedAt: now,
+        missingSaveLabels: validateClientForSave(client).map((issue) => issue.label).slice(0, 6),
+      }
+    }))
+    return { labels, detail: changeDetail }
+  }
   const askAssistant = async (message = assistantInput) => {
     const cleanMessage = message.trim()
     if (!cleanMessage || assistantLoading) return
@@ -7662,6 +7810,19 @@ function AiAssistantPage({
           id: crypto.randomUUID(),
           role: 'assistant',
           content: `已整理出 ${parsedTextDraft.labels.length} 个可填字段，请在下方确认是否导入。`,
+        },
+      ])
+      setAssistantInput('')
+      return
+    }
+    const cleaningUpdate = applyCleaningMessageToDraft(cleanMessage)
+    if (cleaningUpdate) {
+      setAssistantMessages([
+        ...nextMessages,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: `已更新清洗后数据：${cleaningUpdate.detail}`,
         },
       ])
       setAssistantInput('')
@@ -7779,10 +7940,20 @@ function AiAssistantPage({
                 {assistantDrafts.map((draft) => (
                   <article key={draft.id} className="assistant-draft-card">
                     <div>
-                      <p className="eyebrow">{draft.targetMode === 'new' ? '新建企业草稿' : '补充已有企业草稿'}</p>
+                      <p className="eyebrow">{draft.targetMode === 'new' ? '新建企业清洗草稿' : '补充已有企业清洗草稿'}</p>
                       <h4>{draft.client.name || '待命名企业'}</h4>
-                      <small>{draft.fileName || draft.sourceType}</small>
+                      <small>清洗后数据 · {draft.updatedAt}</small>
                     </div>
+                    {draft.rawMaterials.length ? (
+                      <div className="assistant-raw-materials">
+                        <strong>原始资料</strong>
+                        {draft.rawMaterials.map((material) => (
+                          <span key={material.id}>
+                            {material.name}{formatFileSize(material.size) ? ` · ${formatFileSize(material.size)}` : ''}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                     <div className="assistant-draft-fields">
                       {draft.labels.slice(0, 10).map((label) => <span key={label}>{label}</span>)}
                       {draft.labels.length > 10 ? <span>等 {draft.labels.length} 项</span> : null}
@@ -7792,6 +7963,14 @@ function AiAssistantPage({
                     ) : null}
                     {draft.missingSaveLabels.length ? (
                       <p>还需确认：{draft.missingSaveLabels.join('、')}</p>
+                    ) : null}
+                    {draft.changeLog.length ? (
+                      <div className="assistant-clean-log">
+                        <strong>清洗记录</strong>
+                        {draft.changeLog.slice(0, 4).map((change) => (
+                          <span key={change.id}>{change.source}：{change.detail}</span>
+                        ))}
+                      </div>
                     ) : null}
                     <div className="assistant-draft-actions">
                       <button type="button" className="primary-button compact-button" onClick={() => void applyAssistantDraft(draft)}>
