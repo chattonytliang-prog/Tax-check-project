@@ -84,7 +84,7 @@ import {
   type DataBasis,
   type PeriodEntry,
 } from './lib/periodAnalysis'
-import { apiDelete, apiGet, apiSend } from './lib/apiClient'
+import { apiDelete, apiGet, apiSend, apiUpload } from './lib/apiClient'
 import './App.css'
 
 type Page = 'dashboard' | 'assistant' | 'clients' | 'form' | 'result' | 'report' | 'reports' | 'rules' | 'admin'
@@ -332,6 +332,9 @@ type AssistantRawMaterial = {
   name: string
   sourceType: string
   size?: number
+  contentType?: string
+  objectKey?: string
+  storageStatus?: 'stored' | 'metadata_only' | 'local_only'
   uploadedAt: string
 }
 
@@ -380,6 +383,7 @@ type AssistantMaterialSummary = {
 type AssistantDraftApplyResult = {
   status: 'saved' | 'draft'
   message: string
+  client?: Client
 }
 
 type ManagedRule = {
@@ -4264,6 +4268,7 @@ function App() {
       }
       return {
         status: 'saved',
+        client: normalized,
         message: `我已先保存「${normalized.name}」${periodEntry.months.length ? '和已识别的期间数据' : '的企业档案草稿'}，不会离开当前对话。${missingMessage}。你可以直接告诉我这些信息，我会继续更新。`,
       }
     }
@@ -4292,11 +4297,11 @@ function App() {
         riskLevel: getOverallLevel(detectRisks(normalized, managedRules)),
       })
       setDataStatus('connected')
-      return { status: 'saved', message: `我已保存「${normalized.name}」并写入 1 条期间数据，当前仍保留在 AI 对话中。` }
+      return { status: 'saved', client: normalized, message: `我已保存「${normalized.name}」并写入 1 条期间数据，当前仍保留在 AI 对话中。` }
     } catch (error) {
       console.warn('Assistant draft saved locally only.', error)
       setDataStatus('fallback')
-      return { status: 'saved', message: `我已在本地保存「${normalized.name}」，当前后端不可用；你可以继续在这里补充信息。` }
+      return { status: 'saved', client: normalized, message: `我已在本地保存「${normalized.name}」，当前后端不可用；你可以继续在这里补充信息。` }
     }
   }
 
@@ -8011,22 +8016,64 @@ function AiAssistantPage({
       setAssistantLoading(false)
     }
   }
+  const uploadAssistantMaterial = async (file: File): Promise<AssistantRawMaterial> => {
+    const fallback: AssistantRawMaterial = {
+      id: crypto.randomUUID(),
+      name: file.name,
+      size: file.size,
+      contentType: file.type || 'application/octet-stream',
+      sourceType: '上传资料',
+      storageStatus: 'local_only',
+      uploadedAt: formatDate(),
+    }
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      if (activeAssistantThread?.id) formData.append('threadId', activeAssistantThread.id)
+      const response = await apiUpload<{ material: AssistantRawMaterial }>('/api/assistant/materials', formData)
+      return {
+        ...fallback,
+        ...response.material,
+        sourceType: response.material.sourceType || fallback.sourceType,
+        storageStatus: response.material.storageStatus || fallback.storageStatus,
+      }
+    } catch (error) {
+      console.warn('Assistant material stored locally only.', error)
+      return fallback
+    }
+  }
+  const executeAssistantSaveTool = async (client: Client) => {
+    try {
+      await apiSend<{ results: Array<{ status: string; message: string }> }>('/api/assistant/tools', 'POST', {
+        toolCalls: [
+          {
+            name: 'save_current_draft',
+            arguments: {},
+            reason: '用户已确认导入当前清洗草稿',
+            requiresConfirmation: false,
+          },
+        ],
+        allowSave: true,
+        currentDraft: { client },
+      })
+    } catch (error) {
+      console.warn('Assistant save tool fell back to existing save flow.', error)
+    }
+  }
   const importAssistantFile = async (file: File | null) => {
     if (!file) return
     setAssistantError('')
     setAssistantNotice('')
     try {
+      const rawMaterial = await uploadAssistantMaterial(file)
       const fileBuffer = await file.arrayBuffer()
       const isExcelFile = /\.(xlsx|xls)$/i.test(file.name)
       const parsedImport = isExcelFile
         ? await parseClientImportWorkbook(fileBuffer)
         : parseClientImportText(decodeClientImportText(fileBuffer))
       const draft = addAssistantDraftFromParsedImport(parsedImport, file.name, {
-        id: crypto.randomUUID(),
-        name: file.name,
-        size: file.size,
+        ...rawMaterial,
         sourceType: parsedImport.detectedSourceType || '上传资料',
-        uploadedAt: formatDate(),
       })
       if (!draft) {
         setAssistantError('未识别到可填入系统的字段。')
@@ -8090,6 +8137,9 @@ function AiAssistantPage({
     setAssistantError('')
     setAssistantNotice('')
     const result = await onApplyClientDraft(draft.client)
+    if (result.status === 'saved' && result.client) {
+      await executeAssistantSaveTool(result.client)
+    }
     setAssistantNotice(result.message)
     if (result.status === 'saved' && !result.message.includes('还缺')) {
       setActiveAssistantDrafts((current) => current.filter((item) => item.id !== draft.id))
@@ -8199,6 +8249,9 @@ function AiAssistantPage({
           continue
         }
         const result = await onApplyClientDraft(draft.client)
+        if (result.status === 'saved' && result.client) {
+          await executeAssistantSaveTool(result.client)
+        }
         if (result.status === 'saved' && !result.message.includes('还缺')) {
           setActiveAssistantDrafts((current) => current.filter((item) => item.id !== draft.id))
         }

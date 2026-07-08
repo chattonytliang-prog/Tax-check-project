@@ -19,6 +19,18 @@ export async function apiSend<T>(url: string, method: 'POST' | 'PUT', body: unkn
   return response.json() as Promise<T>
 }
 
+export async function apiUpload<T>(url: string, formData: FormData): Promise<T> {
+  const response = await fetch(url, {
+    method: 'POST',
+    body: formData,
+  })
+  if (!response.ok) {
+    const data = await response.json().catch(() => null)
+    throw new Error(data?.error || data?.detail || `API request failed: ${response.status}`)
+  }
+  return response.json() as Promise<T>
+}
+
 export async function apiDelete<T>(url: string): Promise<T> {
   const response = await fetch(url, { method: 'DELETE' })
   if (!response.ok) {
