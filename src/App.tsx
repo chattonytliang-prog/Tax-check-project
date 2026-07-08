@@ -4981,7 +4981,6 @@ function App() {
           <AiAssistantPage
             clients={clients}
             selectedClientId={selectedClientId}
-            onSelectClient={setSelectedClientId}
             managedRules={managedRules}
             reports={reports}
             onApplyClientDraft={(draftClient) => applyAssistantClientDraft(draftClient)}
@@ -7485,14 +7484,12 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
 function AiAssistantPage({
   clients,
   selectedClientId,
-  onSelectClient,
   managedRules,
   reports,
   onApplyClientDraft,
 }: {
   clients: Client[]
   selectedClientId: string
-  onSelectClient: (clientId: string) => void
   managedRules: ManagedRule[]
   reports: Report[]
   onApplyClientDraft: (draftClient: Client) => Promise<AssistantDraftApplyResult>
@@ -7507,18 +7504,12 @@ function AiAssistantPage({
   ), [reports, selectedClient])
   const [assistantInput, setAssistantInput] = useState('')
   const [assistantMessages, setAssistantMessages] = useState<AiAssistantMessage[]>([])
-  const [assistantTargetMode, setAssistantTargetMode] = useState<AiAssistantTargetMode>('auto')
   const [assistantDrafts, setAssistantDrafts] = useState<AiAssistantDraft[]>([])
   const [assistantLoading, setAssistantLoading] = useState(false)
   const [assistantError, setAssistantError] = useState('')
   const [assistantNotice, setAssistantNotice] = useState('')
   const [assistantDragActive, setAssistantDragActive] = useState(false)
   const assistantFileInputRef = useRef<HTMLInputElement | null>(null)
-  const assistantExamples = [
-    '请根据当前企业数据，告诉我最应该先补哪些资料。',
-    '我把客户发来的利润表粘贴给你，请识别能填入系统的字段。',
-    '帮我生成一段发给客户的补资料微信话术。',
-  ]
   const buildAssistantDraft = (
     patchData: Partial<Client>,
     options: {
@@ -7531,11 +7522,7 @@ function AiAssistantPage({
   ) => {
     const targetMode: Exclude<AiAssistantTargetMode, 'auto'> = clients.length === 0
       ? 'new'
-      : assistantTargetMode === 'new'
-      ? 'new'
-      : assistantTargetMode === 'existing'
-        ? 'existing'
-        : patchData.name && !clients.some((client) => (
+      : patchData.name && !clients.some((client) => (
           client.creditCode && patchData.creditCode
             ? client.creditCode === patchData.creditCode
             : client.name === patchData.name
@@ -7716,72 +7703,25 @@ function AiAssistantPage({
         </div>
       </header>
       <section className="ai-assistant-panel assistant-page-panel">
-        <div className="ai-assistant-header">
-          <div>
-            <p className="eyebrow">AI 助手</p>
-            <h3>把资料或问题发给 AI</h3>
-          </div>
-        </div>
-        <>
-            <div className="assistant-context-row">
-              <label>
-                录入方式
-                <select value={assistantTargetMode} onChange={(event) => setAssistantTargetMode(event.target.value as AiAssistantTargetMode)}>
-                  <option value="auto">让 AI 判断</option>
-                  <option value="new">新建企业</option>
-                  <option value="existing" disabled={clients.length === 0}>补充已有企业</option>
-                </select>
-              </label>
-              {assistantTargetMode !== 'new' && clients.length > 0 ? (
-                <label>
-                  当前企业
-                  <select value={selectedClient.id} onChange={(event) => onSelectClient(event.target.value)}>
-                    {clients.map((client) => (
-                      <option key={client.id} value={client.id}>{client.name}</option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-              <div>
-                <strong>{risks.length} 项风险线索</strong>
-                <small>
-                  {clients.length === 0
-                    ? '暂无企业档案，可上传资料创建新企业草稿'
-                    : report
-                      ? '已带入最近报告上下文'
-                      : '暂无报告上下文，将基于企业档案和粘贴内容处理'}
-                </small>
-              </div>
-            </div>
-            <label className="assistant-upload-control">
-              <input
-                ref={assistantFileInputRef}
-                type="file"
-                accept=".json,.csv,.tsv,.txt,.xlsx,.xls"
-                multiple
-                onChange={(event) => {
-                  void importAssistantFiles(event.target.files || [])
-                  event.currentTarget.value = ''
-                }}
-              />
-              <FileText />
-              <span>上传资料</span>
-            </label>
-            <div className="ai-assistant-examples">
-              {assistantExamples.map((example) => (
-                <button type="button" key={example} onClick={() => void askAssistant(example)} disabled={assistantLoading}>
-                  {example}
-                </button>
-              ))}
-            </div>
-            <div
-              className={`ai-assistant-chat ${assistantDragActive ? 'drag-active' : ''}`}
-              aria-live="polite"
-              onDrop={handleAssistantDrop}
-              onDragOver={handleAssistantDragOver}
-              onDragEnter={handleAssistantDragOver}
-              onDragLeave={handleAssistantDragLeave}
-            >
+        <input
+          ref={assistantFileInputRef}
+          className="assistant-hidden-file-input"
+          type="file"
+          accept=".json,.csv,.tsv,.txt,.xlsx,.xls"
+          multiple
+          onChange={(event) => {
+            void importAssistantFiles(event.target.files || [])
+            event.currentTarget.value = ''
+          }}
+        />
+        <div
+          className={`ai-assistant-chat ${assistantDragActive ? 'drag-active' : ''}`}
+          aria-live="polite"
+          onDrop={handleAssistantDrop}
+          onDragOver={handleAssistantDragOver}
+          onDragEnter={handleAssistantDragOver}
+          onDragLeave={handleAssistantDragLeave}
+        >
               {assistantMessages.length ? (
                 assistantMessages.map((item) => (
                   <article key={item.id} className={`ai-assistant-message ${item.role}`}>
@@ -7867,7 +7807,6 @@ function AiAssistantPage({
             ) : null}
             {assistantNotice ? <div className="ai-assistant-notice">{assistantNotice}</div> : null}
             {assistantError ? <div className="ai-assistant-error">{assistantError}</div> : null}
-        </>
       </section>
     </section>
   )
