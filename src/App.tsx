@@ -2573,6 +2573,13 @@ function formatFileSize(size?: number) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
+function assistantMaterialStorageLabel(status?: AssistantRawMaterial['storageStatus']) {
+  if (status === 'stored') return '原件已存档'
+  if (status === 'metadata_only') return '已留痕'
+  if (status === 'local_only') return '本地留痕'
+  return '已接收'
+}
+
 function uniqueLabels(labels: string[]) {
   return Array.from(new Set(labels.filter(Boolean)))
 }
@@ -8434,7 +8441,7 @@ function AiAssistantPage({
             ref={assistantFileInputRef}
             className="assistant-hidden-file-input"
             type="file"
-            accept=".json,.csv,.tsv,.txt,.xlsx,.xls"
+            accept=".json,.csv,.tsv,.txt,.xlsx,.xls,.pdf,.png,.jpg,.jpeg,.webp,.ppt,.pptx"
             multiple
             onChange={(event) => {
               void importAssistantFiles(event.target.files || [])
@@ -8515,7 +8522,7 @@ function AiAssistantPage({
                         <strong>原始资料</strong>
                         {draft.rawMaterials.map((material) => (
                           <span key={material.id}>
-                            {material.name}{formatFileSize(material.size) ? ` · ${formatFileSize(material.size)}` : ''}
+                            {material.name}{formatFileSize(material.size) ? ` · ${formatFileSize(material.size)}` : ''} · {assistantMaterialStorageLabel(material.storageStatus)}
                           </span>
                         ))}
                       </div>
