@@ -4139,6 +4139,12 @@ function App() {
 
   const applyAssistantClientDraft = async (draftClient: Client): Promise<AssistantDraftApplyResult> => {
     const normalizedName = draftClient.name.trim()
+    if (!normalizedName) {
+      return {
+        status: 'draft',
+        message: '还不能保存：请先告诉我企业名称。我会把企业名称写入当前清洗草稿后再保存。',
+      }
+    }
     const normalizedBase: Client = deriveClientMetrics({
       ...normalizePeriodDraft(normalizeClient(draftClient)),
       name: normalizedName,
@@ -4159,14 +4165,32 @@ function App() {
     )
 
     if (saveIssues.length > 0 || !periodEntry.months.length) {
-      setEditingClient(normalizedBase)
+      const periodEntries = periodEntry.months.length
+        ? upsertPeriodEntry(normalizedBase.periodEntries, periodEntry)
+        : normalizedBase.periodEntries
+      const normalized: Client = { ...normalizedBase, periodEntries }
+      setClients((current) => {
+        const exists = current.some((client) => client.id === normalized.id)
+        return exists ? current.map((client) => (client.id === normalized.id ? normalized : client)) : [normalized, ...current]
+      })
       setSelectedClientId(normalizedBase.id)
-      setPage('form')
+      setSelectedPeriodEntryIds(periodEntry.months.length ? [periodEntry.id] : [])
+      const missingMessage = saveIssues.length
+        ? `还缺：${saveIssues.map((issue) => issue.label).slice(0, 6).join('、')}`
+        : '还缺：数据期间'
+      try {
+        await apiSend<{ client: Client }>('/api/clients', 'POST', {
+          ...normalized,
+          riskLevel: getOverallLevel(detectRisks(normalized, managedRules)),
+        })
+        setDataStatus('connected')
+      } catch (error) {
+        console.warn('Assistant draft saved locally only.', error)
+        setDataStatus('fallback')
+      }
       return {
-        status: 'draft',
-        message: saveIssues.length
-          ? `已填入数据录入草稿，请补齐：${saveIssues.map((issue) => issue.label).slice(0, 6).join('、')}`
-          : '已填入数据录入草稿，请补齐数据期间后保存。',
+        status: 'saved',
+        message: `我已先保存「${normalized.name}」${periodEntry.months.length ? '和已识别的期间数据' : '的企业档案草稿'}，不会离开当前对话。${missingMessage}。你可以直接告诉我这些信息，我会继续更新。`,
       }
     }
 
@@ -4175,10 +4199,8 @@ function App() {
     if (consistencyWarnings.length > 0) {
       const confirmed = window.confirm(`发现期间数据差异：\n\n${consistencyWarnings.join('\n')}\n\n是否继续导入？`)
       if (!confirmed) {
-        setEditingClient(normalizedBase)
         setSelectedClientId(normalizedBase.id)
-        setPage('form')
-        return { status: 'draft', message: '已转入数据录入草稿，暂未保存。' }
+        return { status: 'draft', message: '已保留在当前清洗草稿中，暂未覆盖已有期间数据。你可以继续告诉我如何处理。' }
       }
     }
 
@@ -4189,7 +4211,6 @@ function App() {
     })
     setSelectedClientId(normalized.id)
     setSelectedPeriodEntryIds([periodEntry.id])
-    setPage('clients')
 
     try {
       await apiSend<{ client: Client }>('/api/clients', 'POST', {
@@ -4197,11 +4218,11 @@ function App() {
         riskLevel: getOverallLevel(detectRisks(normalized, managedRules)),
       })
       setDataStatus('connected')
-      return { status: 'saved', message: `已导入「${normalized.name}」并保存 1 条期间数据。` }
+      return { status: 'saved', message: `我已保存「${normalized.name}」并写入 1 条期间数据，当前仍保留在 AI 对话中。` }
     } catch (error) {
       console.warn('Assistant draft saved locally only.', error)
       setDataStatus('fallback')
-      return { status: 'saved', message: `已在本地导入「${normalized.name}」，当前后端不可用。` }
+      return { status: 'saved', message: `我已在本地保存「${normalized.name}」，当前后端不可用；你可以继续在这里补充信息。` }
     }
   }
 
@@ -7868,7 +7889,9 @@ function AiAssistantPage({
     setAssistantNotice('')
     const result = await onApplyClientDraft(draft.client)
     setAssistantNotice(result.message)
-    setActiveAssistantDrafts((current) => current.filter((item) => item.id !== draft.id))
+    if (result.status === 'saved' && !result.message.includes('还缺')) {
+      setActiveAssistantDrafts((current) => current.filter((item) => item.id !== draft.id))
+    }
     setActiveAssistantMessages((current) => [
       ...current,
       { id: crypto.randomUUID(), role: 'assistant', content: result.message },
