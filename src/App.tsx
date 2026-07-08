@@ -293,8 +293,24 @@ type AiAssistantSuggestion = {
   note: string
 }
 
+type AiAssistantToolCall = {
+  name: 'create_cleaning_draft' | 'update_cleaning_draft' | 'save_current_draft' | 'ask_missing_fields'
+  arguments: Record<string, unknown>
+  reason: string
+  requiresConfirmation: boolean
+}
+
+type AiAssistantMissingField = {
+  field: string
+  label: string
+  question: string
+}
+
 type AiAssistantResponse = {
   answer: string
+  draftPatch?: Partial<Client>
+  missingFields?: AiAssistantMissingField[]
+  toolCalls?: AiAssistantToolCall[]
   suggestions: AiAssistantSuggestion[]
   followUps: string[]
   clientVerified?: boolean
@@ -7940,6 +7956,73 @@ function AiAssistantPage({
     }))
     return { labels, detail: changeDetail }
   }
+  const applyAssistantDraftPatch = (patch: Partial<Client> | undefined, source = 'AI 工具调用') => {
+    if (!patch || !Object.keys(patch).length) return null
+    const labels = Object.keys(patch).map(fieldLabel)
+    const detail = labels.length ? `更新 ${labels.join('、')}` : '更新清洗草稿'
+    const now = formatDate()
+
+    if (!assistantDrafts.length) {
+      const draft = buildAssistantDraft(patch, {
+        mappings: [],
+        unmappedHeaders: [],
+        detectedTables: [],
+        sourceType: source,
+      })
+      draft.changeLog = [
+        { id: crypto.randomUUID(), at: now, source, detail },
+        ...draft.changeLog,
+      ]
+      draft.updatedAt = now
+      setActiveAssistantDrafts([draft])
+      return { labels, detail }
+    }
+
+    setActiveAssistantDrafts((current) => current.map((draft, index) => {
+      if (index !== 0) return draft
+      const client = deriveClientMetrics({
+        ...draft.client,
+        ...patch,
+      })
+      return {
+        ...draft,
+        client,
+        labels: uniqueLabels([...draft.labels, ...labels]),
+        changeLog: [
+          { id: crypto.randomUUID(), at: now, source, detail },
+          ...draft.changeLog,
+        ].slice(0, 8),
+        updatedAt: now,
+        missingSaveLabels: validateClientForSave(client).map((issue) => issue.label).slice(0, 6),
+      }
+    }))
+    return { labels, detail }
+  }
+  const executeAssistantToolCalls = async (response: AiAssistantResponse) => {
+    const results: string[] = []
+    const draftPatchResult = applyAssistantDraftPatch(response.draftPatch, 'AI 清洗')
+    if (draftPatchResult) {
+      results.push(`已更新清洗草稿：${draftPatchResult.detail}`)
+    }
+
+    for (const toolCall of response.toolCalls || []) {
+      if (toolCall.name === 'save_current_draft') {
+        const draft = assistantDrafts[0]
+        if (!draft) {
+          results.push('暂未找到可保存的清洗草稿。')
+          continue
+        }
+        const result = await onApplyClientDraft(draft.client)
+        if (result.status === 'saved' && !result.message.includes('还缺')) {
+          setActiveAssistantDrafts((current) => current.filter((item) => item.id !== draft.id))
+        }
+        results.push(result.message)
+      } else if (toolCall.name === 'ask_missing_fields' && response.missingFields?.length) {
+        results.push(`还需要确认：${response.missingFields.map((field) => field.label || field.field).join('、')}`)
+      }
+    }
+    return results
+  }
   const askAssistant = async (message = assistantInput) => {
     const cleanMessage = message.trim()
     if (!cleanMessage || assistantLoading) return
@@ -8001,6 +8084,17 @@ function AiAssistantPage({
           response,
         },
       ])
+      const toolResults = await executeAssistantToolCalls(response)
+      if (toolResults.length) {
+        setActiveAssistantMessages((current) => [
+          ...current,
+          {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: toolResults.join('\n'),
+          },
+        ])
+      }
       setAssistantInput('')
     } catch (error) {
       setAssistantError(error instanceof Error ? error.message : String(error))

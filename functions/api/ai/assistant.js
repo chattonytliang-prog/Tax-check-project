@@ -69,6 +69,68 @@ function normalizeStringArray(value) {
     : []
 }
 
+const allowedDraftPatchFields = new Set([
+  'name',
+  'creditCode',
+  'region',
+  'industry',
+  'taxpayerType',
+  'establishedAt',
+  'analysisPeriodType',
+  'analysisYear',
+  'analysisQuarter',
+  'analysisMonth',
+  'periodStartDate',
+  'periodEndDate',
+  'dataBasis',
+  'monthlyRevenue',
+  'monthlyCost',
+  'monthlyProfit',
+  'mainBusinessRevenue',
+  'mainBusinessCost',
+  'outputTax',
+  'inputTax',
+  'assetsTotal',
+  'payrollTotal',
+  'employees',
+  'socialSecurityCount',
+  'salaryDeclaredCount',
+  'otherReceivableAgencyBalance',
+])
+
+const allowedToolNames = new Set([
+  'create_cleaning_draft',
+  'update_cleaning_draft',
+  'save_current_draft',
+  'ask_missing_fields',
+])
+
+function normalizeDraftPatch(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return Object.fromEntries(Object.entries(value).filter(([field]) => allowedDraftPatchFields.has(field)))
+}
+
+function normalizeMissingFields(value) {
+  if (!Array.isArray(value)) return []
+  return value.slice(0, 12).map((item) => ({
+    field: String(item?.field || '').slice(0, 80),
+    label: String(item?.label || item?.field || '').slice(0, 80),
+    question: String(item?.question || '').slice(0, 200),
+  })).filter((item) => item.field || item.label || item.question)
+}
+
+function normalizeToolCalls(value) {
+  if (!Array.isArray(value)) return []
+  return value.slice(0, 8).map((item) => ({
+    name: String(item?.name || '').slice(0, 80),
+    arguments: item?.arguments && typeof item.arguments === 'object' && !Array.isArray(item.arguments)
+      ? item.arguments
+      : {},
+    reason: String(item?.reason || '').slice(0, 200),
+    requiresConfirmation: item?.requiresConfirmation !== false,
+  })).filter((item) => allowedToolNames.has(item.name))
+}
+
 function normalizeHistory(value) {
   if (!Array.isArray(value)) return []
   return value
@@ -82,6 +144,22 @@ function normalizeHistory(value) {
 
 function buildPrompt({ message, history, client, clientVerified, risks, report }) {
   return `You are an AI tax workbench assistant embedded in a Chinese tax risk checking product.
+
+Software capabilities you may use as skills:
+- create_cleaning_draft: create a cleaning draft from user-provided client/material data.
+- update_cleaning_draft: update the current cleaning draft with confirmed facts from the user.
+- save_current_draft: ask the host app to save the current cleaning draft into the tax product. This is allowed only after the user clearly asks to save/import/confirm, or clicks the host app confirmation button.
+- ask_missing_fields: ask the user for missing fields needed for better tax checking.
+
+Software data model:
+- client profile fields: name, creditCode, region, industry, taxpayerType, establishedAt.
+- period fields: analysisPeriodType, analysisYear, analysisQuarter, analysisMonth, periodStartDate, periodEndDate, dataBasis.
+- financial fields: monthlyRevenue, monthlyCost, monthlyProfit, mainBusinessRevenue, mainBusinessCost, outputTax, inputTax, assetsTotal, payrollTotal, employees, socialSecurityCount, salaryDeclaredCount, otherReceivableAgencyBalance.
+
+Permission boundaries:
+- You cannot change code, rules, risk-engine findings, users, auth, or delete data.
+- You do not directly write the database. Return toolCalls and draftPatch; the host app validates and executes allowed operations.
+- Do not invent UI buttons. On this AI assistant page, the user can send messages, upload files, drag Excel, and use the cleaning draft card's "确认导入".
 
 Rules:
 1. Answer in Chinese.
@@ -98,6 +176,27 @@ Rules:
 JSON shape:
 {
   "answer": "short user-facing answer",
+  "draftPatch": {
+    "name": "optional cleaned company name",
+    "analysisYear": "optional year",
+    "analysisMonth": "optional month",
+    "monthlyRevenue": "optional amount"
+  },
+  "missingFields": [
+    {
+      "field": "system field name",
+      "label": "Chinese label",
+      "question": "question to ask the user"
+    }
+  ],
+  "toolCalls": [
+    {
+      "name": "create_cleaning_draft | update_cleaning_draft | save_current_draft | ask_missing_fields",
+      "arguments": {},
+      "reason": "why this tool should run",
+      "requiresConfirmation": true
+    }
+  ],
   "suggestions": [
     {
       "target": "clientProfile | periodEntry | reportDraft | followUp",
@@ -199,6 +298,9 @@ export async function onRequestPost({ request, env }) {
 
     return json({
       answer: String(parsed.answer || '').trim() || '我已完成初步分析，请查看下方建议。',
+      draftPatch: normalizeDraftPatch(parsed.draftPatch),
+      missingFields: normalizeMissingFields(parsed.missingFields),
+      toolCalls: normalizeToolCalls(parsed.toolCalls),
       suggestions: normalizeSuggestions(parsed.suggestions),
       followUps: normalizeStringArray(parsed.followUps),
       clientVerified,
