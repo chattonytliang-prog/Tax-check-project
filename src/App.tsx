@@ -7796,6 +7796,23 @@ function AiAssistantPage({
       updatedAt: formatDate(),
     }))
   }
+  const buildAssistantContext = (
+    draftOverride?: AiAssistantDraft | null,
+    materialSummaryOverride?: AssistantMaterialSummary | null,
+  ) => ({
+    activeThread: activeAssistantThread
+      ? {
+        id: activeAssistantThread.id,
+        title: activeAssistantThread.title,
+        messageCount: activeAssistantThread.messages.length,
+        draftCount: activeAssistantThread.drafts.length,
+      }
+      : null,
+    currentDraft: compactAssistantDraftForModel(draftOverride === undefined ? assistantDrafts[0] : draftOverride || undefined),
+    latestMaterialSummary: materialSummaryOverride === undefined
+      ? activeAssistantThread?.latestMaterialSummary || null
+      : materialSummaryOverride,
+  })
   const updateAssistantThreadTitle = (title: string) => {
     updateActiveAssistantThread((thread) => (
       thread.title === '新对话'
@@ -7918,6 +7935,82 @@ function AiAssistantPage({
     })
     return draft
   }
+  const applyAssistantAutoCleanPatch = (patch: Partial<Client> | undefined, source = 'AI 二次清洗') => {
+    if (!patch || !Object.keys(patch).length) return null
+    const labels = Object.keys(patch).map(fieldLabel)
+    const detail = labels.length ? `更新 ${labels.join('、')}` : '更新清洗草稿'
+    const now = formatDate()
+
+    setActiveAssistantDrafts((current) => {
+      if (!current.length) return current
+      return current.map((draft, index) => {
+        if (index !== 0) return draft
+        const client = deriveClientMetrics({
+          ...draft.client,
+          ...patch,
+        })
+        return {
+          ...draft,
+          client,
+          labels: uniqueLabels([...draft.labels, ...labels]),
+          changeLog: [
+            { id: crypto.randomUUID(), at: now, source, detail },
+            ...draft.changeLog,
+          ].slice(0, 8),
+          updatedAt: now,
+          missingSaveLabels: validateClientForSave(client).map((issue) => issue.label).slice(0, 6),
+        }
+      })
+    })
+    return { labels, detail }
+  }
+  const askAssistantToCleanUploadedDraft = async (
+    draft: AiAssistantDraft,
+    materialSummary: AssistantMaterialSummary,
+    baseMessages: AiAssistantMessage[],
+  ) => {
+    setAssistantLoading(true)
+    try {
+      const response = await apiSend<AiAssistantResponse>('/api/ai/assistant', 'POST', {
+        message: '请基于刚上传的原始资料和当前清洗草稿进行二次清洗：补充可以确定的字段，列出仍需客户确认的字段。不要保存入库，不要要求点击页面保存或提交。',
+        history: baseMessages.map((item) => ({ role: item.role, content: item.content })),
+        client: selectedClient,
+        risks,
+        report,
+        assistantContext: buildAssistantContext(draft, materialSummary),
+      })
+      const toolResults: string[] = []
+      const patchResult = applyAssistantAutoCleanPatch(response.draftPatch)
+      if (patchResult) toolResults.push(`已更新清洗草稿：${patchResult.detail}`)
+      if (response.missingFields?.length) {
+        toolResults.push(`还需要确认：${response.missingFields.map((field) => field.label || field.field).join('、')}`)
+      }
+      setActiveAssistantMessages((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: [
+            sanitizeAssistantAnswer(response.answer),
+            ...toolResults,
+          ].filter(Boolean).join('\n'),
+          response,
+        },
+      ])
+    } catch (error) {
+      console.warn('Assistant auto cleaning failed.', error)
+      setActiveAssistantMessages((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: '已完成本地解析，AI 二次清洗暂时不可用。你可以继续提问，或直接在下方清洗草稿中确认导入。',
+        },
+      ])
+    } finally {
+      setAssistantLoading(false)
+    }
+  }
   const importAssistantFile = async (file: File | null) => {
     if (!file) return
     setAssistantError('')
@@ -7939,7 +8032,26 @@ function AiAssistantPage({
         setAssistantError('未识别到可填入系统的字段。')
         return
       }
+      const materialSummary: AssistantMaterialSummary = {
+        fileName: file.name,
+        sourceType: parsedImport.detectedSourceType || '上传资料',
+        detectedTables: parsedImport.detectedTables,
+        mappedFields: parsedImport.mappings.slice(0, 40),
+        unmappedHeaders: parsedImport.unmappedHeaders.slice(0, 40),
+        patchPreview: {
+          ...inferClientPatchFromFileName(file.name),
+          ...coerceImportedClientPatch(parsedImport.patch),
+        },
+      }
       updateAssistantThreadTitle(file.name)
+      const autoCleanMessages: AiAssistantMessage[] = [
+        ...assistantMessages,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: `已读取「${file.name}」，整理出 ${draft.labels.length} 个可填字段，正在交给 AI 继续清洗。`,
+        },
+      ]
       setActiveAssistantMessages((current) => [
         ...current,
         {
@@ -7948,6 +8060,7 @@ function AiAssistantPage({
           content: `已读取「${file.name}」，整理出 ${draft.labels.length} 个可填字段。请确认后导入。`,
         },
       ])
+      await askAssistantToCleanUploadedDraft(draft, materialSummary, autoCleanMessages)
     } catch (error) {
       console.warn('Failed to import assistant file.', error)
       setAssistantError('文件解析失败，请换一个 Excel、CSV、TSV、JSON 或文本文件。')
