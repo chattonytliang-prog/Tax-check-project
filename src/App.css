@@ -3389,7 +3389,101 @@ textarea:focus {
 }
 
 .assistant-page-panel {
-  max-width: 980px;
+  min-width: 0;
+}
+
+.assistant-workspace {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  max-width: 1180px;
+}
+
+.assistant-thread-sidebar {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(12, 140, 130, 0.2);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: 0 8px 24px rgba(5, 26, 34, 0.06);
+}
+
+.assistant-new-thread {
+  justify-content: center;
+  width: 100%;
+}
+
+.assistant-thread-list {
+  display: grid;
+  gap: 8px;
+  max-height: 560px;
+  overflow-y: auto;
+}
+
+.assistant-thread-item {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 10px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.assistant-thread-item:hover,
+.assistant-thread-item.active {
+  border-color: rgba(12, 140, 130, 0.18);
+  background: rgba(86, 240, 238, 0.12);
+}
+
+.assistant-thread-item span {
+  min-width: 0;
+}
+
+.assistant-thread-item strong,
+.assistant-thread-item small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-thread-item strong {
+  font-size: 13px;
+}
+
+.assistant-thread-item small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.assistant-thread-item i {
+  display: grid;
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--muted);
+}
+
+.assistant-thread-item i:hover {
+  background: rgba(143, 61, 66, 0.1);
+  color: #8f3d42;
+}
+
+.assistant-thread-item i svg {
+  width: 14px;
+  height: 14px;
 }
 
 .ai-assistant-chat {
@@ -4243,6 +4337,7 @@ textarea:focus {
   .intake-requirement-panel,
   .intake-method-grid,
   .intake-status-bar,
+  .assistant-workspace,
   .sidebar nav {
     grid-template-columns: 1fr;
   }
@@ -4264,6 +4359,15 @@ textarea:focus {
 
   .risk-orbit {
     height: 260px;
+  }
+
+  .assistant-thread-list {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(210px, 1fr);
+    grid-template-columns: none;
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 
   .report-cover,

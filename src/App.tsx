@@ -342,6 +342,15 @@ type AiAssistantDraft = {
   missingSaveLabels: string[]
 }
 
+type AssistantThread = {
+  id: string
+  title: string
+  messages: AiAssistantMessage[]
+  drafts: AiAssistantDraft[]
+  createdAt: string
+  updatedAt: string
+}
+
 type AssistantDraftApplyResult = {
   status: 'saved' | 'draft'
   message: string
@@ -2590,6 +2599,37 @@ function inferAssistantCleaningPatch(message: string): { patch: Partial<Client>;
   }
 
   return changes.length ? { patch, changes } : null
+}
+
+const assistantThreadsStorageKey = 'hy-tax-ai-assistant-threads'
+
+function createAssistantThread(title = '新对话'): AssistantThread {
+  const now = formatDate()
+  return {
+    id: crypto.randomUUID(),
+    title,
+    messages: [],
+    drafts: [],
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+function loadAssistantThreads() {
+  if (typeof window === 'undefined') return [createAssistantThread()]
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(assistantThreadsStorageKey) || '[]') as AssistantThread[]
+    const validThreads = parsed.filter((thread) => thread?.id && thread?.title)
+    return validThreads.length ? validThreads : [createAssistantThread()]
+  } catch {
+    return [createAssistantThread()]
+  }
+}
+
+function assistantThreadTitleFromText(text: string) {
+  const cleanText = text.replace(/\s+/g, ' ').trim()
+  if (!cleanText) return '新对话'
+  return cleanText.length > 18 ? `${cleanText.slice(0, 18)}...` : cleanText
 }
 
 function downloadClientImportTemplate() {
@@ -7567,13 +7607,77 @@ function AiAssistantPage({
     selectedClient ? reports.find((item) => item.clientId === selectedClient.id) : undefined
   ), [reports, selectedClient])
   const [assistantInput, setAssistantInput] = useState('')
-  const [assistantMessages, setAssistantMessages] = useState<AiAssistantMessage[]>([])
-  const [assistantDrafts, setAssistantDrafts] = useState<AiAssistantDraft[]>([])
+  const [assistantThreadState, setAssistantThreadState] = useState(() => {
+    const threads = loadAssistantThreads()
+    return { threads, activeId: threads[0]?.id || '' }
+  })
+  const assistantThreads = assistantThreadState.threads
+  const activeAssistantThreadId = assistantThreadState.activeId
+  const setAssistantThreads = (updater: AssistantThread[] | ((threads: AssistantThread[]) => AssistantThread[])) => {
+    setAssistantThreadState((current) => ({
+      ...current,
+      threads: typeof updater === 'function' ? updater(current.threads) : updater,
+    }))
+  }
+  const setActiveAssistantThreadId = (activeId: string) => {
+    setAssistantThreadState((current) => ({ ...current, activeId }))
+  }
   const [assistantLoading, setAssistantLoading] = useState(false)
   const [assistantError, setAssistantError] = useState('')
   const [assistantNotice, setAssistantNotice] = useState('')
   const [assistantDragActive, setAssistantDragActive] = useState(false)
   const assistantFileInputRef = useRef<HTMLInputElement | null>(null)
+  const activeAssistantThread = assistantThreads.find((thread) => thread.id === activeAssistantThreadId) || assistantThreads[0]
+  const assistantMessages = activeAssistantThread?.messages || []
+  const assistantDrafts = activeAssistantThread?.drafts || []
+  useEffect(() => {
+    window.localStorage.setItem(assistantThreadsStorageKey, JSON.stringify(assistantThreads.slice(0, 20)))
+  }, [assistantThreads])
+  const updateActiveAssistantThread = (updater: (thread: AssistantThread) => AssistantThread) => {
+    if (!activeAssistantThread) return
+    setAssistantThreads((current) => current.map((thread) => (
+      thread.id === activeAssistantThread.id ? updater(thread) : thread
+    )))
+  }
+  const setActiveAssistantMessages = (updater: AiAssistantMessage[] | ((messages: AiAssistantMessage[]) => AiAssistantMessage[])) => {
+    updateActiveAssistantThread((thread) => ({
+      ...thread,
+      messages: typeof updater === 'function' ? updater(thread.messages) : updater,
+      updatedAt: formatDate(),
+    }))
+  }
+  const setActiveAssistantDrafts = (updater: AiAssistantDraft[] | ((drafts: AiAssistantDraft[]) => AiAssistantDraft[])) => {
+    updateActiveAssistantThread((thread) => ({
+      ...thread,
+      drafts: typeof updater === 'function' ? updater(thread.drafts) : updater,
+      updatedAt: formatDate(),
+    }))
+  }
+  const updateAssistantThreadTitle = (title: string) => {
+    updateActiveAssistantThread((thread) => (
+      thread.title === '新对话'
+        ? { ...thread, title: assistantThreadTitleFromText(title), updatedAt: formatDate() }
+        : thread
+    ))
+  }
+  const startAssistantThread = () => {
+    const thread = createAssistantThread()
+    setAssistantThreads((current) => [thread, ...current])
+    setActiveAssistantThreadId(thread.id)
+    setAssistantInput('')
+    setAssistantError('')
+    setAssistantNotice('')
+  }
+  const removeAssistantThread = (threadId: string) => {
+    setAssistantThreadState((current) => {
+      const nextThreads = current.threads.filter((thread) => thread.id !== threadId)
+      const threads = nextThreads.length ? nextThreads : [createAssistantThread()]
+      return {
+        threads,
+        activeId: threadId === current.activeId ? threads[0].id : current.activeId,
+      }
+    })
+  }
   const buildAssistantDraft = (
     patchData: Partial<Client>,
     options: {
@@ -7657,7 +7761,7 @@ function AiAssistantPage({
       detectedTables: parsedImport.detectedTables,
       sourceType: parsedImport.detectedSourceType || (fileName ? '上传资料' : '粘贴资料'),
     })
-    setAssistantDrafts((current) => [draft, ...current].slice(0, 5))
+    setActiveAssistantDrafts((current) => [draft, ...current].slice(0, 5))
     return draft
   }
   const importAssistantFile = async (file: File | null) => {
@@ -7681,7 +7785,8 @@ function AiAssistantPage({
         setAssistantError('未识别到可填入系统的字段。')
         return
       }
-      setAssistantMessages((current) => [
+      updateAssistantThreadTitle(file.name)
+      setActiveAssistantMessages((current) => [
         ...current,
         {
           id: crypto.randomUUID(),
@@ -7719,8 +7824,8 @@ function AiAssistantPage({
     setAssistantNotice('')
     const result = await onApplyClientDraft(draft.client)
     setAssistantNotice(result.message)
-    setAssistantDrafts((current) => current.filter((item) => item.id !== draft.id))
-    setAssistantMessages((current) => [
+    setActiveAssistantDrafts((current) => current.filter((item) => item.id !== draft.id))
+    setActiveAssistantMessages((current) => [
       ...current,
       { id: crypto.randomUUID(), role: 'assistant', content: result.message },
     ])
@@ -7744,11 +7849,11 @@ function AiAssistantPage({
         { id: crypto.randomUUID(), at: now, source: '用户确认', detail: changeDetail },
       ]
       draft.updatedAt = now
-      setAssistantDrafts([draft])
+      setActiveAssistantDrafts([draft])
       return { labels, detail: changeDetail }
     }
 
-    setAssistantDrafts((current) => current.map((draft, index) => {
+    setActiveAssistantDrafts((current) => current.map((draft, index) => {
       if (index !== 0) return draft
       const client = deriveClientMetrics({
         ...draft.client,
@@ -7783,9 +7888,10 @@ function AiAssistantPage({
       { id: crypto.randomUUID(), role: 'user', content: cleanMessage },
     ]
     setAssistantInput(cleanMessage)
-    setAssistantMessages(nextMessages)
+    updateAssistantThreadTitle(cleanMessage)
+    setActiveAssistantMessages(nextMessages)
     if (parsedTextDraft) {
-      setAssistantMessages([
+      setActiveAssistantMessages([
         ...nextMessages,
         {
           id: crypto.randomUUID(),
@@ -7798,7 +7904,7 @@ function AiAssistantPage({
     }
     const cleaningUpdate = applyCleaningMessageToDraft(cleanMessage)
     if (cleaningUpdate) {
-      setAssistantMessages([
+      setActiveAssistantMessages([
         ...nextMessages,
         {
           id: crypto.randomUUID(),
@@ -7819,7 +7925,7 @@ function AiAssistantPage({
         risks,
         report,
       })
-      setAssistantMessages([
+      setActiveAssistantMessages([
         ...nextMessages,
         {
           id: crypto.randomUUID(),
@@ -7844,26 +7950,72 @@ function AiAssistantPage({
           <h2>AI 财税助手</h2>
         </div>
       </header>
-      <section className="ai-assistant-panel assistant-page-panel">
-        <input
-          ref={assistantFileInputRef}
-          className="assistant-hidden-file-input"
-          type="file"
-          accept=".json,.csv,.tsv,.txt,.xlsx,.xls"
-          multiple
-          onChange={(event) => {
-            void importAssistantFiles(event.target.files || [])
-            event.currentTarget.value = ''
-          }}
-        />
-        <div
-          className={`ai-assistant-chat ${assistantDragActive ? 'drag-active' : ''}`}
-          aria-live="polite"
-          onDrop={handleAssistantDrop}
-          onDragOver={handleAssistantDragOver}
-          onDragEnter={handleAssistantDragOver}
-          onDragLeave={handleAssistantDragLeave}
-        >
+      <div className="assistant-workspace">
+        <aside className="assistant-thread-sidebar">
+          <button type="button" className="primary-button compact-button assistant-new-thread" onClick={startAssistantThread}>
+            <Plus /> 新对话
+          </button>
+          <div className="assistant-thread-list">
+            {assistantThreads.map((thread) => (
+              <button
+                type="button"
+                key={thread.id}
+                className={thread.id === activeAssistantThread?.id ? 'assistant-thread-item active' : 'assistant-thread-item'}
+                onClick={() => {
+                  setActiveAssistantThreadId(thread.id)
+                  setAssistantInput('')
+                  setAssistantError('')
+                  setAssistantNotice('')
+                }}
+              >
+                <span>
+                  <strong>{thread.title}</strong>
+                  <small>{thread.messages.length} 条消息 · {thread.drafts.length} 个草稿</small>
+                </span>
+                {assistantThreads.length > 1 ? (
+                  <i
+                    role="button"
+                    tabIndex={0}
+                    aria-label="删除对话"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      removeAssistantThread(thread.id)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        removeAssistantThread(thread.id)
+                      }
+                    }}
+                  >
+                    <Trash2 />
+                  </i>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        </aside>
+        <section className="ai-assistant-panel assistant-page-panel">
+          <input
+            ref={assistantFileInputRef}
+            className="assistant-hidden-file-input"
+            type="file"
+            accept=".json,.csv,.tsv,.txt,.xlsx,.xls"
+            multiple
+            onChange={(event) => {
+              void importAssistantFiles(event.target.files || [])
+              event.currentTarget.value = ''
+            }}
+          />
+          <div
+            className={`ai-assistant-chat ${assistantDragActive ? 'drag-active' : ''}`}
+            aria-live="polite"
+            onDrop={handleAssistantDrop}
+            onDragOver={handleAssistantDragOver}
+            onDragEnter={handleAssistantDragOver}
+            onDragLeave={handleAssistantDragLeave}
+          >
               {assistantMessages.length ? (
                 assistantMessages.map((item) => (
                   <article key={item.id} className={`ai-assistant-message ${item.role}`}>
@@ -7957,7 +8109,7 @@ function AiAssistantPage({
                       <button type="button" className="primary-button compact-button" onClick={() => void applyAssistantDraft(draft)}>
                         <CheckCircle2 /> 确认导入
                       </button>
-                      <button type="button" className="secondary-button compact-button" onClick={() => setAssistantDrafts((current) => current.filter((item) => item.id !== draft.id))}>
+                      <button type="button" className="secondary-button compact-button" onClick={() => setActiveAssistantDrafts((current) => current.filter((item) => item.id !== draft.id))}>
                         取消
                       </button>
                     </div>
@@ -7967,7 +8119,8 @@ function AiAssistantPage({
             ) : null}
             {assistantNotice ? <div className="ai-assistant-notice">{assistantNotice}</div> : null}
             {assistantError ? <div className="ai-assistant-error">{assistantError}</div> : null}
-      </section>
+        </section>
+      </div>
     </section>
   )
 }
