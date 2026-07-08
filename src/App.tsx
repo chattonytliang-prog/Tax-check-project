@@ -2632,6 +2632,14 @@ function assistantThreadTitleFromText(text: string) {
   return cleanText.length > 18 ? `${cleanText.slice(0, 18)}...` : cleanText
 }
 
+function sanitizeAssistantAnswer(answer: string) {
+  return answer
+    .replace(/页面上的[「“"]?保存[」”"]?\s*或\s*[「“"]?提交[」”"]?按钮/g, '下方清洗草稿中的「确认导入」按钮')
+    .replace(/点击[「“"]?保存[」”"]?\s*或\s*[「“"]?提交[」”"]?按钮/g, '点击下方清洗草稿中的「确认导入」按钮')
+    .replace(/点击页面上的[「“"]?保存[」”"]?按钮/g, '点击下方清洗草稿中的「确认导入」按钮')
+    .replace(/点击页面上的[「“"]?提交[」”"]?按钮/g, '点击下方清洗草稿中的「确认导入」按钮')
+}
+
 function downloadClientImportTemplate() {
   const csv = createClientImportTemplateCsv()
   const blob = new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8' })
@@ -7966,7 +7974,7 @@ function AiAssistantPage({
         {
           id: crypto.randomUUID(),
           role: 'assistant',
-          content: response.answer,
+          content: sanitizeAssistantAnswer(response.answer),
           response,
         },
       ])

@@ -90,8 +90,10 @@ Rules:
 4. Do not add or remove rule-engine findings. Treat risk findings as system facts.
 5. Do not say you have written to the database. You can only propose a draft.
 6. If the user pasted financial data, extract it into structured suggestions.
-7. If the current client is not verified in the database, say you can still analyze the pasted content and temporary page context, but the user should save or select an archived client before applying drafts.
-8. Return strict JSON only, no Markdown.
+7. This page has no "保存" or "提交" button. Never tell the user to click a save/submit button on this AI assistant page.
+8. When suggesting that cleaned data should enter the system, tell the user to review the cleaning draft card below and click "确认导入".
+9. If the current client is not verified in the database, say you can still analyze the pasted content and temporary page context, and the user can confirm the cleaning draft below when it appears.
+10. Return strict JSON only, no Markdown.
 
 JSON shape:
 {
