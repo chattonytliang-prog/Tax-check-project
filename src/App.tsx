@@ -2276,6 +2276,32 @@ function coerceImportedClientPatch(patch: Record<string, unknown>) {
   return coerced
 }
 
+function inferClientPatchFromFileName(fileName: string): Partial<Client> {
+  const baseName = fileName.replace(/\.[^.]+$/, '')
+  const periodMatch = baseName.match(/(20\d{2})[年.\-/]?\s*(0?[1-9]|1[0-2])\s*月?/)
+  const rangePeriodMatch = baseName.match(/[（(](20\d{2})\.(0?[1-9]|1[0-2])-/)
+  const year = periodMatch?.[1] || rangePeriodMatch?.[1] || ''
+  const month = periodMatch?.[2] || rangePeriodMatch?.[2] || ''
+  const periodMonth = year && month ? `${year}-${month.padStart(2, '0')}` : ''
+  const name = baseName
+    .replace(/[（(].*?[）)]/g, '')
+    .replace(/20\d{2}[年.\-/]?\s*(0?[1-9]|1[0-2])\s*月?/g, '')
+    .replace(/[_\-—]+/g, ' ')
+    .replace(/余额表|批量导出|科目余额表|资产负债表|利润表|现金流量表|导出/g, '')
+    .trim()
+  return {
+    ...(name ? { name } : {}),
+    ...(periodMonth
+      ? {
+          analysisPeriodType: '月度' as AnalysisPeriodType,
+          analysisYear: year,
+          analysisMonth: periodMonth,
+          dataBasis: '管理报表' as DataBasis,
+        }
+      : {}),
+  }
+}
+
 function riskDisplayTitle(risk: RiskResult) {
   return risk.name
 }
@@ -6420,7 +6446,10 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         ? await parseClientImportWorkbook(fileBuffer)
         : parseClientImportText(decodeClientImportText(fileBuffer))
       const sourceType = parsedImport.detectedSourceType || (isExcelFile ? 'Excel/ERP 导出文件' : /\.json$/i.test(file.name) ? 'JSON 数据文件' : 'CSV/TSV/ERP 导出文件')
-      const patchData = coerceImportedClientPatch(parsedImport.patch)
+      const patchData = {
+        ...inferClientPatchFromFileName(file.name),
+        ...coerceImportedClientPatch(parsedImport.patch),
+      }
       const importedLabels = Object.keys(patchData).map(fieldLabel)
       if (!importedLabels.length) {
         setImportSummary(null)
@@ -7541,7 +7570,10 @@ function AiAssistantPage({
     detectedTables: string[]
     detectedSourceType?: string
   }, fileName?: string) => {
-    const patchData = coerceImportedClientPatch(parsedImport.patch)
+    const patchData = {
+      ...(fileName ? inferClientPatchFromFileName(fileName) : {}),
+      ...coerceImportedClientPatch(parsedImport.patch),
+    }
     const labels = Object.keys(patchData).map(fieldLabel)
     if (!labels.length) return null
     const draft = buildAssistantDraft(patchData, {
