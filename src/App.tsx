@@ -8060,12 +8060,33 @@ function AiAssistantPage({
       console.warn('Assistant save tool fell back to existing save flow.', error)
     }
   }
+  const canParseAssistantFile = (fileName: string) => /\.(xlsx|xls|csv|tsv|txt|json)$/i.test(fileName)
   const importAssistantFile = async (file: File | null) => {
     if (!file) return
     setAssistantError('')
     setAssistantNotice('')
     try {
       const rawMaterial = await uploadAssistantMaterial(file)
+      if (!canParseAssistantFile(file.name)) {
+        updateAssistantThreadTitle(file.name)
+        setActiveAssistantMessages((current) => [
+          ...current,
+          {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: `已接收「${file.name}」并记录原始资料。当前自动清洗优先支持 Excel、CSV、TSV、JSON 和文本；图片、PDF、PPT 可先作为资料留痕，你可以继续告诉我这份资料对应哪家公司、哪个期间，以及需要我提取什么信息。`,
+          },
+        ])
+        setActiveAssistantMaterialSummary({
+          fileName: file.name,
+          sourceType: rawMaterial.sourceType,
+          detectedTables: [],
+          mappedFields: [],
+          unmappedHeaders: [],
+          patchPreview: {},
+        })
+        return
+      }
       const fileBuffer = await file.arrayBuffer()
       const isExcelFile = /\.(xlsx|xls)$/i.test(file.name)
       const parsedImport = isExcelFile
