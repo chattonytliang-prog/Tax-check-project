@@ -7509,6 +7509,8 @@ function AiAssistantPage({
   const [assistantLoading, setAssistantLoading] = useState(false)
   const [assistantError, setAssistantError] = useState('')
   const [assistantNotice, setAssistantNotice] = useState('')
+  const [assistantDragActive, setAssistantDragActive] = useState(false)
+  const assistantFileInputRef = useRef<HTMLInputElement | null>(null)
   const assistantExamples = [
     '请根据当前企业数据，告诉我最应该先补哪些资料。',
     '我把客户发来的利润表粘贴给你，请识别能填入系统的字段。',
@@ -7613,6 +7615,26 @@ function AiAssistantPage({
       console.warn('Failed to import assistant file.', error)
       setAssistantError('文件解析失败，请换一个 Excel、CSV、TSV、JSON 或文本文件。')
     }
+  }
+  const importAssistantFiles = async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList)
+    for (const file of files) {
+      await importAssistantFile(file)
+    }
+  }
+  const handleAssistantDrop = (event: React.DragEvent<HTMLElement>) => {
+    event.preventDefault()
+    setAssistantDragActive(false)
+    if (assistantLoading) return
+    void importAssistantFiles(event.dataTransfer.files)
+  }
+  const handleAssistantDragOver = (event: React.DragEvent<HTMLElement>) => {
+    event.preventDefault()
+    if (!assistantLoading) setAssistantDragActive(true)
+  }
+  const handleAssistantDragLeave = (event: React.DragEvent<HTMLElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+    setAssistantDragActive(false)
   }
   const applyAssistantDraft = async (draft: AiAssistantDraft) => {
     setAssistantError('')
@@ -7723,9 +7745,14 @@ function AiAssistantPage({
             </div>
             <label className="assistant-upload-control">
               <input
+                ref={assistantFileInputRef}
                 type="file"
                 accept=".json,.csv,.tsv,.txt,.xlsx,.xls"
-                onChange={(event) => void importAssistantFile(event.target.files?.[0] || null)}
+                multiple
+                onChange={(event) => {
+                  void importAssistantFiles(event.target.files || [])
+                  event.currentTarget.value = ''
+                }}
               />
               <FileText />
               <span>上传资料</span>
@@ -7737,7 +7764,14 @@ function AiAssistantPage({
                 </button>
               ))}
             </div>
-            <div className="ai-assistant-chat" aria-live="polite">
+            <div
+              className={`ai-assistant-chat ${assistantDragActive ? 'drag-active' : ''}`}
+              aria-live="polite"
+              onDrop={handleAssistantDrop}
+              onDragOver={handleAssistantDragOver}
+              onDragEnter={handleAssistantDragOver}
+              onDragLeave={handleAssistantDragLeave}
+            >
               {assistantMessages.length ? (
                 assistantMessages.map((item) => (
                   <article key={item.id} className={`ai-assistant-message ${item.role}`}>
@@ -7767,7 +7801,7 @@ function AiAssistantPage({
                 ))
               ) : (
                 <div className="ai-assistant-empty-chat">
-                  <strong>可以直接提问，也可以粘贴客户资料。</strong>
+                  <strong>可以直接提问，也可以把 Excel 拖到这里。</strong>
                 </div>
               )}
               {assistantLoading ? (
@@ -7785,6 +7819,9 @@ function AiAssistantPage({
             <div className="ai-assistant-actions">
               <button type="button" className="primary-button" onClick={() => void askAssistant()} disabled={assistantLoading || !assistantInput.trim()}>
                 <Sparkles /> {assistantLoading ? '正在处理...' : '发送'}
+              </button>
+              <button type="button" className="secondary-button compact-button" onClick={() => assistantFileInputRef.current?.click()} disabled={assistantLoading}>
+                <FileText /> 上传文件
               </button>
             </div>
             {assistantDrafts.length ? (
