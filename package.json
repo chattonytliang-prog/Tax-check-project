@@ -9,7 +9,9 @@
     "lint": "eslint .",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "d1:list": "wrangler d1 list",
+    "d1:migrate:assistant": "wrangler d1 execute tax-check-db --remote --file=migrations/0007_assistant_business_tools.sql"
   },
   "dependencies": {
     "@e965/xlsx": "^0.20.3",
@@ -34,6 +36,7 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
     "vite": "^8.0.12",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "wrangler": "^4.109.0"
   }
 }
