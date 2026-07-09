@@ -55,6 +55,57 @@ const blockedRuleWriteToolNames = new Set([
   'update_rule_library',
 ])
 
+const assistantBusinessTableStatements = [
+  `CREATE TABLE IF NOT EXISTS assistant_cleaning_drafts (
+    id TEXT PRIMARY KEY,
+    owner_user_id TEXT NOT NULL,
+    thread_id TEXT,
+    client_id TEXT,
+    client_name TEXT,
+    source_type TEXT,
+    payload_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_assistant_cleaning_drafts_owner_updated
+    ON assistant_cleaning_drafts(owner_user_id, updated_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_assistant_cleaning_drafts_client
+    ON assistant_cleaning_drafts(client_id)`,
+  `CREATE TABLE IF NOT EXISTS assistant_customer_memories (
+    id TEXT PRIMARY KEY,
+    owner_user_id TEXT NOT NULL,
+    client_id TEXT,
+    client_name TEXT,
+    memory_key TEXT NOT NULL,
+    memory_value TEXT NOT NULL,
+    source TEXT,
+    confidence TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_assistant_customer_memories_unique
+    ON assistant_customer_memories(owner_user_id, client_id, memory_key)`,
+  `CREATE INDEX IF NOT EXISTS idx_assistant_customer_memories_owner_updated
+    ON assistant_customer_memories(owner_user_id, updated_at)`,
+  `CREATE TABLE IF NOT EXISTS assistant_import_audits (
+    id TEXT PRIMARY KEY,
+    owner_user_id TEXT NOT NULL,
+    thread_id TEXT,
+    client_id TEXT,
+    client_name TEXT,
+    action TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    source_material_ids TEXT,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_assistant_import_audits_owner_created
+    ON assistant_import_audits(owner_user_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_assistant_import_audits_client
+    ON assistant_import_audits(client_id)`,
+]
+
 function normalizeToolCalls(value) {
   if (!Array.isArray(value)) return []
   return value
@@ -101,7 +152,21 @@ function isMissingTableError(error) {
   return /no such table|has no column|no column named/i.test(String(error))
 }
 
-async function tryOptionalWrite(callback) {
+async function ensureAssistantBusinessTables(db) {
+  for (const statement of assistantBusinessTableStatements) {
+    await db.prepare(statement).run()
+  }
+}
+
+async function tryOptionalWrite(db, callback) {
+  try {
+    await callback()
+    return true
+  } catch (error) {
+    if (!isMissingTableError(error)) throw error
+  }
+
+  await ensureAssistantBusinessTables(db)
   try {
     await callback()
     return true
@@ -157,7 +222,7 @@ async function saveCleaningDraft(db, auth, toolCall, client, body) {
   const sourceType = normalizeString(args.sourceType || body?.currentDraft?.sourceType || body?.assistantContext?.latestMaterialSummary?.sourceType || 'AI 清洗', 80)
   const draftId = normalizeString(args.draftId || body?.currentDraft?.id || crypto.randomUUID(), 120)
   const status = normalizeString(args.status || 'draft', 40)
-  const saved = await tryOptionalWrite(async () => {
+  const saved = await tryOptionalWrite(db, async () => {
     await db
       .prepare(
         `INSERT INTO assistant_cleaning_drafts (
@@ -215,7 +280,7 @@ async function saveCustomerMemory(db, auth, toolCall, client) {
     const confidence = normalizeString(item.confidence || 'medium', 40)
     const memoryId = `${auth.user.id}:${client?.id || 'global'}:${key}`
     const now = nowIso()
-    const saved = await tryOptionalWrite(async () => {
+    const saved = await tryOptionalWrite(db, async () => {
       await db
         .prepare(
           `INSERT INTO assistant_customer_memories (
@@ -251,7 +316,7 @@ async function writeImportAudit(db, auth, toolCall, client, body, status) {
   const args = toolCall.arguments || {}
   const materialIds = normalizeMaterialIds(args.materialIds || body?.currentDraft?.rawMaterials?.map((item) => item.id))
   const auditId = crypto.randomUUID()
-  const saved = await tryOptionalWrite(async () => {
+  const saved = await tryOptionalWrite(db, async () => {
     await db
       .prepare(
         `INSERT INTO assistant_import_audits (

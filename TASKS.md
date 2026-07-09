@@ -13,3 +13,4 @@
 - 2026-07-09: Added backend rejection/audit path for attempted assistant rule-library writes.
 - 2026-07-09: Added first-pass backend structures for assistant cleaning drafts, customer memories, and import audits.
 - 2026-07-09: Added explicit assistant business write tools while preserving `save_current_draft` compatibility.
+- 2026-07-09: Added self-healing creation of assistant business tables when `/api/assistant/tools` first writes cleaning drafts, customer memories, or import audits.

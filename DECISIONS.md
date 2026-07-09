@@ -34,3 +34,14 @@ Tools:
 - `create_import_audit_log`
 
 Rationale: The assistant needs to behave like a traceable business operator. Separate tools make permission boundaries, audit records, and future customer-memory behavior easier to control.
+
+## 2026-07-09: Assistant Business Table Self-Healing
+
+Decision: `/api/assistant/tools` may create missing assistant business tables on first use.
+
+Scope:
+- `assistant_cleaning_drafts`
+- `assistant_customer_memories`
+- `assistant_import_audits`
+
+Rationale: Cloudflare D1 migration execution may be unavailable from local CLI when no API token is configured. These tables are additive, idempotent, and limited to AI business-working data, so self-healing avoids blocking the product while keeping the rule library read-only.
