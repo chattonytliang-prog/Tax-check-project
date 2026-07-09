@@ -1,73 +1,49 @@
-# React + TypeScript + Vite
+# 合耀科技税务合规工具
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+面向中小企业、代理记账公司和集团多主体项目的 AI 税务合规工作台。
 
-Currently, two official plugins are available:
+## Project
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Local path: `D:\Codex项目\财税项目`
+- Production: `https://tax.heyaokeji.com`
+- GitHub: `https://github.com/chattonytliang-prog/Tax-check-project`
+- Stack: React, TypeScript, Vite, Cloudflare Pages Functions, D1, DeepSeek API
 
-## React Compiler
+## Product Direction
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Core workflow:
 
-## Expanding the ESLint configuration
+1. Create or update a company profile.
+2. Import and clean source materials from accounting software, spreadsheets, text, or uploaded files.
+3. Save confirmed business data and period data.
+4. Run filing-style basic compliance checks.
+5. Run professional hidden-risk detection through deterministic rules.
+6. Generate and explain reports.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## AI Agent Boundary
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+The AI assistant is a business-data operator:
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+- It can write business data through approved host tools after clear natural-language authorization from the user.
+- It cannot write or change tax rules, risk rules, rule formulas, users, auth, database schema, or code.
+- Business writes must be validated by the host app and recorded in audit logs.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Memory
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Long-term project memory is maintained in:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- `MEMORY.md`
+- `TASKS.md`
+- `DECISIONS.md`
+- `RAG_INDEX.md`
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Original RAG files, downloaded official tax materials, deployment logs, tests, and customer documents remain evidence sources.
+
+## Commands
+
+```powershell
+npm run test -- --run
+npm run build
+npm run lint
+git diff --check
 ```

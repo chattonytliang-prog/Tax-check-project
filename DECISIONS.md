@@ -1,0 +1,22 @@
+# Decisions
+
+## 2026-07-09: AI Agent Permission Boundary
+
+Decision: The AI agent can write business data, but cannot write the rule library.
+
+Allowed via whitelisted tools:
+- Client profiles
+- Uploaded/source material records
+- Cleaning drafts
+- Period data
+- Report drafts
+- Customer memory and import logs
+
+Protected read-only scope:
+- Tax rule library
+- Risk rule library
+- Rule formulas and thresholds
+- Report core templates and deterministic logic
+- Users, authentication, database schema, and code
+
+Rationale: The assistant should become useful as an operator that can import and maintain customer data, while deterministic tax rules remain governed by controlled product logic.

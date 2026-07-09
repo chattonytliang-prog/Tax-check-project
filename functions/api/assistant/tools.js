@@ -12,6 +12,19 @@ const allowedToolNames = new Set([
   'explain_current_report',
 ])
 
+const blockedRuleWriteToolNames = new Set([
+  'create_rule',
+  'update_rule',
+  'delete_rule',
+  'toggle_rule',
+  'create_risk_rule',
+  'update_risk_rule',
+  'delete_risk_rule',
+  'toggle_risk_rule',
+  'write_rule_library',
+  'update_rule_library',
+])
+
 function normalizeToolCalls(value) {
   if (!Array.isArray(value)) return []
   return value
@@ -23,7 +36,7 @@ function normalizeToolCalls(value) {
       reason: String(item?.reason || '').slice(0, 200),
       requiresConfirmation: item?.requiresConfirmation !== false,
     }))
-    .filter((item) => allowedToolNames.has(item.name))
+    .filter((item) => allowedToolNames.has(item.name) || blockedRuleWriteToolNames.has(item.name))
     .slice(0, 8)
 }
 
@@ -46,7 +59,7 @@ function normalizeDraftClient(value) {
 
 async function saveClient(db, ownerUserId, client) {
   const now = nowIso()
-  await db
+  const result = await db
     .prepare(
       `INSERT INTO clients (
         id, owner_user_id, name, credit_code, region, industry, taxpayer_type, risk_level, payload_json, created_at, updated_at
@@ -77,6 +90,37 @@ async function saveClient(db, ownerUserId, client) {
       now,
     )
     .run()
+
+  if (result?.meta && result.meta.changes === 0) {
+    throw new Error('Client is not owned by current user')
+  }
+}
+
+async function writeAssistantAuditLog(db, auth, toolCall, client, status) {
+  try {
+    await db
+      .prepare(
+        'INSERT INTO audit_logs (id, actor_user_id, target_user_id, action, detail, created_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
+      )
+      .bind(
+        crypto.randomUUID(),
+        auth.user.actor?.id || auth.user.id,
+        auth.user.id,
+        'assistant.business_write',
+        JSON.stringify({
+          toolName: toolCall.name,
+          reason: toolCall.reason,
+          status,
+          clientId: client?.id || null,
+          clientName: client?.name || null,
+          writableScope: 'business_data',
+          protectedScope: 'rule_library_readonly',
+        }),
+      )
+      .run()
+  } catch (error) {
+    if (!String(error).includes('audit_logs')) throw error
+  }
 }
 
 export async function onRequestPost({ request, env }) {
@@ -94,12 +138,22 @@ export async function onRequestPost({ request, env }) {
     const results = []
 
     for (const toolCall of toolCalls) {
+      if (blockedRuleWriteToolNames.has(toolCall.name)) {
+        await writeAssistantAuditLog(db, auth, toolCall, null, 'rejected_rule_write')
+        results.push({
+          name: toolCall.name,
+          status: 'rejected',
+          message: '规则库为只读权限，AI 助手不能新增、修改、删除或启停规则。',
+        })
+        continue
+      }
+
       if (toolCall.name === 'save_current_draft') {
         if (!allowSave) {
           results.push({
             name: toolCall.name,
             status: 'skipped',
-            message: '保存需要用户明确确认。',
+            message: '保存需要用户在对话中明确授权，例如“帮我导入吧”或“确认保存”。',
           })
           continue
         }
@@ -111,20 +165,23 @@ export async function onRequestPost({ request, env }) {
           })
           continue
         }
+
         await saveClient(db, auth.user.id, draftClient)
+        await writeAssistantAuditLog(db, auth, toolCall, draftClient, 'saved_business_data')
         results.push({
           name: toolCall.name,
           status: 'saved',
           message: `已保存「${draftClient.name}」。`,
           client: draftClient,
         })
-      } else {
-        results.push({
-          name: toolCall.name,
-          status: 'accepted',
-          message: '工具请求已由前端清洗草稿处理。',
-        })
+        continue
       }
+
+      results.push({
+        name: toolCall.name,
+        status: 'accepted',
+        message: '工具请求已由前端工作流处理。',
+      })
     }
 
     return json({ results })

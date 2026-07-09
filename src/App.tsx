@@ -8497,6 +8497,25 @@ function AiAssistantPage({
   }
   const executeAssistantToolCalls = async (response: AiAssistantResponse) => {
     const results: string[] = []
+    const draftPatch = response.draftPatch || {}
+    const hasDraftPatch = Object.keys(draftPatch).length > 0
+    const currentDraft = assistantDrafts[0]
+    const draftForSave: AiAssistantDraft | null = currentDraft
+      ? {
+          ...currentDraft,
+          client: deriveClientMetrics({
+            ...currentDraft.client,
+            ...draftPatch,
+          }),
+        }
+      : hasDraftPatch
+        ? buildAssistantDraft(draftPatch, {
+            mappings: [],
+            unmappedHeaders: [],
+            detectedTables: [],
+            sourceType: 'AI 对话授权',
+          })
+        : null
     const draftPatchResult = applyAssistantDraftPatch(response.draftPatch, 'AI 清洗')
     if (draftPatchResult) {
       results.push(`已更新清洗草稿：${draftPatchResult.detail}`)
@@ -8504,17 +8523,16 @@ function AiAssistantPage({
 
     for (const toolCall of response.toolCalls || []) {
       if (toolCall.name === 'save_current_draft') {
-        const draft = assistantDrafts[0]
-        if (!draft) {
+        if (!draftForSave) {
           results.push('暂未找到可保存的清洗草稿。')
           continue
         }
-        const result = await onApplyClientDraft(draft.client)
+        const result = await onApplyClientDraft(draftForSave.client)
         if (result.status === 'saved' && result.client) {
           await executeAssistantSaveTool(result.client)
         }
-        if (result.status === 'saved' && !result.message.includes('还缺')) {
-          setActiveAssistantDrafts((current) => current.filter((item) => item.id !== draft.id))
+        if (result.status === 'saved' && !result.message.includes('还缺') && currentDraft) {
+          setActiveAssistantDrafts((current) => current.filter((item) => item.id !== currentDraft.id))
         }
         results.push(result.message)
       } else if (toolCall.name === 'ask_missing_fields' && response.missingFields?.length) {
