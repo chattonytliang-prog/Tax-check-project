@@ -1,5 +1,5 @@
-import { json, requireDb, serverError } from '../_utils.js'
-import { requireAdmin } from '../auth/_auth.js'
+import { json, requireDb, serverError } from '../../_utils.js'
+import { requireAdmin } from '../../auth/_auth.js'
 
 const assistantBusinessToolMigration = {
   id: '0007_assistant_business_tools',
