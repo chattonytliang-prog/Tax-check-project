@@ -8304,7 +8304,7 @@ function AiAssistantPage({
       ...assistantMessages,
       { id: crypto.randomUUID(), role: 'user', content: cleanMessage },
     ]
-    setAssistantInput(cleanMessage)
+    setAssistantInput('')
     updateAssistantThreadTitle(cleanMessage)
     setActiveAssistantMessages(nextMessages)
     if (parsedTextDraft) {
@@ -8611,7 +8611,7 @@ function ReportPage({
   const askAssistant = async (message = assistantInput) => {
     const cleanMessage = message.trim()
     if (!cleanMessage || assistantLoading) return
-    setAssistantInput(cleanMessage)
+    setAssistantInput('')
     setAssistantLoading(true)
     setAssistantError('')
     try {
