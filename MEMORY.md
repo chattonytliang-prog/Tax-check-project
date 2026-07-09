@@ -6,3 +6,4 @@
 - It may write business data through approved host tools after clear user authorization in natural language.
 - The rule library, tax formulas, risk rules, report core logic, users, auth, schema, and code are protected read-only areas for the assistant.
 - Assistant business writes must be validated by the host app and recorded in audit logs.
+- Assistant write tools are being split into explicit business actions: company/profile upsert, period data save, source material attachment, cleaning draft save, customer memory save, and import audit log creation.

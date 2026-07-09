@@ -101,6 +101,12 @@ const allowedDraftPatchFields = new Set([
 const allowedToolNames = new Set([
   'create_cleaning_draft',
   'update_cleaning_draft',
+  'save_cleaning_draft',
+  'create_or_update_company',
+  'save_period_data',
+  'attach_source_material',
+  'save_customer_memory',
+  'create_import_audit_log',
   'save_current_draft',
   'ask_missing_fields',
   'run_basic_compliance',
@@ -163,7 +169,13 @@ function buildPrompt({ message, history, client, clientVerified, risks, report, 
 Software capabilities you may use as skills:
 - create_cleaning_draft: create a cleaning draft from user-provided client/material data.
 - update_cleaning_draft: update the current cleaning draft with confirmed facts from the user.
-- save_current_draft: ask the host app to save the current cleaning draft into the tax product. This is allowed after the user clearly asks to save/import/confirm in natural language, for example "帮我导入吧", "确认保存", "可以入库", or "就按这个保存".
+- save_cleaning_draft: persist the cleaned draft and field mapping as business working data.
+- create_or_update_company: create or update the business client profile after clear user authorization.
+- save_period_data: save identified period data after clear user authorization.
+- attach_source_material: attach uploaded source material metadata to the import workflow.
+- save_customer_memory: save stable customer memory such as accounting software, recurring file format, confirmed field mapping, default taxpayer facts, or recurring missing materials.
+- create_import_audit_log: record what the assistant imported, from which materials, and why.
+- save_current_draft: compatibility tool that saves the current cleaning draft into the tax product. This is allowed after the user clearly asks to save/import/confirm in natural language, for example "帮我导入吧", "确认保存", "可以入库", or "就按这个保存".
 - ask_missing_fields: ask the user for missing fields needed for better tax checking.
 - run_basic_compliance: ask the host app to run deterministic basic compliance checks from filing-style data, financial statements, invoice/payroll inputs, and saved client facts.
 - run_risk_detection: ask the host app to run deterministic professional risk detection. The host rule engine is the source of truth.
@@ -187,14 +199,14 @@ Rules:
 2. You are the main conversational assistant. Treat the tax product context as your knowledge base and skill context.
 3. Do not claim that a tax conclusion is final.
 4. Do not add or remove rule-engine findings. Treat risk findings as system facts.
-5. Do not say data has been saved unless you return a save_current_draft tool call after clear user authorization. The host app validates, writes business data, and audits the operation.
+5. Do not say data has been saved unless you return an authorized business-write tool call after clear user authorization. The host app validates, writes business data, and audits the operation.
 6. If the user pasted financial data, extract it into structured suggestions.
 7. This page has no "保存" or "提交" button. Never tell the user to click a save/submit button on this AI assistant page.
 8. When suggesting that cleaned data should enter the system, tell the user they can reply "帮我导入吧" or "确认保存"; do not tell them to click a button.
 9. If the current client is not verified in the database, say you can still analyze the pasted content and temporary page context, and can create or update business data after the user clearly authorizes it in the conversation.
 10. Keep the product workflow in two layers: basic filing-compliance checks first, then professional hidden-risk analysis and report interpretation.
 11. Never calculate tax exposure freely. If exposure is not provided by deterministic host rules, say it needs rule-based measurement or accountant confirmation.
-12. If the user has clearly authorized saving/importing in the current message, include a save_current_draft tool call and set requiresConfirmation to false.
+12. If the user has clearly authorized saving/importing in the current message, include create_or_update_company and/or save_period_data tool calls, plus create_import_audit_log. You may also include save_current_draft for compatibility. Set requiresConfirmation to false.
 13. Return strict JSON only, no Markdown.
 
 JSON shape:
@@ -215,7 +227,7 @@ JSON shape:
   ],
   "toolCalls": [
     {
-      "name": "create_cleaning_draft | update_cleaning_draft | save_current_draft | ask_missing_fields | run_basic_compliance | run_risk_detection | generate_report | explain_current_report",
+      "name": "create_cleaning_draft | update_cleaning_draft | save_cleaning_draft | create_or_update_company | save_period_data | attach_source_material | save_customer_memory | create_import_audit_log | save_current_draft | ask_missing_fields | run_basic_compliance | run_risk_detection | generate_report | explain_current_report",
       "arguments": {},
       "reason": "why this tool should run",
       "requiresConfirmation": true

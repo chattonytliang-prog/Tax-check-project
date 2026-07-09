@@ -297,6 +297,12 @@ type AiAssistantToolCall = {
   name:
     | 'create_cleaning_draft'
     | 'update_cleaning_draft'
+    | 'save_cleaning_draft'
+    | 'create_or_update_company'
+    | 'save_period_data'
+    | 'attach_source_material'
+    | 'save_customer_memory'
+    | 'create_import_audit_log'
     | 'save_current_draft'
     | 'ask_missing_fields'
     | 'run_basic_compliance'
@@ -8230,22 +8236,38 @@ function AiAssistantPage({
       return fallback
     }
   }
-  const executeAssistantSaveTool = async (client: Client) => {
+  const assistantBackendWriteToolNames = new Set<AiAssistantToolCall['name']>([
+    'save_cleaning_draft',
+    'create_or_update_company',
+    'save_period_data',
+    'attach_source_material',
+    'save_customer_memory',
+    'create_import_audit_log',
+    'save_current_draft',
+  ])
+  const executeAssistantSaveTool = async (
+    client: Client,
+    toolCalls: AiAssistantToolCall[] = [
+      {
+        name: 'save_current_draft',
+        arguments: {},
+        reason: '用户已确认导入当前清洗草稿',
+        requiresConfirmation: false,
+      },
+    ],
+    draft?: AiAssistantDraft | null,
+  ) => {
     try {
-      await apiSend<{ results: Array<{ status: string; message: string }> }>('/api/assistant/tools', 'POST', {
-        toolCalls: [
-          {
-            name: 'save_current_draft',
-            arguments: {},
-            reason: '用户已确认导入当前清洗草稿',
-            requiresConfirmation: false,
-          },
-        ],
+      const response = await apiSend<{ results: Array<{ status: string; message: string }> }>('/api/assistant/tools', 'POST', {
+        toolCalls,
         allowSave: true,
-        currentDraft: { client },
+        currentDraft: draft ? { ...draft, client } : { client },
+        assistantContext: buildAssistantContext(draft || undefined),
       })
+      return response.results.map((item) => item.message).filter(Boolean)
     } catch (error) {
       console.warn('Assistant save tool fell back to existing save flow.', error)
+      return []
     }
   }
   const canParseAssistantFile = (fileName: string) => /\.(xlsx|xls|csv|tsv|txt|json)$/i.test(fileName)
@@ -8500,6 +8522,7 @@ function AiAssistantPage({
     const draftPatch = response.draftPatch || {}
     const hasDraftPatch = Object.keys(draftPatch).length > 0
     const currentDraft = assistantDrafts[0]
+    const verifiedContextClient = selectedClient.id === 'assistant-temp-client' ? null : selectedClient
     const draftForSave: AiAssistantDraft | null = currentDraft
       ? {
           ...currentDraft,
@@ -8515,27 +8538,37 @@ function AiAssistantPage({
             detectedTables: [],
             sourceType: 'AI 对话授权',
           })
+        : verifiedContextClient
+          ? buildAssistantDraft(verifiedContextClient, {
+              mappings: [],
+              unmappedHeaders: [],
+              detectedTables: [],
+              sourceType: '当前客户上下文',
+            })
         : null
     const draftPatchResult = applyAssistantDraftPatch(response.draftPatch, 'AI 清洗')
     if (draftPatchResult) {
       results.push(`已更新清洗草稿：${draftPatchResult.detail}`)
     }
 
-    for (const toolCall of response.toolCalls || []) {
-      if (toolCall.name === 'save_current_draft') {
-        if (!draftForSave) {
-          results.push('暂未找到可保存的清洗草稿。')
-          continue
-        }
+    const backendWriteToolCalls = (response.toolCalls || []).filter((toolCall) => assistantBackendWriteToolNames.has(toolCall.name))
+    if (backendWriteToolCalls.length > 0) {
+      if (!draftForSave) {
+        results.push('暂未找到可保存的清洗草稿。')
+      } else {
         const result = await onApplyClientDraft(draftForSave.client)
         if (result.status === 'saved' && result.client) {
-          await executeAssistantSaveTool(result.client)
+          results.push(...await executeAssistantSaveTool(result.client, backendWriteToolCalls, draftForSave))
         }
         if (result.status === 'saved' && !result.message.includes('还缺') && currentDraft) {
           setActiveAssistantDrafts((current) => current.filter((item) => item.id !== currentDraft.id))
         }
         results.push(result.message)
-      } else if (toolCall.name === 'ask_missing_fields' && response.missingFields?.length) {
+      }
+    }
+
+    for (const toolCall of response.toolCalls || []) {
+      if (toolCall.name === 'ask_missing_fields' && response.missingFields?.length) {
         results.push(`还需要确认：${response.missingFields.map((field) => field.label || field.field).join('、')}`)
       }
     }
