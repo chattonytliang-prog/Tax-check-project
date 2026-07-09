@@ -294,7 +294,15 @@ type AiAssistantSuggestion = {
 }
 
 type AiAssistantToolCall = {
-  name: 'create_cleaning_draft' | 'update_cleaning_draft' | 'save_current_draft' | 'ask_missing_fields'
+  name:
+    | 'create_cleaning_draft'
+    | 'update_cleaning_draft'
+    | 'save_current_draft'
+    | 'ask_missing_fields'
+    | 'run_basic_compliance'
+    | 'run_risk_detection'
+    | 'generate_report'
+    | 'explain_current_report'
   arguments: Record<string, unknown>
   reason: string
   requiresConfirmation: boolean
@@ -1994,6 +2002,158 @@ function getDataCompleteness(client: Client, risks: RiskResult[] = []) {
   const suggestedMaterials = Array.from(new Set(risks.flatMap((risk) => risk.materials))).slice(0, 12)
 
   return { score, label, note, suggestedMaterials }
+}
+
+type FilingChecklistItem = {
+  group: string
+  item: string
+  status: 'ready' | 'missing' | 'manual' | 'optional'
+  handling: 'auto_import' | 'manual_confirm' | 'optional_upload'
+  note: string
+}
+
+type BasicComplianceFinding = {
+  title: string
+  level: 'ok' | 'warning' | 'missing'
+  detail: string
+}
+
+function hasPositive(value: number) {
+  return Number.isFinite(value) && value > 0
+}
+
+function filingChecklistForClient(client: Client): FilingChecklistItem[] {
+  const profileIssues = validateClientForSave(client)
+  const profileMissing = new Set(profileIssues.map((issue) => issue.label))
+  return [
+    {
+      group: '企业基础资料',
+      item: '营业执照图片或 PDF',
+      status: profileMissing.has('企业名称') || profileMissing.has('统一社会信用代码') ? 'missing' : 'ready',
+      handling: 'auto_import',
+      note: '可自动识别企业名称、统一社会信用代码、注册地址、成立日期和经营范围；纳税人类型仍需确认。',
+    },
+    {
+      group: '企业基础资料',
+      item: '纳税人类型、行业、地区、检查期间',
+      status: profileMissing.size ? 'manual' : 'ready',
+      handling: 'manual_confirm',
+      note: '这些字段关系到规则口径，营业执照或报表通常不能完全判断，需要人工确认。',
+    },
+    {
+      group: '财务报表',
+      item: '科目余额表',
+      status: hasPositive(client.assetsTotal) || hasPositive(client.otherReceivableAgencyBalance) ? 'ready' : 'missing',
+      handling: 'auto_import',
+      note: '适合从云代账、金亿财税等系统导出 Excel，用于识别资产、往来、税费、成本费用。',
+    },
+    {
+      group: '财务报表',
+      item: '利润表',
+      status: hasPositive(client.mainBusinessRevenue) || hasPositive(client.monthlyRevenue) ? 'ready' : 'missing',
+      handling: 'auto_import',
+      note: '用于识别收入、成本、费用、利润等基础经营数据。',
+    },
+    {
+      group: '财务报表',
+      item: '资产负债表',
+      status: hasPositive(client.assetsTotal) ? 'ready' : 'missing',
+      handling: 'auto_import',
+      note: '用于识别资产总额、往来款、存货、固定资产、负债等。',
+    },
+    {
+      group: '增值税申报',
+      item: '增值税申报表',
+      status: hasPositive(client.outputTax) || hasPositive(client.inputTax) || hasPositive(client.vatTaxPayable) ? 'ready' : 'missing',
+      handling: 'auto_import',
+      note: '用于核对销项税、进项税、应纳税额、留抵税额和申报销售额。',
+    },
+    {
+      group: '企业所得税申报',
+      item: '企业所得税申报表',
+      status: hasPositive(client.taxableIncome) || hasPositive(client.ytdProfit) ? 'ready' : 'missing',
+      handling: 'auto_import',
+      note: '用于核对利润、应纳税所得额、优惠政策和纳税调整。',
+    },
+    {
+      group: '发票资料',
+      item: '发票汇总表或开票统计表',
+      status: hasPositive(client.monthlyInvoice) ? 'ready' : 'missing',
+      handling: 'auto_import',
+      note: '用于核对开票金额、税率、红字发票、未开票收入等。',
+    },
+    {
+      group: '工资社保个税',
+      item: '工资表、社保、个税申报资料',
+      status: hasPositive(client.payrollTotal) || hasPositive(client.socialSecurityCount) || hasPositive(client.salaryDeclaredCount) ? 'ready' : 'missing',
+      handling: 'auto_import',
+      note: '可导入部分字段，但人数口径和申报口径通常需要人工确认。',
+    },
+    {
+      group: '补充明细',
+      item: '往来款、大额费用、存货、固定资产、合同或业务说明',
+      status: 'optional',
+      handling: 'optional_upload',
+      note: '命中专业风险或资料不足时再补充，用于解释隐藏风险和测算依据。',
+    },
+  ]
+}
+
+function basicComplianceFindings(client: Client): BasicComplianceFinding[] {
+  const findings: BasicComplianceFinding[] = []
+  const saveMissing = validateClientForSave(client)
+  const reportMissing = validateClientForReport(client)
+
+  findings.push({
+    title: '企业建档完整性',
+    level: saveMissing.length ? 'missing' : 'ok',
+    detail: saveMissing.length
+      ? `还需确认：${saveMissing.map((issue) => issue.label).join('、')}`
+      : '企业基础资料已满足建档口径。',
+  })
+  findings.push({
+    title: '申报/报表基础数据完整性',
+    level: reportMissing.length ? 'missing' : 'ok',
+    detail: reportMissing.length
+      ? `影响充分判断的字段：${reportMissing.map((issue) => issue.label).join('、')}`
+      : '收入、成本、开票、人员和工资等基础检测字段已具备。',
+  })
+
+  if (hasPositive(client.monthlyRevenue) && hasPositive(client.monthlyInvoice)) {
+    const gap = Math.abs(client.monthlyRevenue - client.monthlyInvoice)
+    const ratio = gap / Math.max(client.monthlyRevenue, client.monthlyInvoice)
+    findings.push({
+      title: '收入与开票金额一致性',
+      level: ratio > 0.2 ? 'warning' : 'ok',
+      detail: ratio > 0.2
+        ? `收入与开票金额差异约 ${(ratio * 100).toFixed(1)}%，需核对未开票收入、预收款或口径差异。`
+        : '收入与开票金额差异不大，可继续结合申报表复核。',
+    })
+  }
+
+  if (hasPositive(client.employees) && hasPositive(client.socialSecurityCount)) {
+    findings.push({
+      title: '员工人数与社保人数一致性',
+      level: client.employees !== client.socialSecurityCount ? 'warning' : 'ok',
+      detail: client.employees !== client.socialSecurityCount
+        ? `员工人数 ${client.employees} 人，社保人数 ${client.socialSecurityCount} 人，需说明兼职、退休返聘、外包或漏缴情形。`
+        : '员工人数与社保人数一致。',
+    })
+  }
+
+  if (hasPositive(client.outputTax) && hasPositive(client.inputTax) && hasPositive(client.vatTaxPayable)) {
+    const theoreticalVat = client.outputTax - client.inputTax
+    const gap = Math.abs(theoreticalVat - client.vatTaxPayable)
+    findings.push({
+      title: '增值税勾稽关系',
+      level: gap > Math.max(100, Math.abs(theoreticalVat) * 0.1) ? 'warning' : 'ok',
+      detail: gap > Math.max(100, Math.abs(theoreticalVat) * 0.1)
+        ? `销项税减进项税与申报应纳税额存在差异，差额约 ${money(gap)}，需核对留抵、转出、减免或预缴。`
+        : '销项税、进项税和应纳税额勾稽关系未见明显异常。',
+    })
+  }
+
+  return findings
 }
 
 type IntakeValidationIssue = {
@@ -5203,6 +5363,7 @@ function App() {
             managedRules={managedRules}
             reports={reports}
             onApplyClientDraft={(draftClient) => applyAssistantClientDraft(draftClient)}
+            onGenerateReport={() => createReport(true)}
           />
         )}
 
@@ -7706,12 +7867,14 @@ function AiAssistantPage({
   managedRules,
   reports,
   onApplyClientDraft,
+  onGenerateReport,
 }: {
   clients: Client[]
   selectedClientId: string
   managedRules: ManagedRule[]
   reports: Report[]
   onApplyClientDraft: (draftClient: Client) => Promise<AssistantDraftApplyResult>
+  onGenerateReport: () => Promise<void>
 }) {
   const temporaryAssistantClient = useMemo(() => (
     deriveClientMetrics({ ...blankClient, id: 'assistant-temp-client', name: '待录入企业' })
@@ -7721,6 +7884,9 @@ function AiAssistantPage({
   const report = useMemo(() => (
     selectedClient ? reports.find((item) => item.clientId === selectedClient.id) : undefined
   ), [reports, selectedClient])
+  const filingChecklist = useMemo(() => filingChecklistForClient(selectedClient), [selectedClient])
+  const basicFindings = useMemo(() => basicComplianceFindings(selectedClient), [selectedClient])
+  const dataCompleteness = useMemo(() => getDataCompleteness(selectedClient, risks), [selectedClient, risks])
   const [assistantInput, setAssistantInput] = useState('')
   const [assistantThreadState, setAssistantThreadState] = useState(() => {
     const threads = loadAssistantThreads()
@@ -7824,6 +7990,21 @@ function AiAssistantPage({
     latestMaterialSummary: materialSummaryOverride === undefined
       ? activeAssistantThread?.latestMaterialSummary || null
       : materialSummaryOverride,
+    filingChecklist: filingChecklist.map((item) => ({
+      group: item.group,
+      item: item.item,
+      status: item.status,
+      handling: item.handling,
+      note: item.note,
+    })),
+    workflowState: {
+      dataCompleteness,
+      basicComplianceFindings: basicFindings,
+      professionalRiskCount: risks.length,
+      professionalRiskLevel: getOverallLevel(risks),
+      hasReport: Boolean(report),
+      reportRiskLevel: report?.riskLevel || '',
+    },
   })
   const updateAssistantThreadTitle = (title: string) => {
     updateActiveAssistantThread((thread) => (
@@ -8262,6 +8443,58 @@ function AiAssistantPage({
     }))
     return { labels, detail }
   }
+  const appendAssistantSystemMessage = (content: string) => {
+    setActiveAssistantMessages((current) => [
+      ...current,
+      { id: crypto.randomUUID(), role: 'assistant', content },
+    ])
+  }
+  const summarizeFilingChecklist = () => {
+    const grouped = filingChecklist.reduce<Record<string, FilingChecklistItem[]>>((acc, item) => {
+      acc[item.group] = [...(acc[item.group] || []), item]
+      return acc
+    }, {})
+    return Object.entries(grouped).map(([group, items]) => {
+      const lines = items.map((item) => {
+        const status = item.status === 'ready'
+          ? '已具备'
+          : item.status === 'manual'
+            ? '需人工确认'
+            : item.status === 'optional'
+              ? '按需补充'
+              : '建议补充'
+        const handling = item.handling === 'auto_import'
+          ? '可自动导入'
+          : item.handling === 'manual_confirm'
+            ? '必须人工确认'
+            : '可上传留档'
+        return `- ${item.item}：${status}，${handling}。${item.note}`
+      })
+      return `${group}\n${lines.join('\n')}`
+    }).join('\n\n')
+  }
+  const runAssistantChecklist = () => {
+    appendAssistantSystemMessage(`我按报税资料口径整理了当前客户资料清单：\n\n${summarizeFilingChecklist()}`)
+  }
+  const runAssistantBasicCompliance = () => {
+    const lines = basicFindings.map((finding) => {
+      const prefix = finding.level === 'ok' ? '通过' : finding.level === 'warning' ? '需复核' : '缺资料'
+      return `- ${prefix}｜${finding.title}：${finding.detail}`
+    })
+    appendAssistantSystemMessage(`基础合规校验已完成。本板块只按已录入资料做确定性校验，不代表最终税务结论。\n\n${lines.join('\n')}`)
+  }
+  const runAssistantRiskDetection = () => {
+    if (!risks.length) {
+      appendAssistantSystemMessage('专业风险检测已运行：当前已录入资料下未命中中高风险规则。若资料不完整，仍建议先补充申报表、发票汇总、工资社保个税和往来明细后复核。')
+      return
+    }
+    const lines = risks.slice(0, 8).map((risk) => `- ${plainRiskLevel(risk.level)}风险｜${risk.name}：${risk.reason(selectedClient)}`)
+    appendAssistantSystemMessage(`专业风险检测已运行，当前命中 ${risks.length} 项，综合等级为${plainRiskLevel(getOverallLevel(risks))}风险。\n\n${lines.join('\n')}${risks.length > 8 ? '\n- 其余风险请在报告或风险检测页查看。' : ''}`)
+  }
+  const runAssistantReportGeneration = async () => {
+    appendAssistantSystemMessage('我已收到生成报告指令，正在调用系统报告生成流程。报告仍基于已保存期间数据、连续期间选择和规则引擎结果生成。')
+    await onGenerateReport()
+  }
   const executeAssistantToolCalls = async (response: AiAssistantResponse) => {
     const results: string[] = []
     const draftPatchResult = applyAssistantDraftPatch(response.draftPatch, 'AI 清洗')
@@ -8286,6 +8519,19 @@ function AiAssistantPage({
         results.push(result.message)
       } else if (toolCall.name === 'ask_missing_fields' && response.missingFields?.length) {
         results.push(`还需要确认：${response.missingFields.map((field) => field.label || field.field).join('、')}`)
+      }
+    }
+    for (const toolCall of response.toolCalls || []) {
+      if (toolCall.name === 'run_basic_compliance') {
+        runAssistantBasicCompliance()
+      } else if (toolCall.name === 'run_risk_detection') {
+        runAssistantRiskDetection()
+      } else if (toolCall.name === 'generate_report') {
+        await runAssistantReportGeneration()
+      } else if (toolCall.name === 'explain_current_report') {
+        results.push(report
+          ? `当前报告综合等级为${plainRiskLevel(report.riskLevel)}风险，包含 ${report.risks.length} 项规则命中。你可以继续问我某一项风险的依据、需要补充的资料或整改顺序。`
+          : '当前还没有已生成报告。可以先保存期间数据，再让我生成报告。')
       }
     }
     return results
@@ -8341,18 +8587,7 @@ function AiAssistantPage({
         client: selectedClient,
         risks,
         report,
-        assistantContext: {
-          activeThread: activeAssistantThread
-            ? {
-              id: activeAssistantThread.id,
-              title: activeAssistantThread.title,
-              messageCount: activeAssistantThread.messages.length,
-              draftCount: activeAssistantThread.drafts.length,
-            }
-            : null,
-          currentDraft: compactAssistantDraftForModel(assistantDrafts[0]),
-          latestMaterialSummary: activeAssistantThread?.latestMaterialSummary || null,
-        },
+        assistantContext: buildAssistantContext(),
       })
       setActiveAssistantMessages([
         ...nextMessages,
@@ -8448,6 +8683,21 @@ function AiAssistantPage({
               event.currentTarget.value = ''
             }}
           />
+          <div className="assistant-workflow-panel">
+            <button type="button" onClick={runAssistantChecklist}>
+              <ClipboardList /> 资料清单
+            </button>
+            <button type="button" onClick={runAssistantBasicCompliance}>
+              <ShieldCheck /> 基础校验
+            </button>
+            <button type="button" onClick={runAssistantRiskDetection}>
+              <Gauge /> 专业风险
+            </button>
+            <button type="button" onClick={() => void runAssistantReportGeneration()}>
+              <FileText /> 生成报告
+            </button>
+            <span>{dataCompleteness.label} · {dataCompleteness.score}% · {risks.length} 项风险线索</span>
+          </div>
           <div
             className={`ai-assistant-chat ${assistantDragActive ? 'drag-active' : ''}`}
             aria-live="polite"

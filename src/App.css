@@ -3556,6 +3556,50 @@ textarea:focus {
   display: none;
 }
 
+.assistant-workflow-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+  border: 1px solid rgba(12, 140, 130, 0.14);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.assistant-workflow-panel button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 34px;
+  border: 1px solid rgba(12, 140, 130, 0.18);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: rgba(246, 252, 250, 0.88);
+  color: var(--ink);
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.assistant-workflow-panel button:hover {
+  border-color: rgba(18, 174, 234, 0.34);
+  background: rgba(18, 174, 234, 0.08);
+}
+
+.assistant-workflow-panel svg {
+  width: 16px;
+  height: 16px;
+  color: var(--teal);
+}
+
+.assistant-workflow-panel span {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .assistant-draft-list {
   display: grid;
   gap: 10px;

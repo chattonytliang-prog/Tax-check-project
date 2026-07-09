@@ -103,6 +103,10 @@ const allowedToolNames = new Set([
   'update_cleaning_draft',
   'save_current_draft',
   'ask_missing_fields',
+  'run_basic_compliance',
+  'run_risk_detection',
+  'generate_report',
+  'explain_current_report',
 ])
 
 function normalizeDraftPatch(value) {
@@ -148,6 +152,8 @@ function normalizeAssistantContext(value) {
     activeThread: value.activeThread || null,
     currentDraft: value.currentDraft || null,
     latestMaterialSummary: value.latestMaterialSummary || null,
+    filingChecklist: value.filingChecklist || null,
+    workflowState: value.workflowState || null,
   }
 }
 
@@ -159,11 +165,16 @@ Software capabilities you may use as skills:
 - update_cleaning_draft: update the current cleaning draft with confirmed facts from the user.
 - save_current_draft: ask the host app to save the current cleaning draft into the tax product. This is allowed only after the user clearly asks to save/import/confirm, or clicks the host app confirmation button.
 - ask_missing_fields: ask the user for missing fields needed for better tax checking.
+- run_basic_compliance: ask the host app to run deterministic basic compliance checks from filing-style data, financial statements, invoice/payroll inputs, and saved client facts.
+- run_risk_detection: ask the host app to run deterministic professional risk detection. The host rule engine is the source of truth.
+- generate_report: ask the host app to generate a report from saved period data and selected continuous periods. Use only when the user clearly asks to generate a report.
+- explain_current_report: explain the current report, risk findings, basis, materials needed, and next steps. Do not invent missing report facts.
 
 Software data model:
 - client profile fields: name, creditCode, region, industry, taxpayerType, establishedAt.
 - period fields: analysisPeriodType, analysisYear, analysisQuarter, analysisMonth, periodStartDate, periodEndDate, dataBasis.
 - financial fields: monthlyRevenue, monthlyCost, monthlyProfit, mainBusinessRevenue, mainBusinessCost, outputTax, inputTax, assetsTotal, payrollTotal, employees, socialSecurityCount, salaryDeclaredCount, otherReceivableAgencyBalance.
+- filing checklist groups: business license/basic profile, VAT filing, CIT filing, financial statements, invoice summary, payroll/social security/IIT, and supplementary ledgers.
 
 Permission boundaries:
 - You cannot change code, rules, risk-engine findings, users, auth, or delete data.
@@ -180,7 +191,9 @@ Rules:
 7. This page has no "保存" or "提交" button. Never tell the user to click a save/submit button on this AI assistant page.
 8. When suggesting that cleaned data should enter the system, tell the user to review the cleaning draft card below and click "确认导入".
 9. If the current client is not verified in the database, say you can still analyze the pasted content and temporary page context, and the user can confirm the cleaning draft below when it appears.
-10. Return strict JSON only, no Markdown.
+10. Keep the product workflow in two layers: basic filing-compliance checks first, then professional hidden-risk analysis and report interpretation.
+11. Never calculate tax exposure freely. If exposure is not provided by deterministic host rules, say it needs rule-based measurement or accountant confirmation.
+12. Return strict JSON only, no Markdown.
 
 JSON shape:
 {
@@ -200,7 +213,7 @@ JSON shape:
   ],
   "toolCalls": [
     {
-      "name": "create_cleaning_draft | update_cleaning_draft | save_current_draft | ask_missing_fields",
+      "name": "create_cleaning_draft | update_cleaning_draft | save_current_draft | ask_missing_fields | run_basic_compliance | run_risk_detection | generate_report | explain_current_report",
       "arguments": {},
       "reason": "why this tool should run",
       "requiresConfirmation": true

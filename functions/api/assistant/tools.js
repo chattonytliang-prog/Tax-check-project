@@ -6,6 +6,10 @@ const allowedToolNames = new Set([
   'update_cleaning_draft',
   'save_current_draft',
   'ask_missing_fields',
+  'run_basic_compliance',
+  'run_risk_detection',
+  'generate_report',
+  'explain_current_report',
 ])
 
 function normalizeToolCalls(value) {
