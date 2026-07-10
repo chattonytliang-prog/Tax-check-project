@@ -333,6 +333,11 @@ button svg,
   margin: 0 auto;
 }
 
+.assistant-page {
+  max-width: none;
+  width: 100%;
+}
+
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -3394,14 +3399,14 @@ textarea:focus {
 
 .assistant-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
+  grid-template-columns: minmax(0, 1fr) 280px;
   gap: 14px;
   align-items: stretch;
-  width: min(100%, 1500px);
+  width: 100%;
 }
 
 .assistant-workspace.history-open {
-  grid-template-columns: 260px minmax(0, 1fr) 260px;
+  grid-template-columns: 260px minmax(0, 1fr) 280px;
 }
 
 .assistant-thread-sidebar {

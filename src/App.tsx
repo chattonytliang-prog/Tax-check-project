@@ -9041,7 +9041,7 @@ function AiAssistantPage({
   }
 
   return (
-    <section className="page">
+    <section className="page assistant-page">
       <header className="page-header">
         <div>
           <p className="eyebrow">AI 工作台</p>
