@@ -45,3 +45,16 @@ Scope:
 - `assistant_import_audits`
 
 Rationale: Cloudflare D1 migration execution may be unavailable from local CLI when no API token is configured. These tables are additive, idempotent, and limited to AI business-working data, so self-healing avoids blocking the product while keeping the rule library read-only.
+
+## 2026-07-10: Evidence-Safe Financial Import Mapping
+
+Decision: Financial imports may only populate a system field when the source column and accounting meaning match that field. Blank cells remain missing.
+
+Explicitly prohibited substitutions:
+- Account codes or statement row numbers as monetary values
+- Bank-account ending balances as collection flow
+- Employee-compensation liabilities or cash payments as payroll expense
+- Sales-tax offset accounts as output tax
+- Opening balances or unrelated side-by-side statement values as current-period amounts
+
+Rationale: Filling more fields is not useful if it creates false tax-risk findings. The parser provides evidence-backed candidates; the AI asks for missing evidence and the deterministic host validates all writes.

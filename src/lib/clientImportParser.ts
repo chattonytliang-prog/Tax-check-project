@@ -752,13 +752,6 @@ function normalizeFinancialLabel(value: string) {
   return normalizeImportKey(value).replace(/^[一二三四五六七八九十\d]+[、.．]/, '')
 }
 
-function getFinancialRowLabel(row: string[]) {
-  const textCells = row
-    .map((cell) => cell.trim())
-    .filter((cell) => cell && !isAmountLikeCell(cell))
-  return normalizeFinancialLabel(textCells.slice(0, 3).join(''))
-}
-
 const financialRowFieldRules: Array<{ field: string; patterns: string[] }> = [
   { field: 'name', patterns: ['企业名称', '公司名称', '纳税人名称', '单位名称'] },
   { field: 'creditCode', patterns: ['统一社会信用代码', '纳税人识别号', '税号'] },
@@ -772,7 +765,7 @@ const financialRowFieldRules: Array<{ field: string; patterns: string[] }> = [
   { field: 'mainBusinessCost', patterns: ['主营业务成本', '营业成本', '销售成本'] },
   { field: 'ytdProfit', patterns: ['利润总额', '净利润', '营业利润'] },
   { field: 'assetsTotal', patterns: ['资产总计', '资产合计', '资产总额', '资产总额期末余额', '资产合计期末余额'] },
-  { field: 'payrollTotal', patterns: ['工资薪金', '应付职工薪酬', '工资总额', '职工薪酬'] },
+  { field: 'payrollTotal', patterns: ['工资薪金总额', '工资薪金发生额', '工资薪金', '工资总额', '职工薪酬发生额'] },
   { field: 'outputTax', patterns: ['销项税额', '应交增值税销项税额'] },
   { field: 'inputTax', patterns: ['进项税额', '应交增值税进项税额'] },
   { field: 'priorTaxableSales', patterns: ['上期应税销售额', '上期销售额', '上期货物及劳务销售额'] },
@@ -780,7 +773,7 @@ const financialRowFieldRules: Array<{ field: string; patterns: string[] }> = [
   { field: 'vatTaxPayable', patterns: ['应交增值税', '增值税应纳税额', '应纳税额合计'] },
   { field: 'taxableSales', patterns: ['应税销售额', '销售额合计', '货物及劳务销售额'] },
   { field: 'endingVatCredit', patterns: ['期末留抵税额', '期末留抵', '留抵税额'] },
-  { field: 'collectionFlow', patterns: ['银行存款', '收款流水', '现金及银行存款'] },
+  { field: 'collectionFlow', patterns: ['收款流水', '银行收款流水', '账户收款金额'] },
   { field: 'entertainmentExpense', patterns: ['业务招待费'] },
   { field: 'adExpense', patterns: ['广告费', '业务宣传费', '广告宣传费'] },
   { field: 'welfareExpense', patterns: ['职工福利费'] },
@@ -802,10 +795,10 @@ function detectImportSourceType(rows: string[][]) {
 function detectImportTables(rows: string[][]) {
   const sample = rows.slice(0, 30).flat().join(' ')
   const tables: string[] = []
-  if (/科目余额|科目编码|科目名称|期初余额|期末余额/.test(sample)) tables.push('科目余额表')
+  if (/科目余额|科目编码|科目名称/.test(sample)) tables.push('科目余额表')
   if (/利润表|营业收入|营业成本|利润总额|净利润/.test(sample)) tables.push('利润表')
   if (/资产负债表|资产总计|资产总额|资产合计|负债合计|所有者权益/.test(sample)) tables.push('资产负债表')
-  if (/增值税|销项税额|进项税额|应税销售额|纳税申报|留抵税额/.test(sample)) tables.push('增值税数据')
+  if (/增值税纳税申报|应交增值税|增值税应纳税额|销项税额|进项税额|应税销售额|留抵税额/.test(sample)) tables.push('增值税数据')
   return Array.from(new Set(tables))
 }
 
@@ -818,31 +811,37 @@ const fieldAmountHeaderPreferences: Record<string, string[]> = {
   mainBusinessCost: ['本期借方', '借方发生额', '本年累计借方', '本年累计金额', '本期金额', '金额'],
   monthlyCost: ['本期借方', '借方发生额', '本月金额', '本期金额', '金额'],
   ytdCostExpense: ['本年累计借方', '本年累计金额', '借方发生额', '本期借方', '金额'],
-  inputTax: ['本期借方', '借方发生额', '进项税额', '税额', '期末余额', '金额'],
-  outputTax: ['本期贷方', '贷方发生额', '销项税额', '税额', '期末余额', '金额'],
+  inputTax: ['本期发生额借方', '本期借方', '借方发生额', '进项税额', '税额', '金额'],
+  outputTax: ['本期发生额贷方', '本期贷方', '贷方发生额', '销项税额', '税额', '金额'],
   taxableSales: ['应税销售额', '销售额合计', '销售额', '货物及劳务销售额', '金额'],
   vatTaxPayable: ['应纳税额合计', '应纳税额', '增值税应纳税额', '入库税额', '税额', '金额'],
   priorTaxableSales: ['上期应税销售额', '上期销售额', '销售额', '货物及劳务销售额', '金额'],
   priorVatTaxPayable: ['上期应纳税额', '上期增值税税额', '上期增值税应纳税额', '上期增值税入库税额', '税额', '金额'],
   endingVatCredit: ['期末留抵税额合计', '期末留抵税额', '期末留抵', '留抵税额', '税额', '金额'],
-  collectionFlow: ['本期借方', '借方发生额', '期末余额', '金额'],
+  collectionFlow: ['本期发生额借方', '本期借方', '借方发生额', '收款金额', '金额'],
   assetsTotal: ['期末余额', '期末数', '期末金额', '资产总额期末余额', '资产总计期末余额', '金额'],
+  payrollTotal: ['本期发生额贷方', '本期贷方', '贷方发生额', '本年累计金额', '本期金额', '工资薪金总额', '金额'],
 }
 
-function findFinancialAmount(row: string[], headerRow?: string[], field?: string) {
-  const preferredHeaders = [
-    ...(field ? fieldAmountHeaderPreferences[field] || [] : []),
-    ...defaultFinancialAmountHeaders,
-  ]
+function findFinancialAmount(row: string[], headerRow?: string[], field?: string, labelIndex = 0) {
+  const fieldHeaders = field ? fieldAmountHeaderPreferences[field] : undefined
+  const preferredHeaders = fieldHeaders?.length ? fieldHeaders : defaultFinancialAmountHeaders
   if (headerRow) {
     const normalizedHeaders = headerRow.map(normalizeFinancialLabel)
+    let matchedHeader = false
     for (const header of preferredHeaders) {
       const index = normalizedHeaders.findIndex((item) => item.includes(normalizeFinancialLabel(header)))
+      if (index >= 0) matchedHeader = true
       const amount = index >= 0 ? parseImportedAmount(row[index] || '') : null
       if (amount !== null) return amount
     }
+    if (matchedHeader) return null
+    if (fieldHeaders?.length) return null
   }
-  const amounts = row.map(parseImportedAmount).filter((value): value is number => value !== null)
+  const amounts = row
+    .slice(labelIndex + 1)
+    .map(parseImportedAmount)
+    .filter((value): value is number => value !== null)
   return amounts.find((value) => value !== 0) ?? amounts[0] ?? null
 }
 
@@ -879,36 +878,130 @@ function chooseImportSourceType(base?: string, extra?: string) {
   return base
 }
 
+function isFinancialLabelHeader(value: string) {
+  const normalized = normalizeFinancialLabel(value)
+  return /^(项目|科目名称|资产|负债和所有者权益|负债及所有者权益)$/.test(normalized)
+}
+
+function financialHeaderScore(row: string[]) {
+  if (!row.some(isFinancialLabelHeader)) return 0
+  return row.reduce((score, cell) => {
+    const normalized = normalizeFinancialLabel(cell)
+    if (!normalized) return score
+    if (isFinancialLabelHeader(normalized)) return score + 4
+    if (/科目编码|行次/.test(normalized)) return score + 1
+    if (/本年累计|本期|本月|期初|期末|年初|金额|余额|借方|贷方|税额|销售额/.test(normalized)) return score + 2
+    return score
+  }, 0)
+}
+
+function findFinancialHeader(rows: string[][]) {
+  let bestIndex = -1
+  let bestScore = 0
+  rows.slice(0, 15).forEach((row, index) => {
+    const score = financialHeaderScore(row)
+    if (score > bestScore) {
+      bestIndex = index
+      bestScore = score
+    }
+  })
+  if (bestIndex < 0) return null
+
+  const primary = rows[bestIndex]
+  const secondary = rows[bestIndex + 1]
+  const hasDebitCreditSubheaders = secondary?.filter((cell) => /借方|贷方/.test(normalizeFinancialLabel(cell))).length >= 2
+  const headers = hasDebitCreditSubheaders
+    ? primary.map((cell, index) => [cell, secondary[index]].filter(Boolean).join(' '))
+    : primary
+  return { index: bestIndex, headers }
+}
+
+function splitFinancialSections(row: string[], headers: string[]) {
+  const labelIndexes = headers
+    .map((header, index) => (isFinancialLabelHeader(header) ? index : -1))
+    .filter((index) => index >= 0)
+  if (labelIndexes.length <= 1) {
+    const labelIndex = labelIndexes[0] ?? 0
+    return [{ row, headers, labelIndex }]
+  }
+  return labelIndexes.map((start, index) => {
+    const end = labelIndexes[index + 1] ?? headers.length
+    return {
+      row: row.slice(start, end),
+      headers: headers.slice(start, end),
+      labelIndex: 0,
+    }
+  })
+}
+
+function extractFinancialMetadata(rows: string[][]): ParsedClientImport {
+  const patch: Record<string, unknown> = {}
+  const mappings: ImportMappingPreview[] = []
+  const cells = rows.slice(0, 15).flat().map((cell) => cell.trim()).filter(Boolean)
+  const companyCell = cells.find((cell) => /^(核算单位|编制单位|企业名称|公司名称|纳税人名称|单位名称)\s*[:：]/.test(cell))
+  const companyMatch = companyCell?.match(/^(?:核算单位|编制单位|企业名称|公司名称|纳税人名称|单位名称)\s*[:：]\s*(.+)$/)
+  if (companyMatch?.[1]) {
+    patch.name = companyMatch[1].trim()
+    mappings.push({ source: companyCell || '表内单位名称', field: 'name', label: fieldLabel('name') })
+  }
+  const creditCodeCell = cells.find((cell) => /^(统一社会信用代码|纳税人识别号|税号)\s*[:：]/.test(cell))
+  const creditCodeMatch = creditCodeCell?.match(/^(?:统一社会信用代码|纳税人识别号|税号)\s*[:：]\s*([0-9A-Z]{15,20})/i)
+  if (creditCodeMatch?.[1]) {
+    patch.creditCode = creditCodeMatch[1].toUpperCase()
+    mappings.push({ source: creditCodeCell || '表内信用代码', field: 'creditCode', label: fieldLabel('creditCode') })
+  }
+  const periodCell = cells.find((cell) => /20\d{2}\s*年\s*(?:0?[1-9]|1[0-2])\s*月/.test(cell))
+  const periodMatch = periodCell?.match(/(20\d{2})\s*年\s*(0?[1-9]|1[0-2])\s*月/)
+  if (periodMatch) {
+    patch.analysisYear = periodMatch[1]
+    patch.analysisMonth = `${periodMatch[1]}-${periodMatch[2].padStart(2, '0')}`
+    mappings.push({ source: periodCell || '表内期间', field: 'analysisYear', label: fieldLabel('analysisYear') })
+    mappings.push({ source: periodCell || '表内期间', field: 'analysisMonth', label: fieldLabel('analysisMonth') })
+  }
+  return { patch, mappings, unmappedHeaders: [], detectedTables: [] }
+}
+
+function resolveFinancialRowRule(label: string) {
+  const rowLabel = normalizeFinancialLabel(label)
+  if (!rowLabel) return null
+  if (/销项税额抵减/.test(rowLabel)) return null
+  if (/支付的职工薪酬|应付职工薪酬/.test(rowLabel)) return null
+  return financialRowFieldRules.find((item) => (
+    item.patterns.some((pattern) => rowLabel.includes(normalizeFinancialLabel(pattern)))
+  )) || null
+}
+
 function parseFinancialExportRows(rows: string[][]): ParsedClientImport {
   const patch: Record<string, unknown> = {}
   const mappings: ImportMappingPreview[] = []
   const detectedTables = detectImportTables(rows)
   const detectedSourceType = detectImportSourceType(rows)
-  const headerRow = rows.find((row) => row.some((cell) => /项目|科目|本期|本月|本年|期末|金额|税额|余额/.test(cell)))
+  const header = findFinancialHeader(rows)
 
-  rows.forEach((row) => {
-    const rowLabel = getFinancialRowLabel(row)
-    if (!rowLabel) return
-    const rule = financialRowFieldRules.find((item) => (
-      item.patterns.some((pattern) => rowLabel.includes(normalizeFinancialLabel(pattern)))
-    ))
-    if (!rule) return
-    const amount = findFinancialAmount(row, headerRow, rule.field)
-    const rawValue = ['name', 'creditCode', 'analysisYear', 'analysisMonth'].includes(rule.field)
-      ? findFinancialTextValue(row, rule.patterns) || row[row.length - 1]
-      : amount
-    if (rawValue === null || rawValue === undefined || rawValue === '') return
-    patch[rule.field] = rawValue
-    mappings.push({ source: row.slice(0, 3).filter(Boolean).join(' / '), field: rule.field, label: fieldLabel(rule.field) })
+  rows.forEach((row, rowIndex) => {
+    if (header && rowIndex <= header.index) return
+    const sections = header ? splitFinancialSections(row, header.headers) : [{ row, headers: [], labelIndex: 0 }]
+    sections.forEach((section) => {
+      const label = section.row[section.labelIndex] || ''
+      const rule = resolveFinancialRowRule(label)
+      if (!rule) return
+      const amount = findFinancialAmount(section.row, section.headers, rule.field, section.labelIndex)
+      const rawValue = ['name', 'creditCode', 'analysisYear', 'analysisMonth'].includes(rule.field)
+        ? findFinancialTextValue(section.row, rule.patterns) || section.row[section.row.length - 1]
+        : amount
+      if (rawValue === null || rawValue === undefined || rawValue === '') return
+      patch[rule.field] = rawValue
+      mappings.push({ source: section.row.slice(0, 3).filter(Boolean).join(' / '), field: rule.field, label: fieldLabel(rule.field) })
+    })
   })
 
-  return {
+  return mergeParsedClientImports({
     patch,
     mappings,
     unmappedHeaders: [],
     detectedTables,
     detectedSourceType,
-  }
+  }, extractFinancialMetadata(rows))
 }
 
 function countRecognizedHeaders(row: string[]) {

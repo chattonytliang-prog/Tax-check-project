@@ -6,6 +6,7 @@
 - Expand assistant tool coverage from saving cleaning drafts toward source material records, customer memory, basic compliance checks, professional risk detection, and report generation.
 - Keep all assistant writes auditable.
 - Continue official-only tax bureau form research before implementing full filing-field dictionaries.
+- Run the corrected parser and AI authorization flow against the two local real-customer Excel files in production; do not persist incomplete company data merely to make the test pass.
 
 ## Done
 
@@ -14,3 +15,4 @@
 - 2026-07-09: Added first-pass backend structures for assistant cleaning drafts, customer memories, and import audits.
 - 2026-07-09: Added explicit assistant business write tools while preserving `save_current_draft` compatibility.
 - 2026-07-09: Added self-healing creation of assistant business tables when `/api/assistant/tools` first writes cleaning drafts, customer memories, or import audits.
+- 2026-07-10: Added regression coverage for multi-row account-balance headers, side-by-side balance sheets, blank financial-statement amounts, and unsafe accounting-balance substitutions.

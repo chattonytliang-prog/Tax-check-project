@@ -1329,13 +1329,13 @@ describe('clientImportParser', () => {
     expect(parsed.detectedSourceType).toBe('用友导出表')
     expect(parsed.detectedTables).toContain('科目余额表')
     expect(parsed.patch).toMatchObject({
-      collectionFlow: 2500000,
-      outputTax: 52000,
-      inputTax: 31000,
       entertainmentExpense: 18000,
       adExpense: 45000,
-      payrollTotal: 280000,
     })
+    expect(parsed.patch).not.toHaveProperty('collectionFlow')
+    expect(parsed.patch).not.toHaveProperty('payrollTotal')
+    expect(parsed.patch).not.toHaveProperty('outputTax')
+    expect(parsed.patch).not.toHaveProperty('inputTax')
   })
 
   it('uses account-balance debit and credit columns based on mapped field', () => {
@@ -1353,8 +1353,8 @@ describe('clientImportParser', () => {
       mainBusinessCost: 920000,
       outputTax: 195000,
       inputTax: 112000,
-      collectionFlow: 3100000,
     })
+    expect(parsed.patch).not.toHaveProperty('collectionFlow')
   })
 
   it('merges recognizable rows across workbook sheets', async () => {
@@ -1384,8 +1384,69 @@ describe('clientImportParser', () => {
     expect(parsed.patch).toMatchObject({
       mainBusinessRevenue: 1200000,
       mainBusinessCost: 820000,
-      collectionFlow: 2500000,
-      outputTax: 52000,
     })
+    expect(parsed.patch).not.toHaveProperty('collectionFlow')
+    expect(parsed.patch).not.toHaveProperty('outputTax')
+  })
+
+  it('parses two-row account balance headers without treating account codes as amounts', () => {
+    const parsed = parseClientImportRows([
+      ['科目余额表（本币金额式）', '', '', '', '', '', '', '', ''],
+      ['核算单位：示例电气科技有限公司', '', '', '', '', '', '', '', '单位：元'],
+      ['科目编码', '科目名称', '', '期初余额', '', '本期发生额', '', '期末余额', ''],
+      ['', '', '', '借方', '贷方', '借方', '贷方', '借方', '贷方'],
+      ['1002', '银行存款', '', '50,894.11', '', '', '', '50,894.11', ''],
+      ['1221', '其他应收款', '', '132,223.77', '', '', '', '132,223.77', ''],
+      ['2211', '应付职工薪酬', '', '', '43,686.44', '', '', '', '43,686.44'],
+      ['2221001002', '销项税额抵减', '', '', '', '', '', '', ''],
+    ])
+
+    expect(parsed.patch).toMatchObject({
+      name: '示例电气科技有限公司',
+      otherReceivableAgencyBalance: 132223.77,
+    })
+    expect(parsed.patch).not.toHaveProperty('collectionFlow')
+    expect(parsed.patch).not.toHaveProperty('payrollTotal')
+    expect(parsed.patch).not.toHaveProperty('outputTax')
+  })
+
+  it('splits side-by-side balance sheet sections and ignores row numbers', () => {
+    const parsed = parseClientImportRows([
+      ['资产负债表', '', '', '', '', '', '', ''],
+      ['编制单位：示例电气科技有限公司', '', '2026年3月31日', '', '', '', '', '单位：元'],
+      ['资产', '行次', '期末余额', '年初余额', '负债和所有者权益', '行次', '期末余额', '年初余额'],
+      ['预付账款', '5', '4,349,818.84', '8,043,131.12', '应付职工薪酬', '35', '43,686.44', '41,403.19'],
+      ['其他应收款', '8', '140,136.83', '158,568.54', '其他应付款', '39', '17,793,716.92', '19,293,716.92'],
+      ['资产总计', '30', '51,891,876.71', '54,950,083.62', '负债和所有者权益总计', '53', '51,891,876.71', '54,950,083.62'],
+    ])
+
+    expect(parsed.patch).toMatchObject({
+      name: '示例电气科技有限公司',
+      analysisYear: '2026',
+      analysisMonth: '2026-03',
+      otherReceivableAgencyBalance: 140136.83,
+      assetsTotal: 51891876.71,
+    })
+    expect(parsed.patch).not.toHaveProperty('payrollTotal')
+  })
+
+  it('does not use statement row numbers when the amount cell is blank', () => {
+    const parsed = parseClientImportRows([
+      ['利润表', '', '', ''],
+      ['项目', '行次', '本年累计金额', '本期金额'],
+      ['广告费和业务宣传费', '13', '', ''],
+      ['业务招待费', '16', '8,128.40', ''],
+      ['营业外收入', '22', '', ''],
+      ['营业外支出', '24', '', ''],
+      ['净利润', '32', '921,700.69', ''],
+    ])
+
+    expect(parsed.patch).toMatchObject({
+      entertainmentExpense: 8128.4,
+      ytdProfit: 921700.69,
+    })
+    expect(parsed.patch).not.toHaveProperty('adExpense')
+    expect(parsed.patch).not.toHaveProperty('nonOperatingIncome')
+    expect(parsed.patch).not.toHaveProperty('nonOperatingExpense')
   })
 })
