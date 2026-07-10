@@ -16,3 +16,5 @@
 - An assistant cleaning draft is the active company context. Figures, risks, and report facts from a separately selected company must not leak into that draft.
 - Period semantics are evidence: year-to-date profit/revenue/cost must remain cumulative and must never be rewritten as monthly figures.
 - DeepSeek structured replies use JSON mode, concise output limits, and one automatic repair attempt before the UI receives an invalid-output error.
+- Values explicitly supplied by source files or confirmed in assistant conversation override auto-derived formulas; cumulative values must be marked as explicit evidence before metric derivation runs.
+- Runtime stability: keep ordinary concurrency at three or fewer and heavy tasks at one or two; only one writer per project directory; continue long work from Wiki/TASKS checkpoints after disconnects without resetting the project.

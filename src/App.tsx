@@ -85,6 +85,7 @@ import {
   type PeriodEntry,
 } from './lib/periodAnalysis'
 import { apiDelete, apiGet, apiSend, apiUpload } from './lib/apiClient'
+import { explicitDerivedMetadata } from './lib/explicitDerivedFields'
 import './App.css'
 
 type Page = 'dashboard' | 'assistant' | 'clients' | 'form' | 'result' | 'report' | 'reports' | 'rules' | 'admin'
@@ -2463,6 +2464,22 @@ function deriveClientMetrics(client: Client): Client {
   })
 
   return derived
+}
+
+function applyExplicitDerivedPatch(client: Client, patch: Partial<Client>, reason: string) {
+  const { fields: manualDerivedFields, reasons: manualDerivedReasons } = explicitDerivedMetadata(
+    patch as Record<string, unknown>,
+    autoDerivedFieldConfigs.map((field) => String(field.key)),
+    client.manualDerivedFields,
+    client.manualDerivedReasons,
+    reason,
+  )
+  return deriveClientMetrics({
+    ...client,
+    ...patch,
+    manualDerivedFields,
+    manualDerivedReasons,
+  })
 }
 
 const demoClients: Client[] = createDemoClients()
@@ -6847,7 +6864,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         window.alert('未识别到可填充字段。请确认表头或字段名使用系统字段名、中文字段名，或采用“字段名 / 值”两列格式。')
         return
       }
-      const importedClient = deriveClientMetrics({ ...client, ...patchData })
+      const importedClient = applyExplicitDerivedPatch(client, patchData, '原始资料导入值')
       const importedSaveMissing = validateClientForSave(importedClient).map((issue) => issue.label).slice(0, 6)
       const importedReportMissing = validateClientForReport(importedClient).map((issue) => issue.label).slice(0, 6)
       onChange(importedClient)
@@ -8076,18 +8093,18 @@ function AiAssistantPage({
           : 'existing'
     const matchedClient = targetMode === 'existing'
       ? clients.find((client) => (
-        patchData.creditCode && client.creditCode === patchData.creditCode
-      )) || selectedClient
+        (patchData.creditCode && client.creditCode === patchData.creditCode)
+        || (patchData.name && client.name === patchData.name)
+      )) || (!patchData.name && !patchData.creditCode ? selectedClient : null)
       : null
     const baseClient = targetMode === 'existing' && matchedClient
       ? matchedClient
       : blankDraftClient()
-    const draftClient = deriveClientMetrics({
-      ...baseClient,
+    const draftClient = applyExplicitDerivedPatch(baseClient, {
       ...patchData,
       id: baseClient.id,
       periodEntries: baseClient.periodEntries,
-    })
+    }, `清洗资料明确值：${options.sourceType}`)
     const labels = Object.keys(patchData).map(fieldLabel)
     const now = formatDate()
     const rawMaterials = options.rawMaterial ? [options.rawMaterial] : []
@@ -8158,10 +8175,7 @@ function AiAssistantPage({
       if (!current.length) return current
       return current.map((draft, index) => {
         if (index !== 0) return draft
-        const client = deriveClientMetrics({
-          ...draft.client,
-          ...patch,
-        })
+        const client = applyExplicitDerivedPatch(draft.client, patch, source)
         return {
           ...draft,
           client,
@@ -8427,10 +8441,7 @@ function AiAssistantPage({
 
     setActiveAssistantDrafts((current) => current.map((draft, index) => {
       if (index !== 0) return draft
-      const client = deriveClientMetrics({
-        ...draft.client,
-        ...inferred.patch,
-      })
+      const client = applyExplicitDerivedPatch(draft.client, inferred.patch, '用户对话明确值')
       return {
         ...draft,
         client,
@@ -8469,10 +8480,7 @@ function AiAssistantPage({
 
     setActiveAssistantDrafts((current) => current.map((draft, index) => {
       if (index !== 0) return draft
-      const client = deriveClientMetrics({
-        ...draft.client,
-        ...patch,
-      })
+      const client = applyExplicitDerivedPatch(draft.client, patch, source)
       return {
         ...draft,
         client,
@@ -8548,10 +8556,7 @@ function AiAssistantPage({
     const draftForSave: AiAssistantDraft | null = currentDraft
       ? {
           ...currentDraft,
-          client: deriveClientMetrics({
-            ...currentDraft.client,
-            ...draftPatch,
-          }),
+          client: applyExplicitDerivedPatch(currentDraft.client, draftPatch, 'AI 清洗确认值'),
         }
       : hasDraftPatch
         ? buildAssistantDraft(draftPatch, {

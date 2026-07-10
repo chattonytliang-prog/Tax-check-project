@@ -18,3 +18,4 @@
 - 2026-07-10: Added regression coverage for multi-row account-balance headers, side-by-side balance sheets, blank financial-statement amounts, and unsafe accounting-balance substitutions.
 - 2026-07-10: Directly passed both local real-customer `.xls` files through parser regression assertions without committing customer data or paths.
 - 2026-07-10: Added concise structured-output limits and automatic JSON repair for incomplete model responses found during live real-data testing.
+- 2026-07-10: Checkpoint: live testing found explicit year-to-date profit was overwritten by an auto-derived monthly-profit formula; implementation now marks imported/confirmed derived fields as explicit evidence before recalculation. Pending full verification and online retest.
