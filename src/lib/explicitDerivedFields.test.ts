@@ -27,4 +27,11 @@ describe('explicit derived field metadata', () => {
     expect(result.fields).toEqual({ ytdProfit: true, monthlyProfit: true })
     expect(result.reasons.monthlyProfit).toBe('用户对话明确值')
   })
+
+  it('starts from empty metadata when no overrides exist yet', () => {
+    expect(explicitDerivedMetadata({}, ['ytdProfit'], undefined, undefined, '导入')).toEqual({
+      fields: {},
+      reasons: {},
+    })
+  })
 })

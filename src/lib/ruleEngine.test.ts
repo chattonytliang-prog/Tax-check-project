@@ -186,6 +186,7 @@ describe('ruleEngine', () => {
 
     expect(parseComparableValue(undefined, 1)).toBe(0)
     expect(parseComparableValue(5, 'sample')).toBe('5')
+    expect(parseComparableValue(null as never, 'sample')).toBe('')
     expect(parseComparableValue('false', true)).toBe(false)
     expect(evaluateCondition(client)).toBe(false)
     expect(evaluateCondition(client, emptyRuleCondition)).toBe(false)
@@ -273,6 +274,8 @@ describe('ruleEngine', () => {
     }
 
     expect(conditionRequiredFields(condition)).toEqual(['currentRevenue', 'previousRevenue', 'hasBusiness', 'manualOverride'])
+    expect(conditionRequiredFields()).toEqual([])
+    expect(conditionRequiredFields(emptyRuleCondition)).toEqual([])
     expect(missingRequiredFields(
       { currentRevenue: 130, hasBusiness: true },
       condition,

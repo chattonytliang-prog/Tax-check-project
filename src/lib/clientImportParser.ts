@@ -659,18 +659,18 @@ function emptyParsedClientImport(): ParsedClientImport {
 }
 
 function fieldLabel(field: string) {
-  return conditionFields.find((item) => item.value === field)?.label || clientImportFieldLabels[field] || field
+  return conditionFields.find((item) => item.value === field)?.label || clientImportFieldLabels[field]
 }
 
-function csvCell(value: string | number) {
+export function encodeClientImportCsvCell(value: string | number) {
   const text = String(value)
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
 }
 
 export function createClientImportTemplateCsv() {
   return [
-    importTemplateFields.map(fieldLabel).map(csvCell).join(','),
-    importTemplateSampleRow.map(csvCell).join(','),
+    importTemplateFields.map(fieldLabel).map(encodeClientImportCsvCell).join(','),
+    importTemplateSampleRow.map(encodeClientImportCsvCell).join(','),
   ].join('\r\n')
 }
 
@@ -690,8 +690,6 @@ function resolveImportField(key: string) {
   const candidates = importKeyCandidates(key)
   const direct = importFieldAliases[key] || candidates.map((candidate) => importFieldAliases[candidate]).find(Boolean)
   if (direct) return direct
-  const matched = Object.entries(importFieldAliases).find(([label]) => candidates.includes(normalizeImportKey(label)))
-  if (matched) return matched[1]
   return conditionFields.some((field) => field.value === key) ? key : null
 }
 
@@ -823,10 +821,10 @@ const fieldAmountHeaderPreferences: Record<string, string[]> = {
   payrollTotal: ['本期发生额贷方', '本期贷方', '贷方发生额', '本年累计金额', '本期金额', '工资薪金总额', '金额'],
 }
 
-function findFinancialAmount(row: string[], headerRow?: string[], field?: string, labelIndex = 0) {
-  const fieldHeaders = field ? fieldAmountHeaderPreferences[field] : undefined
+function findFinancialAmount(row: string[], headerRow: string[], field: string, labelIndex: number) {
+  const fieldHeaders = fieldAmountHeaderPreferences[field]
   const preferredHeaders = fieldHeaders?.length ? fieldHeaders : defaultFinancialAmountHeaders
-  if (headerRow) {
+  if (headerRow.length) {
     const normalizedHeaders = headerRow.map(normalizeFinancialLabel)
     let matchedHeader = false
     for (const header of preferredHeaders) {
@@ -850,14 +848,14 @@ function findFinancialTextValue(row: string[], patterns: string[]) {
   return row.find((cell) => {
     const normalized = normalizeFinancialLabel(cell)
     return normalized && !isAmountLikeCell(cell) && !normalizedPatterns.some((pattern) => normalized.includes(pattern))
-  }) || ''
+  })
 }
 
 function mergeParsedClientImports(base: ParsedClientImport, extra: ParsedClientImport): ParsedClientImport {
   const patch = { ...extra.patch, ...base.patch }
   const seenMappings = new Set<string>()
   const mappings = [...base.mappings, ...extra.mappings].filter((item) => {
-    const key = `${item.source}-${String(item.field)}`
+    const key = String(item.field)
     if (seenMappings.has(key)) return false
     seenMappings.add(key)
     return true
@@ -921,7 +919,7 @@ function splitFinancialSections(row: string[], headers: string[]) {
     .map((header, index) => (isFinancialLabelHeader(header) ? index : -1))
     .filter((index) => index >= 0)
   if (labelIndexes.length <= 1) {
-    const labelIndex = labelIndexes[0] ?? 0
+    const labelIndex = labelIndexes[0]
     return [{ row, headers, labelIndex }]
   }
   return labelIndexes.map((start, index) => {
@@ -942,21 +940,21 @@ function extractFinancialMetadata(rows: string[][]): ParsedClientImport {
   const companyMatch = companyCell?.match(/^(?:核算单位|编制单位|企业名称|公司名称|纳税人名称|单位名称)\s*[:：]\s*(.+)$/)
   if (companyMatch?.[1]) {
     patch.name = companyMatch[1].trim()
-    mappings.push({ source: companyCell || '表内单位名称', field: 'name', label: fieldLabel('name') })
+    mappings.push({ source: companyCell!, field: 'name', label: fieldLabel('name') })
   }
   const creditCodeCell = cells.find((cell) => /^(统一社会信用代码|纳税人识别号|税号)\s*[:：]/.test(cell))
   const creditCodeMatch = creditCodeCell?.match(/^(?:统一社会信用代码|纳税人识别号|税号)\s*[:：]\s*([0-9A-Z]{15,20})/i)
   if (creditCodeMatch?.[1]) {
     patch.creditCode = creditCodeMatch[1].toUpperCase()
-    mappings.push({ source: creditCodeCell || '表内信用代码', field: 'creditCode', label: fieldLabel('creditCode') })
+    mappings.push({ source: creditCodeCell!, field: 'creditCode', label: fieldLabel('creditCode') })
   }
   const periodCell = cells.find((cell) => /20\d{2}\s*年\s*(?:0?[1-9]|1[0-2])\s*月/.test(cell))
   const periodMatch = periodCell?.match(/(20\d{2})\s*年\s*(0?[1-9]|1[0-2])\s*月/)
   if (periodMatch) {
     patch.analysisYear = periodMatch[1]
     patch.analysisMonth = `${periodMatch[1]}-${periodMatch[2].padStart(2, '0')}`
-    mappings.push({ source: periodCell || '表内期间', field: 'analysisYear', label: fieldLabel('analysisYear') })
-    mappings.push({ source: periodCell || '表内期间', field: 'analysisMonth', label: fieldLabel('analysisMonth') })
+    mappings.push({ source: periodCell!, field: 'analysisYear', label: fieldLabel('analysisYear') })
+    mappings.push({ source: periodCell!, field: 'analysisMonth', label: fieldLabel('analysisMonth') })
   }
   return { patch, mappings, unmappedHeaders: [], detectedTables: [] }
 }
@@ -987,7 +985,7 @@ function parseFinancialExportRows(rows: string[][]): ParsedClientImport {
       if (!rule) return
       const amount = findFinancialAmount(section.row, section.headers, rule.field, section.labelIndex)
       const rawValue = ['name', 'creditCode', 'analysisYear', 'analysisMonth'].includes(rule.field)
-        ? findFinancialTextValue(section.row, rule.patterns) || section.row[section.row.length - 1]
+        ? findFinancialTextValue(section.row, rule.patterns)
         : amount
       if (rawValue === null || rawValue === undefined || rawValue === '') return
       patch[rule.field] = rawValue
@@ -1010,8 +1008,6 @@ function countRecognizedHeaders(row: string[]) {
 
 function chooseTabularHeaderRows(rows: string[][]) {
   const [firstRow, secondRow, thirdRow] = rows
-  if (!firstRow) return null
-
   const secondRowFieldCount = secondRow ? countRecognizedHeaders(secondRow) : 0
   if (secondRow && thirdRow && secondRow.length > 2 && secondRowFieldCount >= 2) {
     return { headers: secondRow, values: thirdRow }
@@ -1021,7 +1017,7 @@ function chooseTabularHeaderRows(rows: string[][]) {
   if (firstRow.length > 2 || Boolean(
     secondRow && firstRow.length > 1 && firstRowFieldCount === firstRow.length && !resolveImportField(secondRow[0] || ''),
   )) {
-    return secondRow ? { headers: firstRow, values: secondRow } : null
+    return { headers: firstRow, values: secondRow || [] }
   }
 
   return null
@@ -1043,9 +1039,9 @@ export function parseClientImportRows(rows: string[][]): ParsedClientImport {
   const detectedTables = detectImportTables(rows)
   const detectedSourceType = detectImportSourceType(rows)
 
-  const mapValue = (source: string, value: string) => {
+  const mapValue = (source: string, value?: string) => {
     const normalizedSource = source.trim()
-    if (!normalizedSource) return
+    if (!normalizedSource || value === undefined) return
     const field = resolveImportField(normalizedSource)
     if (field) {
       patch[field] = value
@@ -1068,13 +1064,16 @@ export function parseClientImportRows(rows: string[][]): ParsedClientImport {
     })
   }
 
-  return mergeParsedClientImports({
+  const parsedRows = {
     patch,
     mappings,
     unmappedHeaders: Array.from(new Set(unmappedHeaders)).slice(0, 12),
     detectedTables,
     detectedSourceType,
-  }, parseFinancialExportRows(rows))
+  }
+  return detectedTables.length
+    ? mergeParsedClientImports(parsedRows, parseFinancialExportRows(rows))
+    : parsedRows
 }
 
 function parseClientImportObject(raw: Record<string, unknown>): ParsedClientImport {
@@ -1105,7 +1104,7 @@ function findJsonArrayValue(record: Record<string, unknown>, keys: string[]) {
   return keys.map((key) => record[key]).find(Array.isArray)
 }
 
-function parseClientImportJson(raw: unknown): ParsedClientImport {
+function parseClientImportJson(raw: Record<string, unknown> | unknown[]): ParsedClientImport {
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
     const record = raw as Record<string, unknown>
     const headers = findJsonArrayValue(record, jsonHeaderKeys)
@@ -1117,7 +1116,6 @@ function parseClientImportJson(raw: unknown): ParsedClientImport {
     if (wrappedRows) return parseClientImportJson(wrappedRows)
     return parseClientImportObject(record)
   }
-  if (!Array.isArray(raw)) return emptyParsedClientImport()
   if (raw.every(Array.isArray)) {
     return parseClientImportRows(raw.map((row) => row.map((cell) => (cell == null ? '' : String(cell)))))
   }
@@ -1141,12 +1139,8 @@ function looksLikeMojibake(text: string) {
 export function decodeClientImportText(buffer: ArrayBuffer): string {
   const utf8 = new TextDecoder('utf-8').decode(buffer)
   if (!looksLikeMojibake(utf8)) return utf8
-  try {
-    const gb18030 = new TextDecoder('gb18030').decode(buffer)
-    return looksLikeMojibake(gb18030) ? utf8 : gb18030
-  } catch {
-    return utf8
-  }
+  const gb18030 = new TextDecoder('gb18030').decode(buffer)
+  return looksLikeMojibake(gb18030) ? utf8 : gb18030
 }
 
 export async function parseClientImportWorkbook(buffer: ArrayBuffer): Promise<ParsedClientImport> {
@@ -1154,14 +1148,13 @@ export async function parseClientImportWorkbook(buffer: ArrayBuffer): Promise<Pa
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
   return workbook.SheetNames.reduce<ParsedClientImport>((parsed, sheetName) => {
     const sheet = workbook.Sheets[sheetName]
-    if (!sheet) return parsed
-    const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean | Date | null>>(sheet, {
+    const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean | Date>>(sheet, {
       header: 1,
       blankrows: false,
       defval: '',
       raw: false,
     })
-      .map((row) => row.map((cell) => String(cell ?? '').trim()))
+      .map((row) => row.map((cell) => String(cell).trim()))
       .filter((row) => row.some(Boolean))
     if (!rows.length) return parsed
 

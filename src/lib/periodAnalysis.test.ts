@@ -85,6 +85,7 @@ describe('periodAnalysis', () => {
     expect(formatAnalysisPeriod({ ...baseClient, analysisPeriodType: '季度', analysisYear: '', analysisQuarter: '' })).toBe('未填写年度年未填写季度')
     expect(formatAnalysisPeriod({ ...baseClient, analysisPeriodType: '月度', analysisMonth: '2023-08' })).toBe('2023-08')
     expect(formatAnalysisPeriod({ ...baseClient, analysisPeriodType: '月度', analysisMonth: '' })).toBe('2023年未填写月份')
+    expect(formatAnalysisPeriod({ ...baseClient, analysisPeriodType: '月度', analysisYear: '', analysisMonth: '' })).toBe('未填写年度年未填写月份')
     expect(formatAnalysisPeriod({ ...baseClient, analysisPeriodType: '年初至今', periodStartDate: '2023-01-01', periodEndDate: '2023-05-31' })).toContain('年初至今')
     expect(formatAnalysisPeriod({ ...baseClient, analysisPeriodType: '年初至今', analysisYear: '', periodStartDate: '', periodEndDate: '' })).toContain('未填写开始')
     expect(formatAnalysisPeriod({ ...baseClient, analysisPeriodType: '自定义期间', periodStartDate: '', periodEndDate: '' })).toBe('未填写开始 至 未填写结束')
@@ -105,6 +106,10 @@ describe('periodAnalysis', () => {
     expect(periodProfitTotal(replacement)).toBe(20000)
     expect(periodInvoiceTotal(replacement)).toBe(90000)
     expect(periodRevenueTotal({ ...replacement, months: [], snapshot: { ...replacement.snapshot, monthlyRevenue: 0, annualRevenue: 0 } })).toBe(0)
+    expect(periodRevenueTotal({ ...replacement, analysisPeriodType: '年度', snapshot: { ...replacement.snapshot, annualRevenue: undefined as unknown as number } })).toBe(0)
+    expect(periodCostTotal({ ...replacement, snapshot: { ...replacement.snapshot, monthlyCost: undefined as unknown as number } })).toBe(0)
+    expect(periodProfitTotal({ ...replacement, snapshot: { ...replacement.snapshot, monthlyProfit: undefined as unknown as number } })).toBe(0)
+    expect(periodInvoiceTotal({ ...replacement, snapshot: { ...replacement.snapshot, monthlyInvoice: undefined as unknown as number } })).toBe(0)
   })
 
   it('summarizes continuous period entries for analysis', () => {

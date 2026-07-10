@@ -98,4 +98,56 @@ describe('professionalReportDocumentHtml', () => {
     expect(html).not.toContain('Issue R-001')
     expect(html).not.toContain('code: R-001')
   })
+
+  it('renders empty sections, detailed findings, and medium/low badges', () => {
+    const finding = {
+      ...structuredReport.keyFindings[0],
+      level: '中' as const,
+      deepTemplate: false,
+      materials: [],
+    }
+    const html = professionalReportDocumentHtml({
+      structured: {
+        ...structuredReport,
+        executiveSummary: { ...structuredReport.executiveSummary, overallLevel: '中' },
+        keyFindings: [{ ...finding, level: '低' }],
+        detailedFindings: [finding, { ...finding, id: 'R-DEEP', deepTemplate: true }],
+        taxSummaries: [],
+        actionPlan: [],
+        expertReviewItems: [],
+        followUpCadence: [],
+        deliveryChecklist: [],
+        clientAcknowledgement: [],
+        signOffBlock: [],
+        disclaimers: [],
+        dataQuality: {
+          ...structuredReport.dataQuality,
+          missingFields: [],
+          suggestedMaterials: [],
+        },
+      },
+    }, 'word')
+
+    expect(html).toContain('中风险')
+    expect(html).toContain('低风险')
+    expect(html).toContain('标准规则解释')
+    expect(html).toContain('暂无明确补充资料。')
+    expect(html).toContain('当前无需要列入整改清单的自动风险事项。')
+    expect(html).toContain('<title>历史报告税务风险体检报告</title>')
+  })
+
+  it('renders empty finding summaries and legacy defaults', () => {
+    const emptyStructured = {
+      ...structuredReport,
+      keyFindings: [],
+      detailedFindings: [],
+    }
+    const structuredHtml = professionalReportDocumentHtml({ structured: emptyStructured }, 'word')
+    const legacyHtml = professionalReportDocumentHtml({}, 'word')
+
+    expect(structuredHtml).toContain('当前未形成需要在摘要中重点列示的风险事项。')
+    expect(structuredHtml).toContain('当前未命中自动风险事项。')
+    expect(legacyHtml).toContain('<h1>历史报告税务风险体检报告</h1>')
+    expect(legacyHtml).toContain('生成时间：')
+  })
 })

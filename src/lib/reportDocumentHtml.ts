@@ -9,20 +9,19 @@ export type ReportDocumentHtmlInput = {
   createdAt?: string
   structured?: unknown
 }
-function formatReportDate(date = new Date()) {
-  return date.toLocaleString('zh-CN', { hour12: false })
+function formatReportDate() {
+  return new Date().toLocaleString('zh-CN', { hour12: false })
 }
 
-function plainRiskLevel(level: RiskLevel) {
-  if (level === '高') return '高'
-  if (level === '中') return '中'
-  return '低'
+const badgeStyles: Record<RiskLevel, { color: string; background: string }> = {
+  高: { color: '#b42318', background: '#fef3f2' },
+  中: { color: '#b54708', background: '#fffaeb' },
+  低: { color: '#027a48', background: '#ecfdf3' },
 }
 
 function exportBadgeHtml(level: RiskLevel) {
-  const color = level === '高' ? '#b42318' : level === '中' ? '#b54708' : '#027a48'
-  const background = level === '高' ? '#fef3f2' : level === '中' ? '#fffaeb' : '#ecfdf3'
-  return `<span class="risk-badge" style="color:${color};background:${background};border-color:${color};">${plainRiskLevel(level)}风险</span>`
+  const { color, background } = badgeStyles[level]
+  return `<span class="risk-badge" style="color:${color};background:${background};border-color:${color};">${level}风险</span>`
 }
 
 function exportRows(items: Array<{ label: string; value: string }>) {

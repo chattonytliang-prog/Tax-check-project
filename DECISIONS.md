@@ -64,3 +64,9 @@ Rationale: Filling more fields is not useful if it creates false tax-risk findin
 Decision: When a cleaning draft exists, the model receives that draft as the active company context and does not receive another selected company's risks or report. One natural-language save authorization executes one client write, even if the model proposes multiple compatible save tools.
 
 Rationale: Cross-company context can contaminate financial fields, while duplicate save tools create repeated writes and misleading receipts. Draft scoping and write deduplication make the agent safe to use as the primary import operator.
+
+## 2026-07-10: Core Library Coverage Gate
+
+Decision: `src/lib/*.ts` is the deterministic core-library coverage scope. Statements, branches, functions, and lines must all remain at 100% in CI/local coverage runs. UI composition and Cloudflare request adapters require separate integration/E2E coverage and are not represented as unit coverage.
+
+Rationale: A precise scope prevents a misleading repository-wide claim while making regressions in parsers, rule evaluation, period aggregation, API request handling, and report generation fail immediately.

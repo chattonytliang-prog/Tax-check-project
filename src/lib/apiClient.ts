@@ -1,41 +1,37 @@
-export async function apiGet<T>(url: string): Promise<T> {
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`API request failed: ${response.status}`)
+type ApiErrorBody = { error?: string; detail?: string }
+
+async function apiError(response: Response) {
+  const fallback = `API request failed: ${response.status}`
+  try {
+    const data = await response.json() as ApiErrorBody
+    return data.error || data.detail || fallback
+  } catch {
+    return fallback
   }
+}
+
+async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init)
+  if (!response.ok) throw new Error(await apiError(response))
   return response.json() as Promise<T>
 }
 
-export async function apiSend<T>(url: string, method: 'POST' | 'PUT', body: unknown): Promise<T> {
-  const response = await fetch(url, {
+export function apiGet<T>(url: string) {
+  return requestJson<T>(url)
+}
+
+export function apiSend<T>(url: string, method: 'POST' | 'PUT', body: unknown) {
+  return requestJson<T>(url, {
     method,
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   })
-  if (!response.ok) {
-    const data = await response.json().catch(() => null)
-    throw new Error(data?.error || data?.detail || `API request failed: ${response.status}`)
-  }
-  return response.json() as Promise<T>
 }
 
-export async function apiUpload<T>(url: string, formData: FormData): Promise<T> {
-  const response = await fetch(url, {
-    method: 'POST',
-    body: formData,
-  })
-  if (!response.ok) {
-    const data = await response.json().catch(() => null)
-    throw new Error(data?.error || data?.detail || `API request failed: ${response.status}`)
-  }
-  return response.json() as Promise<T>
+export function apiUpload<T>(url: string, formData: FormData) {
+  return requestJson<T>(url, { method: 'POST', body: formData })
 }
 
-export async function apiDelete<T>(url: string): Promise<T> {
-  const response = await fetch(url, { method: 'DELETE' })
-  if (!response.ok) {
-    const data = await response.json().catch(() => null)
-    throw new Error(data?.error || data?.detail || `API request failed: ${response.status}`)
-  }
-  return response.json() as Promise<T>
+export function apiDelete<T>(url: string) {
+  return requestJson<T>(url, { method: 'DELETE' })
 }

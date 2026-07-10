@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apiDelete, apiGet, apiSend } from './apiClient'
+import { apiDelete, apiGet, apiSend, apiUpload } from './apiClient'
 
-function mockFetch(response: Partial<Response> & { jsonBody?: unknown }) {
+function mockFetch(response: Partial<Response> & { jsonBody?: unknown; jsonError?: Error }) {
   const fetchMock = vi.fn().mockResolvedValue({
     ok: response.ok ?? true,
     status: response.status ?? 200,
-    json: vi.fn().mockResolvedValue(response.jsonBody ?? {}),
+    json: response.jsonError
+      ? vi.fn().mockRejectedValue(response.jsonError)
+      : vi.fn().mockResolvedValue(response.jsonBody ?? {}),
   })
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
@@ -43,5 +45,26 @@ describe('apiClient', () => {
     mockFetch({ ok: false, status: 403, jsonBody: { error: '无权限' } })
 
     await expect(apiDelete('/api/items/1')).rejects.toThrow('无权限')
+  })
+
+  it('uploads form data without adding JSON headers', async () => {
+    const fetchMock = mockFetch({ jsonBody: { stored: true } })
+    const formData = new FormData()
+    formData.append('name', '资料')
+
+    await expect(apiUpload('/api/files', formData)).resolves.toEqual({ stored: true })
+    expect(fetchMock).toHaveBeenCalledWith('/api/files', { method: 'POST', body: formData })
+  })
+
+  it('falls back to response status when an error body has no message', async () => {
+    mockFetch({ ok: false, status: 422, jsonBody: {} })
+
+    await expect(apiSend('/api/items', 'POST', {})).rejects.toThrow('API request failed: 422')
+  })
+
+  it('falls back to response status when an error body is not JSON', async () => {
+    mockFetch({ ok: false, status: 500, jsonError: new Error('invalid json') })
+
+    await expect(apiGet('/api/items')).rejects.toThrow('API request failed: 500')
   })
 })

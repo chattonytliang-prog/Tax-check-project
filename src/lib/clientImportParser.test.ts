@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createClientImportTemplateCsv,
   decodeClientImportText,
+  encodeClientImportCsvCell,
   parseClientImportRows,
   parseClientImportText,
   parseClientImportWorkbook,
@@ -17,6 +18,59 @@ describe('clientImportParser', () => {
     expect(header).toContain('月收入')
     expect(sample).toContain('示例企业（请替换）')
     expect(sample).toContain('管理报表')
+    expect(encodeClientImportCsvCell('普通值')).toBe('普通值')
+    expect(encodeClientImportCsvCell('含,逗号"和换行\n')).toBe('"含,逗号""和换行\n"')
+  })
+
+  it('handles empty, incomplete, and unmapped row collections', () => {
+    expect(parseClientImportRows([])).toEqual({ patch: {}, mappings: [], unmappedHeaders: [], detectedTables: [] })
+    expect(parseClientImportRows([['企业名称', '月收入', '月成本费用']]).patch).toEqual({})
+    expect(parseClientImportRows([['未知字段', '值']]).unmappedHeaders).toEqual(['未知字段'])
+    expect(parseClientImportRows([['taxableIncome', '123']]).patch).toEqual({ taxableIncome: '123' })
+    expect(parseClientImportText('   ')).toEqual({ patch: {}, mappings: [], unmappedHeaders: [], detectedTables: [] })
+  })
+
+  it('handles mixed JSON records and null table cells', () => {
+    const mixed = parseClientImportText(JSON.stringify([
+      null,
+      1,
+      [],
+      { 企业名称: '混合记录企业', 未知字段: '保留为未映射' },
+    ]))
+    const table = parseClientImportText(JSON.stringify([
+      ['企业名称', '月收入'],
+      ['空值企业', null],
+    ]))
+
+    expect(mixed.patch.name).toBe('混合记录企业')
+    expect(mixed.unmappedHeaders).toContain('未知字段')
+    expect(table.patch).toMatchObject({ name: '空值企业', monthlyRevenue: '' })
+  })
+
+  it('decodes GB18030 text and keeps undecodable replacement text stable', () => {
+    const gbHello = Uint8Array.from([0xc4, 0xe3, 0xba, 0xc3]).buffer
+    const invalid = Uint8Array.from([0xff]).buffer
+
+    expect(decodeClientImportText(gbHello)).toBe('你好')
+    expect(decodeClientImportText(invalid)).toContain('�')
+    expect(decodeClientImportText(new TextEncoder().encode('正常文本').buffer)).toBe('正常文本')
+  })
+
+  it('handles compact tabular headers and non-amount financial header cells', () => {
+    const compact = parseClientImportRows([
+      ['企业名称', '月收入'],
+      ['', '100'],
+    ])
+    const financial = parseClientImportRows([
+      ['利润表'],
+      ['项目', '备注'],
+      ['', '仅说明'],
+      ['营业收入', '100'],
+      ['净利润', '100'],
+    ])
+
+    expect(compact.patch).toMatchObject({ name: '', monthlyRevenue: '100' })
+    expect(financial.patch).toEqual({ ytdProfit: 100 })
   })
 
   it('parses template-style CSV headers into client fields', () => {
@@ -1448,5 +1502,58 @@ describe('clientImportParser', () => {
     expect(parsed.patch).not.toHaveProperty('adExpense')
     expect(parsed.patch).not.toHaveProperty('nonOperatingIncome')
     expect(parsed.patch).not.toHaveProperty('nonOperatingExpense')
+  })
+
+  it('extracts financial metadata and text rows without inventing missing values', () => {
+    const parsed = parseClientImportRows([
+      ['资产负债表', '', ''],
+      ['统一社会信用代码：91310000ABCDEF1234', '', '2026年04月'],
+      ['项目', '本期金额', ''],
+      ['企业名称', '表内企业', ''],
+      ['营业收入', '', ''],
+    ])
+
+    expect(parsed.patch).toMatchObject({
+      name: '表内企业',
+      creditCode: '91310000ABCDEF1234',
+      analysisYear: '2026',
+      analysisMonth: '2026-04',
+    })
+    expect(parsed.patch).not.toHaveProperty('mainBusinessRevenue')
+  })
+
+  it('prefers a named accounting source and removes duplicate mappings across sheets', async () => {
+    const XLSX = await import('@e965/xlsx')
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+      ['利润表'],
+      ['项目', '本期金额'],
+      ['营业收入', '100'],
+    ]), '通用表')
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+      ['用友 U8 利润表'],
+      ['项目', '本期金额'],
+      ['营业收入', '200'],
+    ]), '用友表')
+    const buffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+    const parsed = await parseClientImportWorkbook(buffer)
+
+    expect(parsed.detectedSourceType).toBe('用友导出表')
+    expect(parsed.patch.mainBusinessRevenue).toBe(100)
+    expect(parsed.mappings.filter((item) => item.field === 'mainBusinessRevenue')).toHaveLength(1)
+  })
+
+  it('skips empty workbook sheets', async () => {
+    const XLSX = await import('@e965/xlsx')
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([]), '空表')
+    const buffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+
+    await expect(parseClientImportWorkbook(buffer)).resolves.toEqual({
+      patch: {},
+      mappings: [],
+      unmappedHeaders: [],
+      detectedTables: [],
+    })
   })
 })

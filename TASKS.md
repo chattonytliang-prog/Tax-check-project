@@ -10,6 +10,8 @@
 
 ## Done
 
+- 2026-07-10: Refactored repeated API request/error handling into one request core, removed unreachable import fallbacks, tightened financial parser invariants, and enforced 100% statement/branch/function/line coverage for `src/lib` core libraries.
+
 - 2026-07-09: Added natural-language authorization for assistant business-data writes.
 - 2026-07-09: Added backend rejection/audit path for attempted assistant rule-library writes.
 - 2026-07-09: Added first-pass backend structures for assistant cleaning drafts, customer memories, and import audits.
