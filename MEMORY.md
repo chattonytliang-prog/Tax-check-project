@@ -15,3 +15,4 @@
 - Balance-sheet balances and cash-flow payments must not be silently substituted for collection-flow or payroll-expense fields. Missing evidence remains missing and should be confirmed through conversation.
 - An assistant cleaning draft is the active company context. Figures, risks, and report facts from a separately selected company must not leak into that draft.
 - Period semantics are evidence: year-to-date profit/revenue/cost must remain cumulative and must never be rewritten as monthly figures.
+- DeepSeek structured replies use JSON mode, concise output limits, and one automatic repair attempt before the UI receives an invalid-output error.

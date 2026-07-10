@@ -224,6 +224,7 @@ Rules:
 11. Never calculate tax exposure freely. If exposure is not provided by deterministic host rules, say it needs rule-based measurement or accountant confirmation.
 12. If the user has clearly authorized saving/importing in the current message, include create_or_update_company and/or save_period_data tool calls, plus create_import_audit_log. You may also include save_current_draft for compatibility. Set requiresConfirmation to false.
 13. Return strict JSON only, no Markdown.
+14. Keep the JSON concise and complete: answer <= 300 Chinese characters, missingFields <= 8, toolCalls <= 5, suggestions <= 8, and followUps <= 6. Never leave the JSON unfinished.
 
 JSON shape:
 {
@@ -339,7 +340,7 @@ export async function onRequestPost({ request, env }) {
           },
         ],
         temperature: 0.2,
-        max_tokens: 2200,
+        max_tokens: 3200,
         response_format: { type: 'json_object' },
       }),
     })
@@ -357,7 +358,36 @@ export async function onRequestPost({ request, env }) {
 
     const data = await response.json()
     const content = data?.choices?.[0]?.message?.content?.trim() || ''
-    const parsed = parseJsonObject(content)
+    let parsed = parseJsonObject(content)
+    if (!parsed && content) {
+      const repairResponse = await fetch(DEEPSEEK_API_URL, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${env.DEEPSEEK_API_KEY}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: 'system',
+              content: 'Repair the supplied output into one complete strict JSON object. Preserve facts and field semantics. Return JSON only, without Markdown.',
+            },
+            {
+              role: 'user',
+              content: `The previous assistant output was incomplete or invalid. Rebuild it using the required keys answer, draftPatch, missingFields, toolCalls, suggestions, and followUps. Keep answer under 300 Chinese characters and each array under 8 items.\n\nPrevious output:\n${content.slice(0, 12000)}`,
+            },
+          ],
+          temperature: 0,
+          max_tokens: 2400,
+          response_format: { type: 'json_object' },
+        }),
+      })
+      if (repairResponse.ok) {
+        const repairData = await repairResponse.json()
+        parsed = parseJsonObject(repairData?.choices?.[0]?.message?.content?.trim() || '')
+      }
+    }
     if (!parsed) {
       return json({ error: 'AI assistant returned invalid JSON' }, { status: 502 })
     }

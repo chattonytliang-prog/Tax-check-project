@@ -17,3 +17,4 @@
 - 2026-07-09: Added self-healing creation of assistant business tables when `/api/assistant/tools` first writes cleaning drafts, customer memories, or import audits.
 - 2026-07-10: Added regression coverage for multi-row account-balance headers, side-by-side balance sheets, blank financial-statement amounts, and unsafe accounting-balance substitutions.
 - 2026-07-10: Directly passed both local real-customer `.xls` files through parser regression assertions without committing customer data or paths.
+- 2026-07-10: Added concise structured-output limits and automatic JSON repair for incomplete model responses found during live real-data testing.
