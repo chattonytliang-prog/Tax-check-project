@@ -8154,6 +8154,83 @@ function AiAssistantPage({
       console.warn('Assistant thread delete saved locally only.', error)
     })
   }
+  const taxFactAmountFields = ['currentAmount', 'cumulativeAmount', 'endingAmount', 'currentTax', 'taxAmount', 'taxWithheld', 'grossPay', 'currentIncome', 'endingDebit', 'endingCredit']
+  const taxFactKey = (record: ParsedTaxDataIntake['records'][number]) => {
+    const payload = record.payload || {}
+    const businessKey = [
+      payload.statementType,
+      payload.lineCode || payload.lineName,
+      payload.accountCode || payload.accountName,
+      payload.rowNo || payload.itemName,
+      payload.invoiceNo,
+      payload.employeeName || payload.personName,
+      payload.incomeItem,
+    ].filter(Boolean).join('|')
+    return [record.recordType, record.recordSubtype || '', record.periodStart || '', record.periodEnd || '', businessKey].join('::')
+  }
+  const taxFactDisplayName = (record: ParsedTaxDataIntake['records'][number], field: string) => {
+    const payload = record.payload || {}
+    return [
+      payload.lineName,
+      payload.accountName,
+      payload.itemName,
+      payload.invoiceNo,
+      payload.employeeName || payload.personName,
+      field,
+    ].filter(Boolean).join(' / ') || `${record.recordType} / ${field}`
+  }
+  const buildCrossMaterialConfirmationQuestions = (
+    incomingDraft: AiAssistantDraft,
+    incomingIntake?: ParsedTaxDataIntake,
+    existingDrafts: AiAssistantDraft[] = assistantDrafts,
+  ) => {
+    if (!incomingIntake?.records.length) return { questions: [] as IntakeConfirmationQuestion[], warnings: [] as string[] }
+    const existingFacts = new Map<string, { amount: number; draft: AiAssistantDraft; record: ParsedTaxDataIntake['records'][number]; field: string }>()
+    existingDrafts.forEach((draft) => {
+      const intake = structuredIntakeByDraftId.current.get(draft.id)
+      if (!intake?.records.length) return
+      if (draft.client.name && incomingDraft.client.name && draft.client.name !== incomingDraft.client.name) return
+      intake.records.forEach((record) => {
+        taxFactAmountFields.forEach((field) => {
+          const amount = Number(record.payload?.[field])
+          if (!Number.isFinite(amount)) return
+          existingFacts.set(`${taxFactKey(record)}::${field}`, { amount, draft, record, field })
+        })
+      })
+    })
+
+    const questions: IntakeConfirmationQuestion[] = []
+    const warnings: string[] = []
+    const matchedFacts = new Set<string>()
+    incomingIntake.records.forEach((record) => {
+      taxFactAmountFields.forEach((field) => {
+        const incomingAmount = Number(record.payload?.[field])
+        if (!Number.isFinite(incomingAmount)) return
+        const key = `${taxFactKey(record)}::${field}`
+        const existing = existingFacts.get(key)
+        if (!existing) return
+        const diff = Math.abs(incomingAmount - existing.amount)
+        const label = taxFactDisplayName(record, field)
+        if (diff <= 0.01) {
+          if (!matchedFacts.has(key)) {
+            matchedFacts.add(key)
+            warnings.push(`跨资料一致：${label} 在「${existing.draft.fileName || existing.draft.sourceType}」和「${incomingDraft.fileName || incomingDraft.sourceType}」中金额一致。`)
+          }
+          return
+        }
+        questions.push({
+          id: `crossMaterial:${key}`.replace(/[^a-z0-9:_-]/gi, '_'),
+          field: `crossMaterial.${field}`,
+          label: '跨资料金额差异',
+          question: `「${existing.draft.fileName || existing.draft.sourceType}」与「${incomingDraft.fileName || incomingDraft.sourceType}」都包含「${label}」，但金额不一致：前者 ${existing.amount}，后者 ${incomingAmount}，差额 ${diff.toFixed(2)}。请客户确认哪一份为准，或说明是否存在期间/口径差异。`,
+          severity: 'required',
+          source: incomingDraft.fileName || incomingDraft.sourceType,
+          evidence: `${existing.record.periodStart || ''} 至 ${existing.record.periodEnd || ''}`,
+        })
+      })
+    })
+    return { questions: uniqueByQuestion(questions).slice(0, 6), warnings: warnings.slice(0, 6) }
+  }
   const buildAssistantDraft = (
     patchData: Partial<Client>,
     options: {
@@ -8242,6 +8319,28 @@ function AiAssistantPage({
       sourceType: parsedImport.detectedSourceType || (fileName ? '上传资料' : '粘贴资料'),
       taxDataIntake: parsedImport.taxDataIntake,
     })
+    const crossMaterialCheck = buildCrossMaterialConfirmationQuestions(draft, parsedImport.taxDataIntake)
+    if (crossMaterialCheck.questions.length || crossMaterialCheck.warnings.length) {
+      draft.confirmationQuestions = uniqueByQuestion([
+        ...crossMaterialCheck.questions,
+        ...draft.confirmationQuestions,
+      ]).slice(0, 8)
+      draft.taxDataWarnings = uniqueLabels([
+        ...(draft.taxDataWarnings || []),
+        ...crossMaterialCheck.warnings,
+      ]).slice(0, 12)
+      draft.changeLog = [
+        {
+          id: crypto.randomUUID(),
+          at: formatDate(),
+          source: '跨资料校验',
+          detail: crossMaterialCheck.questions.length
+            ? `发现 ${crossMaterialCheck.questions.length} 个跨资料金额差异，需客户确认。`
+            : `已有 ${crossMaterialCheck.warnings.length} 个字段被其他客户资料互相佐证。`,
+        },
+        ...draft.changeLog,
+      ]
+    }
     if (parsedImport.taxDataIntake?.records.length) structuredIntakeByDraftId.current.set(draft.id, parsedImport.taxDataIntake)
     setActiveAssistantDrafts((current) => [draft, ...current].slice(0, 5))
     setActiveAssistantMaterialSummary({
@@ -8251,7 +8350,7 @@ function AiAssistantPage({
       mappedFields: parsedImport.mappings.slice(0, 40),
       unmappedHeaders: parsedImport.unmappedHeaders.slice(0, 40),
       patchPreview: patchData,
-      confirmationQuestions: rawMaterial?.confirmationQuestions || [],
+      confirmationQuestions: draft.confirmationQuestions,
     })
     return draft
   }
