@@ -192,8 +192,18 @@ function normalizeSourceFiles(args, body, client) {
       contentType: material.type,
       fileSize: material.size,
       storageKey: material.objectKey,
-      documentType: material.sourceType || args.documentType || 'unknown',
+      documentType: material.documentType || material.sourceType || args.documentType || 'unknown',
+      sourceSystem: material.sourceSystem || args.sourceSystem,
+      periodStart: material.periodStart || args.periodStart,
+      periodEnd: material.periodEnd || args.periodEnd,
       parseStatus: 'parsed',
+      evidence: {
+        classificationConfidence: material.classificationConfidence || '',
+        classificationReasons: material.classificationReasons || [],
+        periodType: material.periodType || '',
+        periodEvidence: material.periodEvidence || '',
+        requiresSpecializedParser: material.requiresSpecializedParser === true,
+      },
     }))
 
   return sourceFiles.map((item) => ({

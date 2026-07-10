@@ -67,6 +67,13 @@ import {
   type ImportMappingPreview,
 } from './lib/clientImportParser'
 import {
+  classifyIntakeMaterial,
+  detectIntakePeriod,
+  type IntakeClassification,
+  type IntakeDocumentType,
+  type IntakePeriodType,
+} from './lib/intakeClassifier'
+import {
   areMonthsContinuous,
   createPeriodEntry,
   findPeriodConsistencyWarnings,
@@ -304,6 +311,7 @@ type AiAssistantToolCall = {
     | 'attach_source_material'
     | 'save_customer_memory'
     | 'create_import_audit_log'
+    | 'save_standardized_tax_data'
     | 'save_current_draft'
     | 'ask_missing_fields'
     | 'run_basic_compliance'
@@ -346,6 +354,15 @@ type AssistantRawMaterial = {
   id: string
   name: string
   sourceType: string
+  documentType?: IntakeDocumentType
+  classificationConfidence?: IntakeClassification['confidence']
+  classificationReasons?: string[]
+  sourceSystem?: string
+  requiresSpecializedParser?: boolean
+  periodType?: IntakePeriodType
+  periodStart?: string
+  periodEnd?: string
+  periodEvidence?: string
   size?: number
   contentType?: string
   objectKey?: string
@@ -389,6 +406,15 @@ type AssistantThread = {
 type AssistantMaterialSummary = {
   fileName?: string
   sourceType: string
+  documentType?: IntakeDocumentType
+  classificationConfidence?: IntakeClassification['confidence']
+  classificationReasons?: string[]
+  sourceSystem?: string
+  requiresSpecializedParser?: boolean
+  periodType?: IntakePeriodType
+  periodStart?: string
+  periodEnd?: string
+  periodEvidence?: string
   detectedTables: string[]
   mappedFields: Array<{ source: string; field: string; label: string }>
   unmappedHeaders: string[]
@@ -8264,6 +8290,39 @@ function AiAssistantPage({
       return fallback
     }
   }
+  const buildAssistantIntakeMetadata = (
+    fileName: string,
+    parsedImport?: {
+      mappings: ImportMappingPreview[]
+      unmappedHeaders: string[]
+      detectedTables: string[]
+      detectedSourceType?: string
+    },
+  ) => {
+    const signal = {
+      fileName,
+      sheetNames: parsedImport?.detectedTables || [],
+      textSample: [
+        parsedImport?.detectedSourceType || '',
+        ...(parsedImport?.detectedTables || []),
+        ...(parsedImport?.mappings || []).map((item) => `${item.source} ${item.label} ${item.field}`),
+        ...(parsedImport?.unmappedHeaders || []),
+      ].filter(Boolean).join('\n').slice(0, 4000),
+    }
+    const classification = classifyIntakeMaterial(signal)
+    const period = detectIntakePeriod(signal)
+    return {
+      documentType: classification.documentType,
+      classificationConfidence: classification.confidence,
+      classificationReasons: classification.reasons,
+      sourceSystem: classification.sourceSystem,
+      requiresSpecializedParser: classification.requiresSpecializedParser,
+      periodType: period.periodType,
+      periodStart: period.periodStart,
+      periodEnd: period.periodEnd,
+      periodEvidence: period.evidence,
+    }
+  }
   const assistantBackendWriteToolNames = new Set<AiAssistantToolCall['name']>([
     'save_cleaning_draft',
     'create_or_update_company',
@@ -8271,6 +8330,7 @@ function AiAssistantPage({
     'attach_source_material',
     'save_customer_memory',
     'create_import_audit_log',
+    'save_standardized_tax_data',
     'save_current_draft',
   ])
   const assistantClientWriteToolNames = new Set<AiAssistantToolCall['name']>([
@@ -8314,6 +8374,11 @@ function AiAssistantPage({
     try {
       const rawMaterial = await uploadAssistantMaterial(file)
       if (!canParseAssistantFile(file.name)) {
+        const metadata = buildAssistantIntakeMetadata(file.name)
+        const enrichedRawMaterial = {
+          ...rawMaterial,
+          ...metadata,
+        }
         updateAssistantThreadTitle(file.name)
         setActiveAssistantMessages((current) => [
           ...current,
@@ -8325,7 +8390,16 @@ function AiAssistantPage({
         ])
         setActiveAssistantMaterialSummary({
           fileName: file.name,
-          sourceType: rawMaterial.sourceType,
+          sourceType: enrichedRawMaterial.sourceType,
+          documentType: enrichedRawMaterial.documentType,
+          classificationConfidence: enrichedRawMaterial.classificationConfidence,
+          classificationReasons: enrichedRawMaterial.classificationReasons,
+          sourceSystem: enrichedRawMaterial.sourceSystem,
+          requiresSpecializedParser: enrichedRawMaterial.requiresSpecializedParser,
+          periodType: enrichedRawMaterial.periodType,
+          periodStart: enrichedRawMaterial.periodStart,
+          periodEnd: enrichedRawMaterial.periodEnd,
+          periodEvidence: enrichedRawMaterial.periodEvidence,
           detectedTables: [],
           mappedFields: [],
           unmappedHeaders: [],
@@ -8338,8 +8412,10 @@ function AiAssistantPage({
       const parsedImport = isExcelFile
         ? await parseClientImportWorkbook(fileBuffer)
         : parseClientImportText(decodeClientImportText(fileBuffer))
+      const metadata = buildAssistantIntakeMetadata(file.name, parsedImport)
       const draft = addAssistantDraftFromParsedImport(parsedImport, file.name, {
         ...rawMaterial,
+        ...metadata,
         sourceType: parsedImport.detectedSourceType || '上传资料',
       })
       if (!draft) {
@@ -8348,6 +8424,7 @@ function AiAssistantPage({
       }
       const materialSummary: AssistantMaterialSummary = {
         fileName: file.name,
+        ...metadata,
         sourceType: parsedImport.detectedSourceType || '上传资料',
         detectedTables: parsedImport.detectedTables,
         mappedFields: parsedImport.mappings.slice(0, 40),
