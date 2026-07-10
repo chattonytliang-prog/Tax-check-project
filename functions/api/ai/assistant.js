@@ -2,7 +2,7 @@ import { badRequest, json, readJson, requireDb, serverError } from '../_utils.js
 import { requireUser } from '../auth/_auth.js'
 
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
-const DEFAULT_MODEL = 'deepseek-v4-flash'
+const DEFAULT_MODEL = 'deepseek-v4-pro'
 
 function compactClient(client) {
   return {

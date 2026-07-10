@@ -32,7 +32,7 @@ Workers 和 Pages -> tax-check-project -> 设置 -> 变量和密钥
 
 ```text
 变量名：DEEPSEEK_MODEL
-变量值：deepseek-v4-flash
+变量值：deepseek-v4-pro
 ```
 
 保存后，需要重新部署一次 Pages。
