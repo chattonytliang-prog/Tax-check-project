@@ -3465,6 +3465,34 @@ textarea:focus {
   overflow-wrap: anywhere;
 }
 
+@media (max-width: 1280px) {
+  .assistant-workspace,
+  .assistant-workspace.history-open {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .assistant-workspace.history-open {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+
+  .assistant-status-panel {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .assistant-status-panel div {
+    border-right: 1px solid rgba(12, 140, 130, 0.1);
+    border-bottom: 0;
+    padding-right: 10px;
+    padding-bottom: 0;
+  }
+
+  .assistant-status-panel div:last-child {
+    border-right: 0;
+    padding-right: 0;
+  }
+}
+
 .assistant-new-thread {
   justify-content: center;
   width: 100%;
@@ -4458,6 +4486,19 @@ textarea:focus {
 
   .assistant-status-panel {
     order: 3;
+    grid-template-columns: 1fr;
+  }
+
+  .assistant-status-panel div {
+    border-right: 0;
+    border-bottom: 1px solid rgba(12, 140, 130, 0.1);
+    padding-right: 0;
+    padding-bottom: 10px;
+  }
+
+  .assistant-status-panel div:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
   }
 
   .ai-assistant-chat {
