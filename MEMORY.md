@@ -18,3 +18,4 @@
 - DeepSeek structured replies use JSON mode, concise output limits, and one automatic repair attempt before the UI receives an invalid-output error.
 - Values explicitly supplied by source files or confirmed in assistant conversation override auto-derived formulas; cumulative values must be marked as explicit evidence before metric derivation runs.
 - Runtime stability: keep ordinary concurrency at three or fewer and heavy tasks at one or two; only one writer per project directory; continue long work from Wiki/TASKS checkpoints after disconnects without resetting the project.
+- Default role model is GPT-5.5 unless the owner or CEO explicitly changes it later; this does not alter project memory, task, or permission boundaries.
