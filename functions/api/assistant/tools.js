@@ -1,5 +1,6 @@
 import { badRequest, json, nowIso, readJson, requireDb, serverError } from '../_utils.js'
 import { requireUser } from '../auth/_auth.js'
+import { ensureTaxDataIntakeTables } from '../_tax_data_schema.js'
 
 const allowedToolNames = new Set([
   'create_cleaning_draft',
@@ -10,6 +11,7 @@ const allowedToolNames = new Set([
   'attach_source_material',
   'save_customer_memory',
   'create_import_audit_log',
+  'save_standardized_tax_data',
   'save_current_draft',
   'ask_missing_fields',
   'run_basic_compliance',
@@ -27,6 +29,7 @@ const backendWriteToolNames = new Set([
   'attach_source_material',
   'save_customer_memory',
   'create_import_audit_log',
+  'save_standardized_tax_data',
   'save_current_draft',
 ])
 
@@ -53,6 +56,8 @@ const blockedRuleWriteToolNames = new Set([
   'toggle_risk_rule',
   'write_rule_library',
   'update_rule_library',
+  'write_tax_rule_schema',
+  'update_tax_rule_schema',
 ])
 
 const assistantBusinessTableStatements = [
@@ -161,6 +166,52 @@ function normalizeMaterialIds(value) {
   return Array.isArray(value)
     ? value.map((item) => normalizeString(item, 120)).filter(Boolean).slice(0, 20)
     : []
+}
+
+function normalizeObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+}
+
+function normalizeArray(value, limit = 50) {
+  return Array.isArray(value) ? value.slice(0, limit) : []
+}
+
+function normalizeIsoDate(value) {
+  const clean = normalizeString(value, 20)
+  return /^\d{4}-\d{2}-\d{2}$/.test(clean) ? clean : ''
+}
+
+function normalizeSourceFiles(args, body, client) {
+  const explicit = normalizeArray(args.sourceFiles, 40)
+  const rawMaterials = normalizeArray(body?.currentDraft?.rawMaterials, 40)
+  const sourceFiles = explicit.length
+    ? explicit
+    : rawMaterials.map((material) => ({
+      materialId: material.id,
+      fileName: material.name,
+      contentType: material.type,
+      fileSize: material.size,
+      storageKey: material.objectKey,
+      documentType: material.sourceType || args.documentType || 'unknown',
+      parseStatus: 'parsed',
+    }))
+
+  return sourceFiles.map((item) => ({
+    id: normalizeString(item.id || item.sourceFileId || crypto.randomUUID(), 120),
+    materialId: normalizeString(item.materialId || item.material_id, 120),
+    clientId: client?.id || normalizeString(item.clientId, 120),
+    fileName: normalizeString(item.fileName || item.name || 'uploaded-material', 240),
+    fileHash: normalizeString(item.fileHash || item.hash, 160),
+    contentType: normalizeString(item.contentType || item.type, 120),
+    fileSize: Number.isFinite(Number(item.fileSize || item.size)) ? Number(item.fileSize || item.size) : 0,
+    documentType: normalizeString(item.documentType || item.kind || args.documentType || 'unknown', 80),
+    sourceSystem: normalizeString(item.sourceSystem || args.sourceSystem, 120),
+    periodStart: normalizeIsoDate(item.periodStart || args.periodStart),
+    periodEnd: normalizeIsoDate(item.periodEnd || args.periodEnd),
+    parseStatus: normalizeString(item.parseStatus || 'parsed', 40),
+    storageKey: normalizeString(item.storageKey || item.objectKey, 240),
+    evidence: normalizeObject(item.evidence),
+  }))
 }
 
 function isMissingTableError(error) {
@@ -361,6 +412,241 @@ async function writeImportAudit(db, auth, toolCall, client, body, status) {
   return saved
 }
 
+async function saveStandardizedTaxData(db, auth, toolCall, client, body) {
+  const args = toolCall.arguments || {}
+  const now = nowIso()
+  const batchId = normalizeString(args.batchId || body?.currentDraft?.id || crypto.randomUUID(), 120)
+  const threadId = normalizeString(args.threadId || body?.threadId || body?.assistantContext?.activeThread?.id, 120)
+  const sourceSystem = normalizeString(args.sourceSystem || body?.assistantContext?.latestMaterialSummary?.sourceSystem, 120)
+  const periodStart = normalizeIsoDate(args.periodStart || body?.currentDraft?.client?.periodStartDate)
+  const periodEnd = normalizeIsoDate(args.periodEnd || body?.currentDraft?.client?.periodEndDate)
+  const sourceFiles = normalizeSourceFiles(args, body, client)
+  const records = normalizeArray(args.records || args.standardRecords, 200)
+  const periods = normalizeArray(args.periods, 40)
+  const evidenceFields = normalizeArray(args.evidenceFields || args.evidence, 300)
+  const conflicts = normalizeArray(args.conflicts, 80)
+
+  await ensureTaxDataIntakeTables(db)
+
+  await db
+    .prepare(
+      `INSERT INTO tax_data_import_batches (
+        id, owner_user_id, thread_id, client_id, client_name, client_credit_code, period_start, period_end,
+        source_system, status, summary_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        owner_user_id = excluded.owner_user_id,
+        thread_id = excluded.thread_id,
+        client_id = excluded.client_id,
+        client_name = excluded.client_name,
+        client_credit_code = excluded.client_credit_code,
+        period_start = excluded.period_start,
+        period_end = excluded.period_end,
+        source_system = excluded.source_system,
+        status = excluded.status,
+        summary_json = excluded.summary_json,
+        updated_at = excluded.updated_at
+      WHERE tax_data_import_batches.owner_user_id = excluded.owner_user_id`,
+    )
+    .bind(
+      batchId,
+      auth.user.id,
+      threadId,
+      client?.id || normalizeString(args.clientId, 120),
+      client?.name || normalizeString(args.clientName, 200),
+      client?.creditCode || normalizeString(args.clientCreditCode, 80),
+      periodStart,
+      periodEnd,
+      sourceSystem,
+      normalizeString(args.status || 'draft', 40),
+      JSON.stringify({
+        reason: toolCall.reason,
+        documentTypes: sourceFiles.map((item) => item.documentType),
+        recordCount: records.length,
+        evidenceCount: evidenceFields.length,
+        conflictCount: conflicts.length,
+        summary: normalizeObject(args.summary),
+      }),
+      now,
+      now,
+    )
+    .run()
+
+  for (const sourceFile of sourceFiles) {
+    await db
+      .prepare(
+        `INSERT INTO tax_data_source_files (
+          id, owner_user_id, batch_id, material_id, client_id, file_name, file_hash, content_type,
+          file_size, document_type, source_system, period_start, period_end, parse_status,
+          storage_key, evidence_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET
+          batch_id = excluded.batch_id,
+          client_id = excluded.client_id,
+          file_name = excluded.file_name,
+          file_hash = excluded.file_hash,
+          content_type = excluded.content_type,
+          file_size = excluded.file_size,
+          document_type = excluded.document_type,
+          source_system = excluded.source_system,
+          period_start = excluded.period_start,
+          period_end = excluded.period_end,
+          parse_status = excluded.parse_status,
+          storage_key = excluded.storage_key,
+          evidence_json = excluded.evidence_json
+        WHERE tax_data_source_files.owner_user_id = excluded.owner_user_id`,
+      )
+      .bind(
+        sourceFile.id,
+        auth.user.id,
+        batchId,
+        sourceFile.materialId,
+        sourceFile.clientId,
+        sourceFile.fileName,
+        sourceFile.fileHash,
+        sourceFile.contentType,
+        sourceFile.fileSize,
+        sourceFile.documentType,
+        sourceFile.sourceSystem,
+        sourceFile.periodStart,
+        sourceFile.periodEnd,
+        sourceFile.parseStatus,
+        sourceFile.storageKey,
+        JSON.stringify(sourceFile.evidence),
+      )
+      .run()
+  }
+
+  for (const period of periods) {
+    const start = normalizeIsoDate(period.periodStart || period.start)
+    const end = normalizeIsoDate(period.periodEnd || period.end)
+    const periodClientId = client?.id || normalizeString(period.clientId || args.clientId, 120)
+    if (!periodClientId || !start || !end) continue
+    await db
+      .prepare(
+        `INSERT INTO tax_data_periods (
+          id, owner_user_id, client_id, batch_id, period_type, period_start, period_end,
+          status, data_basis, source_file_ids, validation_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(owner_user_id, client_id, period_type, period_start, period_end) DO UPDATE SET
+          batch_id = excluded.batch_id,
+          status = excluded.status,
+          data_basis = excluded.data_basis,
+          source_file_ids = excluded.source_file_ids,
+          validation_json = excluded.validation_json,
+          updated_at = excluded.updated_at`,
+      )
+      .bind(
+        normalizeString(period.id || crypto.randomUUID(), 120),
+        auth.user.id,
+        periodClientId,
+        batchId,
+        normalizeString(period.periodType || period.type || 'monthly', 40),
+        start,
+        end,
+        normalizeString(period.status || 'draft', 40),
+        normalizeString(period.dataBasis || args.dataBasis, 120),
+        JSON.stringify(normalizeMaterialIds(period.sourceFileIds || sourceFiles.map((item) => item.id))),
+        JSON.stringify(normalizeObject(period.validation)),
+        now,
+        now,
+      )
+      .run()
+  }
+
+  for (const record of records) {
+    const recordType = normalizeString(record.recordType || record.type || record.category, 80)
+    if (!recordType) continue
+    await db
+      .prepare(
+        `INSERT INTO tax_data_standard_records (
+          id, owner_user_id, batch_id, client_id, source_file_id, record_type, record_subtype,
+          period_start, period_end, record_json, confidence, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      )
+      .bind(
+        normalizeString(record.id || crypto.randomUUID(), 120),
+        auth.user.id,
+        batchId,
+        client?.id || normalizeString(record.clientId || args.clientId, 120),
+        normalizeString(record.sourceFileId, 120),
+        recordType,
+        normalizeString(record.recordSubtype || record.subtype, 80),
+        normalizeIsoDate(record.periodStart || args.periodStart),
+        normalizeIsoDate(record.periodEnd || args.periodEnd),
+        JSON.stringify(normalizeObject(record.payload || record.data || record)),
+        normalizeString(record.confidence || 'medium', 40),
+      )
+      .run()
+  }
+
+  for (const evidence of evidenceFields) {
+    const targetField = normalizeString(evidence.targetField || evidence.field, 120)
+    if (!targetField) continue
+    await db
+      .prepare(
+        `INSERT INTO tax_data_evidence_fields (
+          id, owner_user_id, batch_id, source_file_id, target_table, target_id, target_field,
+          raw_value, normalized_value, confidence, sheet_name, row_no, column_no, page_no, note, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      )
+      .bind(
+        normalizeString(evidence.id || crypto.randomUUID(), 120),
+        auth.user.id,
+        batchId,
+        normalizeString(evidence.sourceFileId, 120),
+        normalizeString(evidence.targetTable || 'tax_data_standard_records', 120),
+        normalizeString(evidence.targetId, 120),
+        targetField,
+        normalizeString(evidence.rawValue, 1000),
+        normalizeString(evidence.normalizedValue, 1000),
+        normalizeString(evidence.confidence || 'medium', 40),
+        normalizeString(evidence.sheetName, 120),
+        Number.isFinite(Number(evidence.rowNo)) ? Number(evidence.rowNo) : null,
+        Number.isFinite(Number(evidence.columnNo)) ? Number(evidence.columnNo) : null,
+        Number.isFinite(Number(evidence.pageNo)) ? Number(evidence.pageNo) : null,
+        normalizeString(evidence.note, 500),
+      )
+      .run()
+  }
+
+  for (const conflict of conflicts) {
+    await db
+      .prepare(
+        `INSERT INTO tax_data_conflicts (
+          id, owner_user_id, batch_id, client_id, conflict_type, field_name, existing_value,
+          incoming_value, source_file_ids, severity, status, resolution, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        normalizeString(conflict.id || crypto.randomUUID(), 120),
+        auth.user.id,
+        batchId,
+        client?.id || normalizeString(conflict.clientId || args.clientId, 120),
+        normalizeString(conflict.conflictType || conflict.type || 'field_conflict', 80),
+        normalizeString(conflict.fieldName || conflict.field, 120),
+        normalizeString(conflict.existingValue, 1000),
+        normalizeString(conflict.incomingValue, 1000),
+        JSON.stringify(normalizeMaterialIds(conflict.sourceFileIds || sourceFiles.map((item) => item.id))),
+        normalizeString(conflict.severity || 'medium', 40),
+        normalizeString(conflict.status || 'open', 40),
+        normalizeString(conflict.resolution, 1000),
+        now,
+        now,
+      )
+      .run()
+  }
+
+  return {
+    batchId,
+    sourceFileCount: sourceFiles.length,
+    periodCount: periods.length,
+    recordCount: records.length,
+    evidenceCount: evidenceFields.length,
+    conflictCount: conflicts.length,
+  }
+}
+
 async function writeAssistantAuditLog(db, auth, toolCall, client, status) {
   try {
     await db
@@ -490,6 +776,19 @@ export async function onRequestPost({ request, env }) {
           name: toolCall.name,
           status: importAuditSaved ? 'saved' : 'accepted',
           message: importAuditSaved ? '已记录导入审计。' : '导入审计已在当前对话中保留，审计表尚未迁移。',
+        })
+        continue
+      }
+
+      if (toolCall.name === 'save_standardized_tax_data') {
+        const saved = await saveStandardizedTaxData(db, auth, toolCall, draftClient, body)
+        await writeImportAudit(db, auth, toolCall, draftClient, body, 'saved_standardized_tax_data')
+        await writeAssistantAuditLog(db, auth, toolCall, draftClient, 'saved_standardized_tax_data')
+        results.push({
+          name: toolCall.name,
+          status: 'saved',
+          message: `已保存标准化资料批次 ${saved.batchId}，包含 ${saved.sourceFileCount} 个原始文件、${saved.recordCount} 条标准记录、${saved.conflictCount} 条待确认冲突。`,
+          intake: saved,
         })
         continue
       }

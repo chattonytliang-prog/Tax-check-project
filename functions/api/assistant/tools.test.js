@@ -19,11 +19,14 @@ describe('assistant business tool execution', () => {
     const result = dedupeToolCalls([
       call('attach_source_material'),
       call('attach_source_material'),
+      call('save_standardized_tax_data'),
+      call('save_standardized_tax_data'),
       call('save_customer_memory'),
     ])
 
     expect(result.map((item) => item.name)).toEqual([
       'attach_source_material',
+      'save_standardized_tax_data',
       'save_customer_memory',
     ])
   })

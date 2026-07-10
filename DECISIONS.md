@@ -70,3 +70,21 @@ Rationale: Cross-company context can contaminate financial fields, while duplica
 Decision: `src/lib/*.ts` is the deterministic core-library coverage scope. Statements, branches, functions, and lines must all remain at 100% in CI/local coverage runs. UI composition and Cloudflare request adapters require separate integration/E2E coverage and are not represented as unit coverage.
 
 Rationale: A precise scope prevents a misleading repository-wide claim while making regressions in parsers, rule evaluation, period aggregation, API request handling, and report generation fail immediately.
+
+## 2026-07-10: Full Source-Backed Tax Data Intake
+
+Decision: Customer uploads must enter a standard intake layer before they are used for filing checks, professional risk analysis, or reports.
+
+Standard intake scope:
+- Import batches and original source-file metadata
+- Period records
+- Financial statements and statement lines
+- Account balances and ledger entries
+- VAT returns and VAT return lines
+- Invoice summaries and invoice lines
+- Payroll runs and payroll lines
+- IIT withholding returns and lines
+- Evidence fields and unresolved conflicts
+- Generic standard records for future material types
+
+Rationale: The assistant should feel like it can complete the work from conversation, but every stored value needs source evidence, period context, conflict handling, and deterministic validation. This keeps AI useful without letting it silently overwrite data or bypass professional rules.

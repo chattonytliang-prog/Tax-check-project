@@ -6,11 +6,13 @@
 - Expand assistant tool coverage from saving cleaning drafts toward source material records, customer memory, basic compliance checks, professional risk detection, and report generation.
 - Keep all assistant writes auditable.
 - Continue official-only tax bureau form research before implementing full filing-field dictionaries.
+- Build specialized parsers for the full intake tables: VAT PDF returns, invoice list workbooks, payroll sheets, IIT withholding sheets, financial statements, account balances, and ledgers.
 - Clean up duplicate/polluted Beijing customer test records only after explicit deletion approval; do not let test cleanup alter rule-library data.
 
 ## Done
 
 - 2026-07-10: Refactored repeated API request/error handling into one request core, removed unreachable import fallbacks, tightened financial parser invariants, and enforced 100% statement/branch/function/line coverage for `src/lib` core libraries.
+- 2026-07-10: Added the full standard tax-data intake schema, assistant `save_standardized_tax_data` tool permission, deterministic material classifier, period detector, and tests. Real Beijing customer materials were read-only audited and all 9 files classified with correct periods; no customer data was committed.
 
 - 2026-07-09: Added natural-language authorization for assistant business-data writes.
 - 2026-07-09: Added backend rejection/audit path for attempted assistant rule-library writes.

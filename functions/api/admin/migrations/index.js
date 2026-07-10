@@ -1,5 +1,6 @@
 import { json, requireDb, serverError } from '../../_utils.js'
 import { requireAdmin } from '../../auth/_auth.js'
+import { taxDataIntakeMigration } from '../../_tax_data_schema.js'
 
 const assistantBusinessToolMigration = {
   id: '0007_assistant_business_tools',
@@ -64,13 +65,15 @@ async function tableExists(db, tableName) {
   return Boolean(row)
 }
 
-async function migrationStatus(db) {
+const migrations = [assistantBusinessToolMigration, taxDataIntakeMigration]
+
+async function migrationStatus(db, migration) {
   const tables = {}
-  for (const table of assistantBusinessToolMigration.tables) {
+  for (const table of migration.tables) {
     tables[table] = await tableExists(db, table)
   }
   return {
-    id: assistantBusinessToolMigration.id,
+    id: migration.id,
     applied: Object.values(tables).every(Boolean),
     tables,
   }
@@ -82,7 +85,7 @@ export async function onRequestGet({ request, env }) {
     const auth = await requireAdmin(request, db)
     if (auth.response) return auth.response
 
-    return json({ migrations: [await migrationStatus(db)] })
+    return json({ migrations: await Promise.all(migrations.map((migration) => migrationStatus(db, migration))) })
   } catch (error) {
     return serverError(error)
   }
@@ -94,8 +97,10 @@ export async function onRequestPost({ request, env }) {
     const auth = await requireAdmin(request, db)
     if (auth.response) return auth.response
 
-    for (const statement of assistantBusinessToolMigration.statements) {
-      await db.prepare(statement).run()
+    for (const migration of migrations) {
+      for (const statement of migration.statements) {
+        await db.prepare(statement).run()
+      }
     }
 
     await db
@@ -107,11 +112,11 @@ export async function onRequestPost({ request, env }) {
         auth.admin.id,
         auth.user.id,
         'admin.migration_apply',
-        assistantBusinessToolMigration.id,
+        migrations.map((migration) => migration.id).join(','),
       )
       .run()
 
-    return json({ migration: await migrationStatus(db) })
+    return json({ migrations: await Promise.all(migrations.map((migration) => migrationStatus(db, migration))) })
   } catch (error) {
     return serverError(error)
   }

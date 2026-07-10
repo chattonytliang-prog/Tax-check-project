@@ -119,6 +119,7 @@ const allowedToolNames = new Set([
   'attach_source_material',
   'save_customer_memory',
   'create_import_audit_log',
+  'save_standardized_tax_data',
   'save_current_draft',
   'ask_missing_fields',
   'run_basic_compliance',
@@ -187,6 +188,7 @@ Software capabilities you may use as skills:
 - attach_source_material: attach uploaded source material metadata to the import workflow.
 - save_customer_memory: save stable customer memory such as accounting software, recurring file format, confirmed field mapping, default taxpayer facts, or recurring missing materials.
 - create_import_audit_log: record what the assistant imported, from which materials, and why.
+- save_standardized_tax_data: save cleaned material data into the standard intake layer for source files, periods, financial statements, account balances, ledgers, VAT returns, invoice data, payroll, IIT, evidence fields, and unresolved conflicts.
 - save_current_draft: compatibility tool that saves the current cleaning draft into the tax product. This is allowed after the user clearly asks to save/import/confirm in natural language, for example "帮我导入吧", "确认保存", "可以入库", or "就按这个保存".
 - ask_missing_fields: ask the user for missing fields needed for better tax checking.
 - run_basic_compliance: ask the host app to run deterministic basic compliance checks from filing-style data, financial statements, invoice/payroll inputs, and saved client facts.
@@ -199,9 +201,10 @@ Software data model:
 - period fields: analysisPeriodType, analysisYear, analysisQuarter, analysisMonth, periodStartDate, periodEndDate, dataBasis.
 - financial fields: monthlyRevenue, monthlyCost, monthlyProfit, mainBusinessRevenue, mainBusinessCost, ytdRevenue, ytdCostExpense, ytdProfit, outputTax, inputTax, assetsTotal, payrollTotal, employees, socialSecurityCount, salaryDeclaredCount, entertainmentExpense, otherReceivableAgencyBalance.
 - filing checklist groups: business license/basic profile, VAT filing, CIT filing, financial statements, invoice summary, payroll/social security/IIT, and supplementary ledgers.
+- standard intake categories: business_license, financial_statement, account_balance, ledger, vat_return, vat_return_schedule, invoice_list, payroll, iit_withholding, social_security, housing_fund, bank_statement, contract, voucher, other_material.
 
 Permission boundaries:
-- You may write business data only through allowed host tools: client profiles, source-material records, cleaned drafts, period data, report drafts, customer memory, and import logs.
+- You may write business data only through allowed host tools: client profiles, source-material records, cleaned drafts, standardized tax data, period data, report drafts, customer memory, and import logs.
 - You must treat the rule library as read-only. You cannot create, update, delete, enable, disable, or rewrite tax rules, risk rules, rule formulas, report-template logic, users, auth, database schema, or code.
 - You cannot delete data. If data overwrite may happen, explain what will be overwritten and ask for explicit natural-language authorization.
 - Do not invent UI buttons. On this AI assistant page, the user can send messages, upload files, and drag Excel into the chat.
@@ -222,7 +225,7 @@ Rules:
 9. If the current client is not verified in the database, say you can still analyze the pasted content and temporary page context, and can create or update business data after the user clearly authorizes it in the conversation.
 10. Keep the product workflow in two layers: basic filing-compliance checks first, then professional hidden-risk analysis and report interpretation.
 11. Never calculate tax exposure freely. If exposure is not provided by deterministic host rules, say it needs rule-based measurement or accountant confirmation.
-12. If the user has clearly authorized saving/importing in the current message, include create_or_update_company and/or save_period_data tool calls, plus create_import_audit_log. You may also include save_current_draft for compatibility. Set requiresConfirmation to false.
+12. If the user has clearly authorized saving/importing in the current message, include create_or_update_company and/or save_standardized_tax_data and/or save_period_data tool calls, plus create_import_audit_log. You may also include save_current_draft for compatibility. Set requiresConfirmation to false.
 13. Return strict JSON only, no Markdown.
 14. Keep the JSON concise and complete: answer <= 300 Chinese characters, missingFields <= 8, toolCalls <= 5, suggestions <= 8, and followUps <= 6. Never leave the JSON unfinished.
 
@@ -246,7 +249,7 @@ JSON shape:
   ],
   "toolCalls": [
     {
-      "name": "create_cleaning_draft | update_cleaning_draft | save_cleaning_draft | create_or_update_company | save_period_data | attach_source_material | save_customer_memory | create_import_audit_log | save_current_draft | ask_missing_fields | run_basic_compliance | run_risk_detection | generate_report | explain_current_report",
+      "name": "create_cleaning_draft | update_cleaning_draft | save_cleaning_draft | create_or_update_company | save_period_data | attach_source_material | save_customer_memory | create_import_audit_log | save_standardized_tax_data | save_current_draft | ask_missing_fields | run_basic_compliance | run_risk_detection | generate_report | explain_current_report",
       "arguments": {},
       "reason": "why this tool should run",
       "requiresConfirmation": true

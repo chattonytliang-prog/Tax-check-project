@@ -11,7 +11,8 @@
     "coverage": "vitest run --coverage",
     "preview": "vite preview",
     "d1:list": "wrangler d1 list",
-    "d1:migrate:assistant": "wrangler d1 execute tax-check-db --remote --file=migrations/0007_assistant_business_tools.sql"
+    "d1:migrate:assistant": "wrangler d1 execute tax-check-db --remote --file=migrations/0007_assistant_business_tools.sql",
+    "d1:migrate:intake": "wrangler d1 execute tax-check-db --remote --file=migrations/0008_full_tax_data_intake.sql"
   },
   "dependencies": {
     "@e965/xlsx": "^0.20.3",
