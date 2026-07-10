@@ -8005,7 +8005,6 @@ function AiAssistantPage({
   const [assistantNotice, setAssistantNotice] = useState('')
   const [assistantDragActive, setAssistantDragActive] = useState(false)
   const [assistantThreadsHydrated, setAssistantThreadsHydrated] = useState(false)
-  const [assistantSidebarOpen, setAssistantSidebarOpen] = useState(false)
   const assistantFileInputRef = useRef<HTMLInputElement | null>(null)
   const structuredIntakeByDraftId = useRef(new Map<string, ParsedTaxDataIntake>())
   const activeAssistantThread = assistantThreads.find((thread) => thread.id === activeAssistantThreadId) || assistantThreads[0]
@@ -9047,11 +9046,8 @@ function AiAssistantPage({
           <p className="eyebrow">AI 工作台</p>
           <h2>AI 财税助手</h2>
         </div>
-        <button type="button" className="secondary-button compact-button" onClick={() => setAssistantSidebarOpen((open) => !open)}>
-          {assistantSidebarOpen ? '收起历史' : '历史对话'}
-        </button>
       </header>
-      <div className={assistantSidebarOpen ? 'assistant-workspace history-open' : 'assistant-workspace'}>
+      <div className="assistant-workspace">
         <aside className="assistant-thread-sidebar">
           <button type="button" className="primary-button compact-button assistant-new-thread" onClick={startAssistantThread}>
             <Plus /> 新对话
@@ -9160,9 +9156,7 @@ function AiAssistantPage({
                   </article>
                 ))
               ) : (
-                <div className="ai-assistant-empty-chat">
-                  <strong>可以直接提问，也可以把 Excel 拖到这里。</strong>
-                </div>
+                <div className="ai-assistant-empty-chat" aria-hidden="true" />
               )}
               {assistantLoading ? (
                 <article className="ai-assistant-message assistant">
