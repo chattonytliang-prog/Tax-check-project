@@ -18,3 +18,10 @@
 - `project_memory.json` remains an evidence record and compatibility memory file.
 - Test, build, lint, deployment logs remain evidence records.
 - User Word documents and real customer materials must not be committed unless explicitly requested.
+
+## Handoff Evidence
+
+- `D:\Codex项目\财税项目\HANDOFF.md`
+- Latest handoff commit target: `ea200bf Attach intake metadata to assistant uploads`
+- Latest verified production assets: `index-7pXwohZj.js` / `index-JOpt4TN7.css`
+- Handoff note: new tasks should restore context from Wiki, RAG mirrors, `HANDOFF.md`, and real Git status, not from copied chat history.

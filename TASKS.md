@@ -9,12 +9,14 @@
 - Build specialized parsers for the full intake tables: VAT PDF returns, invoice list workbooks, payroll sheets, IIT withholding sheets, financial statements, account balances, and ledgers.
 - Clean up duplicate/polluted Beijing customer test records only after explicit deletion approval; do not let test cleanup alter rule-library data.
 - Next parser batch: convert classified upload metadata into standard records for payroll, IIT withholding, account balances, financial statements, VAT returns/schedules, invoice lists, and ledgers.
+- Handoff task: create a clean continuation task named "税务合规工具管理员（续）" on GPT-5.5. The new task must first read Wiki/RAG/HANDOFF and report status only.
 
 ## Done
 
 - 2026-07-10: Refactored repeated API request/error handling into one request core, removed unreachable import fallbacks, tightened financial parser invariants, and enforced 100% statement/branch/function/line coverage for `src/lib` core libraries.
 - 2026-07-10: Added the full standard tax-data intake schema, assistant `save_standardized_tax_data` tool permission, deterministic material classifier, period detector, and tests. Real Beijing customer materials were read-only audited and all 9 files classified with correct periods; no customer data was committed.
 - 2026-07-10: Connected assistant upload classification metadata to chat context and backend source-file normalization, so standard intake saves can persist document type, source system, period evidence, and specialized-parser requirements.
+- 2026-07-10: Created `HANDOFF.md` and updated Wiki/RAG handoff pointers for a clean task migration.
 
 - 2026-07-09: Added natural-language authorization for assistant business-data writes.
 - 2026-07-09: Added backend rejection/audit path for attempted assistant rule-library writes.

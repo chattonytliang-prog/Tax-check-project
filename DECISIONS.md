@@ -88,3 +88,24 @@ Standard intake scope:
 - Generic standard records for future material types
 
 Rationale: The assistant should feel like it can complete the work from conversation, but every stored value needs source evidence, period context, conflict handling, and deterministic validation. This keeps AI useful without letting it silently overwrite data or bypass professional rules.
+
+## 2026-07-10: Standard Clean Task Handoff
+
+Decision: Long continuation work should migrate through durable project files instead of copying chat history or forking the old thread.
+
+Handoff sources:
+- `README.md`
+- `MEMORY.md`
+- `TASKS.md`
+- `DECISIONS.md`
+- `RAG_INDEX.md`
+- `HANDOFF.md`
+- Existing RAG mirrors and `project_memory.json`
+- Real Git status and production health checks
+
+New task boundary:
+- Begin read-only.
+- Report current state, next step, risks, and missing information.
+- Do not modify code, commit, deploy, operate database/auth, or let AI write real business data before a fresh owner instruction.
+
+Rationale: The project has long memory and sensitive production/customer boundaries. A clean task must restore context from maintained artifacts and the repository state, not from stale or partial chat context.

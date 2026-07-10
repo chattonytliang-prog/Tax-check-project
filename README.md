@@ -36,8 +36,18 @@ Long-term project memory is maintained in:
 - `TASKS.md`
 - `DECISIONS.md`
 - `RAG_INDEX.md`
+- `HANDOFF.md`
 
 Original RAG files, downloaded official tax materials, deployment logs, tests, and customer documents remain evidence sources.
+
+## Current Handoff
+
+- Latest verified commit: `ea200bf Attach intake metadata to assistant uploads`
+- Production assets: `index-7pXwohZj.js` / `index-JOpt4TN7.css`
+- Production health: `/api/health` returned D1 connected on 2026-07-10.
+- Full handoff file: `HANDOFF.md`
+- Automation remains paused. Do not restart `automation-6` unless the owner explicitly asks.
+- Do not commit real customer materials, user Word documents, or the flowchart directory unless explicitly requested.
 
 ## Commands
 
