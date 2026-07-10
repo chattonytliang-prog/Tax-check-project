@@ -426,6 +426,20 @@ function recordPayload(record) {
   return normalizeObject(record.payload || record.data || record)
 }
 
+async function runStatements(db, statements, chunkSize = 50) {
+  const prepared = statements.filter(Boolean)
+  if (!prepared.length) return
+  if (typeof db.batch === 'function') {
+    for (let offset = 0; offset < prepared.length; offset += chunkSize) {
+      await db.batch(prepared.slice(offset, offset + chunkSize))
+    }
+    return
+  }
+  for (const statement of prepared) {
+    await statement.run()
+  }
+}
+
 async function materializeStandardRecord(db, auth, batchId, record, defaultClientId, defaultSourceFileId, defaultPeriodStart, defaultPeriodEnd) {
   const type = normalizeString(record.recordType || record.type || record.category, 80)
   const payload = recordPayload(record)
@@ -637,8 +651,8 @@ async function saveStandardizedTaxData(db, auth, toolCall, client, body) {
     )
     .run()
 
-  for (const sourceFile of sourceFiles) {
-    await db
+  await runStatements(db, sourceFiles.map((sourceFile) => (
+    db
       .prepare(
         `INSERT INTO tax_data_source_files (
           id, owner_user_id, batch_id, material_id, client_id, file_name, file_hash, content_type,
@@ -679,8 +693,7 @@ async function saveStandardizedTaxData(db, auth, toolCall, client, body) {
         sourceFile.storageKey,
         JSON.stringify(sourceFile.evidence),
       )
-      .run()
-  }
+  )))
 
   for (const period of periods) {
     const start = normalizeIsoDate(period.periodStart || period.start)
@@ -720,10 +733,10 @@ async function saveStandardizedTaxData(db, auth, toolCall, client, body) {
   }
 
   let typedRecordCount = 0
-  for (const record of records) {
+  await runStatements(db, records.map((record) => {
     const recordType = normalizeString(record.recordType || record.type || record.category, 80)
-    if (!recordType) continue
-    await db
+    if (!recordType) return null
+    return db
       .prepare(
         `INSERT INTO tax_data_standard_records (
           id, owner_user_id, batch_id, client_id, source_file_id, record_type, record_subtype,
@@ -753,7 +766,11 @@ async function saveStandardizedTaxData(db, auth, toolCall, client, body) {
         JSON.stringify(normalizeObject(record.payload || record.data || record)),
         normalizeString(record.confidence || 'medium', 40),
       )
-      .run()
+  }))
+
+  for (const record of records) {
+    const recordType = normalizeString(record.recordType || record.type || record.category, 80)
+    if (!recordType) continue
     if (await materializeStandardRecord(
       db,
       auth,
@@ -766,10 +783,10 @@ async function saveStandardizedTaxData(db, auth, toolCall, client, body) {
     )) typedRecordCount += 1
   }
 
-  for (const evidence of evidenceFields) {
+  await runStatements(db, evidenceFields.map((evidence) => {
     const targetField = normalizeString(evidence.targetField || evidence.field, 120)
-    if (!targetField) continue
-    await db
+    if (!targetField) return null
+    return db
       .prepare(
         `INSERT INTO tax_data_evidence_fields (
           id, owner_user_id, batch_id, source_file_id, target_table, target_id, target_field,
@@ -793,8 +810,7 @@ async function saveStandardizedTaxData(db, auth, toolCall, client, body) {
         Number.isFinite(Number(evidence.pageNo)) ? Number(evidence.pageNo) : null,
         normalizeString(evidence.note, 500),
       )
-      .run()
-  }
+  }))
 
   for (const conflict of conflicts) {
     await db
