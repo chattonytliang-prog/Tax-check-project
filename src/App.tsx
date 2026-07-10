@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EChartsOption } from 'echarts'
 import type { EChartsType } from 'echarts/core'
 import type * as ThreeNamespace from 'three'
@@ -2787,19 +2787,6 @@ function fieldLabel(field: string) {
   return conditionFields.find((item) => item.value === field)?.label || clientImportFieldLabels[field] || field
 }
 
-function formatFileSize(size?: number) {
-  if (!size) return ''
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
-  return `${(size / 1024 / 1024).toFixed(1)} MB`
-}
-
-function assistantMaterialStorageLabel(status?: AssistantRawMaterial['storageStatus']) {
-  if (status === 'stored') return '原件已存档'
-  if (status === 'metadata_only') return '已留痕'
-  if (status === 'local_only') return '本地留痕'
-  return '已接收'
-}
 
 function uniqueLabels(labels: string[]) {
   return Array.from(new Set(labels.filter(Boolean)))
@@ -2989,10 +2976,10 @@ function compactAssistantDraftForModel(draft?: AiAssistantDraft) {
 
 function sanitizeAssistantAnswer(answer: string) {
   return answer
-    .replace(/页面上的[「“"]?保存[」”"]?\s*或\s*[「“"]?提交[」”"]?按钮/g, '下方清洗草稿中的「确认导入」按钮')
-    .replace(/点击[「“"]?保存[」”"]?\s*或\s*[「“"]?提交[」”"]?按钮/g, '点击下方清洗草稿中的「确认导入」按钮')
-    .replace(/点击页面上的[「“"]?保存[」”"]?按钮/g, '点击下方清洗草稿中的「确认导入」按钮')
-    .replace(/点击页面上的[「“"]?提交[」”"]?按钮/g, '点击下方清洗草稿中的「确认导入」按钮')
+    .replace(/页面上的[「“"]?保存[」”"]?\s*或\s*[「“"]?提交[」”"]?按钮/g, '在对话里回复“确认导入”')
+    .replace(/点击[「“"]?保存[」”"]?\s*或\s*[「“"]?提交[」”"]?按钮/g, '在对话里回复“确认导入”')
+    .replace(/点击页面上的[「“"]?保存[」”"]?按钮/g, '在对话里回复“确认导入”')
+    .replace(/点击页面上的[「“"]?提交[」”"]?按钮/g, '在对话里回复“确认导入”')
 }
 
 function downloadClientImportTemplate() {
@@ -8231,6 +8218,18 @@ function AiAssistantPage({
     })
     return { questions: uniqueByQuestion(questions).slice(0, 6), warnings: warnings.slice(0, 6) }
   }
+  const assistantUploadCustomerMessage = (draft: AiAssistantDraft, fileName: string, recordCount: number) => {
+    const questionLines = draft.confirmationQuestions.slice(0, 6).map((question) => `- ${question.question}`)
+    const missingLabels = draft.missingSaveLabels.filter((label) => !draft.confirmationQuestions.some((question) => question.label === label))
+    return [
+      `我已读取「${fileName}」，识别到 ${recordCount} 条可收录数据。`,
+      questionLines.length
+        ? `还有这些地方需要你确认：\n${questionLines.join('\n')}`
+        : '目前没有发现必须确认的疑点。',
+      missingLabels.length ? `为了建档完整，还需要补充：${missingLabels.join('、')}。` : '',
+      '确认无误后，直接在对话里回复“确认导入”或“按这个保存”，我会自动入库。',
+    ].filter(Boolean).join('\n\n')
+  }
   const buildAssistantDraft = (
     patchData: Partial<Client>,
     options: {
@@ -8388,7 +8387,7 @@ function AiAssistantPage({
     setAssistantLoading(true)
     try {
       const response = await apiSend<AiAssistantResponse>('/api/ai/assistant', 'POST', {
-        message: '请基于刚上传的原始资料和当前清洗草稿进行二次清洗：补充可以确定的字段，列出仍需客户确认的字段。不要保存入库，不要要求点击页面保存或提交。',
+        message: '请基于刚上传的原始资料和当前上下文继续清洗：补充可以确定的字段，列出仍需客户确认的字段。不要要求用户点击页面保存、提交或确认导入按钮；用户只需要在对话中确认。',
         history: baseMessages.map((item) => ({ role: item.role, content: item.content })),
         client: draft.client,
         risks: [],
@@ -8420,7 +8419,7 @@ function AiAssistantPage({
         {
           id: crypto.randomUUID(),
           role: 'assistant',
-          content: '已完成本地解析，AI 二次清洗暂时不可用。你可以继续提问，或直接在下方清洗草稿中确认导入。',
+          content: '已完成资料解析。你可以继续回答我提出的确认问题；确认无误后，直接回复“确认导入”或“按这个保存”，我会自动入库。',
         },
       ])
     } finally {
@@ -8696,7 +8695,7 @@ function AiAssistantPage({
         {
           id: crypto.randomUUID(),
           role: 'assistant',
-          content: `已读取「${file.name}」，整理出 ${draft.labels.length} 个档案字段和 ${parsedImport.taxDataIntake?.records.length || 0} 条标准记录，正在交给 AI 继续清洗。`,
+          content: assistantUploadCustomerMessage(draft, file.name, parsedImport.taxDataIntake?.records.length || 0),
         },
       ]
       setActiveAssistantMessages((current) => [
@@ -8704,7 +8703,7 @@ function AiAssistantPage({
         {
           id: crypto.randomUUID(),
           role: 'assistant',
-          content: `已读取「${file.name}」，整理出 ${draft.labels.length} 个档案字段和 ${parsedImport.taxDataIntake?.records.length || 0} 条标准记录。请核对客户确认问题后导入。`,
+          content: assistantUploadCustomerMessage(draft, file.name, parsedImport.taxDataIntake?.records.length || 0),
         },
       ])
       await askAssistantToCleanUploadedDraft(draft, materialSummary, autoCleanMessages)
@@ -8732,33 +8731,6 @@ function AiAssistantPage({
   const handleAssistantDragLeave = (event: React.DragEvent<HTMLElement>) => {
     if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
     setAssistantDragActive(false)
-  }
-  const applyAssistantDraft = async (draft: AiAssistantDraft) => {
-    setAssistantError('')
-    setAssistantNotice('')
-    const expectedStructuredRecords = Object.values(draft.taxDataRecordCounts || {}).reduce((sum, value) => sum + value, 0)
-    if (expectedStructuredRecords > 0 && !structuredIntakeByDraftId.current.has(draft.id)) {
-      setAssistantError('结构化解析缓存已失效，请重新上传原始文件后再确认导入。')
-      return
-    }
-    const result = await onApplyClientDraft(draft.client)
-    let structuredMessages: string[] = []
-    if (result.status === 'saved' && result.client) {
-      await executeAssistantSaveTool(result.client)
-      structuredMessages = await saveStructuredIntake(draft, result.client)
-    }
-    const structuredNotice = structuredMessages.length
-      ? `；已分批保存 ${Object.values(draft.taxDataRecordCounts || {}).reduce((sum, value) => sum + value, 0)} 条标准记录`
-      : ''
-    setAssistantNotice(`${result.message}${structuredNotice}`)
-    if (result.status === 'saved' && !result.message.includes('还缺')) {
-      setActiveAssistantDrafts((current) => current.filter((item) => item.id !== draft.id))
-      structuredIntakeByDraftId.current.delete(draft.id)
-    }
-    setActiveAssistantMessages((current) => [
-      ...current,
-      { id: crypto.randomUUID(), role: 'assistant', content: `${result.message}${structuredNotice}` },
-    ])
   }
   const applyCleaningMessageToDraft = (message: string) => {
     const inferred = inferAssistantCleaningPatch(message, assistantDrafts[0]?.client)
@@ -8944,10 +8916,18 @@ function AiAssistantPage({
       } else {
         const result = await onApplyClientDraft(draftForSave.client)
         if (result.status === 'saved' && result.client) {
-          results.push(...await executeAssistantSaveTool(result.client, backendWriteToolCalls, draftForSave))
+          const ordinaryToolCalls = backendWriteToolCalls.filter((toolCall) => toolCall.name !== 'save_standardized_tax_data')
+          if (ordinaryToolCalls.length) {
+            results.push(...await executeAssistantSaveTool(result.client, ordinaryToolCalls, draftForSave))
+          }
+          const structuredMessages = await saveStructuredIntake(draftForSave, result.client)
+          if (structuredMessages.length) {
+            results.push(`已自动导入 ${Object.values(draftForSave.taxDataRecordCounts || {}).reduce((sum, value) => sum + value, 0)} 条标准记录。`)
+          }
         }
         if (result.status === 'saved' && !result.message.includes('还缺') && currentDraft) {
           setActiveAssistantDrafts((current) => current.filter((item) => item.id !== currentDraft.id))
+          structuredIntakeByDraftId.current.delete(currentDraft.id)
         }
         results.push(result.message)
       }
@@ -8996,7 +8976,7 @@ function AiAssistantPage({
         {
           id: crypto.randomUUID(),
           role: 'assistant',
-          content: `已整理出 ${parsedTextDraft.labels.length} 个可填字段，请在下方确认是否导入。`,
+          content: `已整理出 ${parsedTextDraft.labels.length} 个可填字段。请直接在对话里确认是否导入；如果无误，回复“确认导入”或“按这个保存”。`,
         },
       ])
       setAssistantInput('')
@@ -9200,70 +9180,6 @@ function AiAssistantPage({
                 <FileText /> 上传文件
               </button>
             </div>
-            {assistantDrafts.length ? (
-              <div className="assistant-draft-list">
-                {assistantDrafts.map((draft) => (
-                  <article key={draft.id} className="assistant-draft-card">
-                    <div>
-                      <p className="eyebrow">{draft.targetMode === 'new' ? '新建企业清洗草稿' : '补充已有企业清洗草稿'}</p>
-                      <h4>{draft.client.name || '待命名企业'}</h4>
-                      <small>清洗后数据 · {draft.updatedAt}</small>
-                    </div>
-                    {draft.rawMaterials.length ? (
-                      <div className="assistant-raw-materials">
-                        <strong>原始资料</strong>
-                        {draft.rawMaterials.map((material) => (
-                          <span key={material.id}>
-                            {material.name}{formatFileSize(material.size) ? ` · ${formatFileSize(material.size)}` : ''} · {assistantMaterialStorageLabel(material.storageStatus)}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                    <div className="assistant-draft-fields">
-                      {draft.labels.slice(0, 10).map((label) => <span key={label}>{label}</span>)}
-                      {draft.labels.length > 10 ? <span>等 {draft.labels.length} 项</span> : null}
-                    </div>
-                    {draft.detectedTables.length ? (
-                      <p>识别资料：{draft.detectedTables.join('、')}</p>
-                    ) : null}
-                    {draft.taxDataRecordCounts && Object.keys(draft.taxDataRecordCounts).length ? (
-                      <p>标准记录：{Object.entries(draft.taxDataRecordCounts).map(([type, count]) => `${type} ${count} 条`).join('、')}</p>
-                    ) : null}
-                    {draft.taxDataWarnings?.length ? <p>解析提示：{draft.taxDataWarnings.slice(0, 3).join('；')}</p> : null}
-                    {draft.missingSaveLabels.length ? (
-                      <p>还需确认：{draft.missingSaveLabels.join('、')}</p>
-                    ) : null}
-                    {(draft.confirmationQuestions || []).length ? (
-                      <div className="assistant-clean-log">
-                        <strong>客户确认问题</strong>
-                        {(draft.confirmationQuestions || []).slice(0, 6).map((question) => (
-                          <span key={question.id}>{question.question}</span>
-                        ))}
-                      </div>
-                    ) : null}
-                    {draft.changeLog.length ? (
-                      <div className="assistant-clean-log">
-                        <strong>清洗记录</strong>
-                        {draft.changeLog.slice(0, 4).map((change) => (
-                          <span key={change.id}>{change.source}：{change.detail}</span>
-                        ))}
-                      </div>
-                    ) : null}
-                    <div className="assistant-draft-actions">
-                      <button type="button" className="primary-button compact-button" onClick={() => void applyAssistantDraft(draft)}>
-                        <CheckCircle2 /> 确认导入
-                      </button>
-                      <button type="button" className="secondary-button compact-button" onClick={() => {
-                        structuredIntakeByDraftId.current.delete(draft.id)
-                        setActiveAssistantDrafts((current) => current.filter((item) => item.id !== draft.id))
-                      }}>
-                        取消
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : null}
             {assistantNotice ? <div className="ai-assistant-notice">{assistantNotice}</div> : null}
             {assistantError ? <div className="ai-assistant-error">{assistantError}</div> : null}
         </section>
