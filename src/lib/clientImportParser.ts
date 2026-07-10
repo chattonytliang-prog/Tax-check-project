@@ -1,4 +1,5 @@
 import { conditionFields } from './ruleEngine'
+import { parseTaxDataWorkbook, type ParsedTaxDataIntake } from './taxDataIntakeParser'
 
 export type ImportMappingPreview = {
   source: string
@@ -12,6 +13,7 @@ export type ParsedClientImport = {
   unmappedHeaders: string[]
   detectedTables: string[]
   detectedSourceType?: string
+  taxDataIntake?: ParsedTaxDataIntake
 }
 
 export const importFieldAliases: Record<string, string> = {
@@ -1143,10 +1145,11 @@ export function decodeClientImportText(buffer: ArrayBuffer): string {
   return looksLikeMojibake(gb18030) ? utf8 : gb18030
 }
 
-export async function parseClientImportWorkbook(buffer: ArrayBuffer): Promise<ParsedClientImport> {
+export async function parseClientImportWorkbook(buffer: ArrayBuffer, fileName = ''): Promise<ParsedClientImport> {
   const XLSX = await import('@e965/xlsx')
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
-  return workbook.SheetNames.reduce<ParsedClientImport>((parsed, sheetName) => {
+  const intakeSheets: Array<{ name: string; rows: string[][] }> = []
+  const parsed = workbook.SheetNames.reduce<ParsedClientImport>((parsedImport, sheetName) => {
     const sheet = workbook.Sheets[sheetName]
     const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean | Date>>(sheet, {
       header: 1,
@@ -1156,8 +1159,11 @@ export async function parseClientImportWorkbook(buffer: ArrayBuffer): Promise<Pa
     })
       .map((row) => row.map((cell) => String(cell).trim()))
       .filter((row) => row.some(Boolean))
-    if (!rows.length) return parsed
-
-    return mergeParsedClientImports(parsed, parseClientImportRows(rows))
+    if (!rows.length) return parsedImport
+    intakeSheets.push({ name: sheetName, rows })
+    return mergeParsedClientImports(parsedImport, parseClientImportRows(rows))
   }, emptyParsedClientImport())
+  return intakeSheets.length
+    ? { ...parsed, taxDataIntake: parseTaxDataWorkbook(fileName, intakeSheets) }
+    : parsed
 }

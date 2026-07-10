@@ -65,7 +65,10 @@ import {
   parseClientImportText,
   parseClientImportWorkbook,
   type ImportMappingPreview,
+  type ParsedClientImport,
 } from './lib/clientImportParser'
+import { extractPdfTextPages } from './lib/pdfTextExtractor'
+import { parseTaxDataPdfText, type ParsedTaxDataIntake } from './lib/taxDataIntakeParser'
 import {
   classifyIntakeMaterial,
   detectIntakePeriod,
@@ -73,6 +76,10 @@ import {
   type IntakeDocumentType,
   type IntakePeriodType,
 } from './lib/intakeClassifier'
+import {
+  buildIntakeConfirmationQuestions,
+  type IntakeConfirmationQuestion,
+} from './lib/intakeConfirmationQuestions'
 import {
   areMonthsContinuous,
   createPeriodEntry,
@@ -367,6 +374,7 @@ type AssistantRawMaterial = {
   contentType?: string
   objectKey?: string
   storageStatus?: 'stored' | 'metadata_only' | 'local_only'
+  confirmationQuestions?: IntakeConfirmationQuestion[]
   uploadedAt: string
 }
 
@@ -391,6 +399,9 @@ type AiAssistantDraft = {
   changeLog: AssistantDraftChange[]
   updatedAt: string
   missingSaveLabels: string[]
+  confirmationQuestions: IntakeConfirmationQuestion[]
+  taxDataRecordCounts?: Record<string, number>
+  taxDataWarnings?: string[]
 }
 
 type AssistantThread = {
@@ -419,6 +430,7 @@ type AssistantMaterialSummary = {
   mappedFields: Array<{ source: string; field: string; label: string }>
   unmappedHeaders: string[]
   patchPreview: Record<string, unknown>
+  confirmationQuestions?: IntakeConfirmationQuestion[]
 }
 
 type AssistantDraftApplyResult = {
@@ -2797,7 +2809,7 @@ function cleanAssistantValue(value: string) {
   return value.replace(/[，。；;：:\s]+$/g, '').trim()
 }
 
-function inferAssistantCleaningPatch(message: string): { patch: Partial<Client>; changes: string[] } | null {
+function inferAssistantCleaningPatch(message: string, contextClient?: Client): { patch: Partial<Client>; changes: string[] } | null {
   const patch: Partial<Client> = {}
   const changes: string[] = []
   const companyMatch = message.match(/(?:这是|这个是|客户是|公司是|企业是|名称是|企业名称是)\s*([^，。；;\n]+?(?:有限责任公司|股份有限公司|有限公司|公司|集团|工作室|中心|店|个体工商户))/)
@@ -2813,12 +2825,27 @@ function inferAssistantCleaningPatch(message: string): { patch: Partial<Client>;
     changes.push(`统一社会信用代码：${patch.creditCode}`)
   }
 
-  const periodMatch = message.match(/(20\d{2})\s*年\s*(1[0-2]|0?[1-9])\s*月/)
-  if (periodMatch) {
-    patch.analysisPeriodType = '月度'
-    patch.analysisYear = periodMatch[1]
-    patch.analysisMonth = `${Number(periodMatch[2])}月`
-    changes.push(`所属期间：${patch.analysisYear}年${patch.analysisMonth}`)
+  const periodRangeMatch = message.match(/(?:(20\d{2})\s*年\s*)?(1[0-2]|0?[1-9])\s*月?\s*(?:至|到|[-~—])\s*(1[0-2]|0?[1-9])\s*月/)
+  const contextYear = contextClient?.analysisYear || contextClient?.periodStartDate?.slice(0, 4) || ''
+  if (periodRangeMatch && (periodRangeMatch[1] || contextYear)) {
+    const year = periodRangeMatch[1] || contextYear
+    const startMonth = Number(periodRangeMatch[2])
+    const endMonth = Number(periodRangeMatch[3])
+    const endDay = new Date(Date.UTC(Number(year), endMonth, 0)).getUTCDate()
+    patch.analysisPeriodType = '自定义期间'
+    patch.analysisYear = year
+    patch.analysisMonth = ''
+    patch.periodStartDate = `${year}-${String(startMonth).padStart(2, '0')}-01`
+    patch.periodEndDate = `${year}-${String(endMonth).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`
+    changes.push(`所属期间：${year}年${startMonth}月至${endMonth}月`)
+  } else {
+    const periodMatch = message.match(/(20\d{2})\s*年\s*(1[0-2]|0?[1-9])\s*月/)
+    if (periodMatch) {
+      patch.analysisPeriodType = '月度'
+      patch.analysisYear = periodMatch[1]
+      patch.analysisMonth = `${Number(periodMatch[2])}月`
+      changes.push(`所属期间：${patch.analysisYear}年${patch.analysisMonth}`)
+    }
   }
 
   if (/一般纳税人/.test(message)) {
@@ -2845,6 +2872,18 @@ function inferAssistantCleaningPatch(message: string): { patch: Partial<Client>;
   }
 
   return changes.length ? { patch, changes } : null
+}
+
+function resolvedConfirmationFields(message: string, patch: Partial<Client>) {
+  const fields = new Set<string>()
+  if (patch.analysisYear || patch.analysisMonth || patch.periodStartDate || patch.periodEndDate) fields.add('period')
+  if (/进项|销项|进销项|两者|都有/.test(message)) fields.add('invoiceDirection')
+  if (/本月数|本期数|本年累计|期末余额|年初余额/.test(message)) fields.add('periodNature')
+  if (/单月发生额|累计余额|截至.*余额|本期发生额/.test(message)) fields.add('balanceNature')
+  if (/逐行收录|生成标准记录|按.*口径/.test(message)) fields.add('parserScope')
+  if (/未识别.*(?:不需要|无需)收录|列.*分别对应/.test(message)) fields.add('unmappedHeaders')
+  if (/工资表|个税扣缴|科目余额表|明细账|财务报表|增值税申报|发票清单/.test(message)) fields.add('documentType')
+  return fields
 }
 
 const assistantThreadsStorageKey = 'hy-tax-ai-assistant-threads'
@@ -2876,6 +2915,16 @@ function assistantThreadTitleFromText(text: string) {
   const cleanText = text.replace(/\s+/g, ' ').trim()
   if (!cleanText) return '新对话'
   return cleanText.length > 18 ? `${cleanText.slice(0, 18)}...` : cleanText
+}
+
+function uniqueByQuestion(questions: IntakeConfirmationQuestion[]) {
+  const seen = new Set<string>()
+  return questions.filter((question) => {
+    const key = question.id || question.question
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 function compactAssistantDraftForModel(draft?: AiAssistantDraft) {
@@ -2917,9 +2966,16 @@ function compactAssistantDraftForModel(draft?: AiAssistantDraft) {
     rawMaterials: draft.rawMaterials.map((material) => ({
       name: material.name,
       sourceType: material.sourceType,
+      documentType: material.documentType,
+      periodStart: material.periodStart,
+      periodEnd: material.periodEnd,
+      confirmationQuestions: material.confirmationQuestions || [],
       size: material.size,
       uploadedAt: material.uploadedAt,
     })),
+    confirmationQuestions: draft.confirmationQuestions || [],
+    taxDataRecordCounts: draft.taxDataRecordCounts || {},
+    taxDataWarnings: draft.taxDataWarnings || [],
     mappings: draft.mappings.slice(0, 30),
     unmappedHeaders: draft.unmappedHeaders.slice(0, 30),
     detectedTables: draft.detectedTables,
@@ -7963,6 +8019,7 @@ function AiAssistantPage({
   const [assistantDragActive, setAssistantDragActive] = useState(false)
   const [assistantThreadsHydrated, setAssistantThreadsHydrated] = useState(false)
   const assistantFileInputRef = useRef<HTMLInputElement | null>(null)
+  const structuredIntakeByDraftId = useRef(new Map<string, ParsedTaxDataIntake>())
   const activeAssistantThread = assistantThreads.find((thread) => thread.id === activeAssistantThreadId) || assistantThreads[0]
   const assistantMessages = activeAssistantThread?.messages || []
   const assistantDrafts = activeAssistantThread?.drafts || []
@@ -8106,6 +8163,8 @@ function AiAssistantPage({
       unmappedHeaders: string[]
       detectedTables: string[]
       sourceType: string
+      confirmationQuestions?: IntakeConfirmationQuestion[]
+      taxDataIntake?: ParsedTaxDataIntake
     },
   ) => {
     const targetMode: Exclude<AiAssistantTargetMode, 'auto'> = clients.length === 0
@@ -8134,6 +8193,10 @@ function AiAssistantPage({
     const labels = Object.keys(patchData).map(fieldLabel)
     const now = formatDate()
     const rawMaterials = options.rawMaterial ? [options.rawMaterial] : []
+    const confirmationQuestions = uniqueByQuestion([
+      ...(options.confirmationQuestions || []),
+      ...rawMaterials.flatMap((material) => material.confirmationQuestions || []),
+    ]).slice(0, 8)
     return {
       id: crypto.randomUUID(),
       targetMode,
@@ -8157,29 +8220,29 @@ function AiAssistantPage({
       ],
       updatedAt: now,
       missingSaveLabels: validateClientForSave(draftClient).map((issue) => issue.label).slice(0, 6),
+      confirmationQuestions,
+      taxDataRecordCounts: options.taxDataIntake?.recordCounts,
+      taxDataWarnings: options.taxDataIntake?.warnings,
     }
   }
-  const addAssistantDraftFromParsedImport = (parsedImport: {
-    patch: Record<string, unknown>
-    mappings: ImportMappingPreview[]
-    unmappedHeaders: string[]
-    detectedTables: string[]
-    detectedSourceType?: string
-  }, fileName?: string, rawMaterial?: AssistantRawMaterial) => {
+  const addAssistantDraftFromParsedImport = (parsedImport: ParsedClientImport, fileName?: string, rawMaterial?: AssistantRawMaterial) => {
     const patchData = {
       ...(fileName ? inferClientPatchFromFileName(fileName) : {}),
       ...coerceImportedClientPatch(parsedImport.patch),
     }
     const labels = Object.keys(patchData).map(fieldLabel)
-    if (!labels.length) return null
+    if (!labels.length && !parsedImport.taxDataIntake?.records.length) return null
     const draft = buildAssistantDraft(patchData, {
       fileName,
       rawMaterial,
+      confirmationQuestions: rawMaterial?.confirmationQuestions || [],
       mappings: parsedImport.mappings,
       unmappedHeaders: parsedImport.unmappedHeaders,
       detectedTables: parsedImport.detectedTables,
       sourceType: parsedImport.detectedSourceType || (fileName ? '上传资料' : '粘贴资料'),
+      taxDataIntake: parsedImport.taxDataIntake,
     })
+    if (parsedImport.taxDataIntake?.records.length) structuredIntakeByDraftId.current.set(draft.id, parsedImport.taxDataIntake)
     setActiveAssistantDrafts((current) => [draft, ...current].slice(0, 5))
     setActiveAssistantMaterialSummary({
       fileName,
@@ -8188,6 +8251,7 @@ function AiAssistantPage({
       mappedFields: parsedImport.mappings.slice(0, 40),
       unmappedHeaders: parsedImport.unmappedHeaders.slice(0, 40),
       patchPreview: patchData,
+      confirmationQuestions: rawMaterial?.confirmationQuestions || [],
     })
     return draft
   }
@@ -8311,6 +8375,12 @@ function AiAssistantPage({
     }
     const classification = classifyIntakeMaterial(signal)
     const period = detectIntakePeriod(signal)
+    const confirmationQuestions = buildIntakeConfirmationQuestions({
+      fileName,
+      classification,
+      period,
+      parsedImport,
+    })
     return {
       documentType: classification.documentType,
       classificationConfidence: classification.confidence,
@@ -8321,6 +8391,7 @@ function AiAssistantPage({
       periodStart: period.periodStart,
       periodEnd: period.periodEnd,
       periodEvidence: period.evidence,
+      confirmationQuestions,
     }
   }
   const assistantBackendWriteToolNames = new Set<AiAssistantToolCall['name']>([
@@ -8366,7 +8437,72 @@ function AiAssistantPage({
       return []
     }
   }
-  const canParseAssistantFile = (fileName: string) => /\.(xlsx|xls|csv|tsv|txt|json)$/i.test(fileName)
+  const saveStructuredIntake = async (draft: AiAssistantDraft, savedClient: Client) => {
+    const intake = structuredIntakeByDraftId.current.get(draft.id)
+    const expectedRecordCount = Object.values(draft.taxDataRecordCounts || {}).reduce((sum, value) => sum + value, 0)
+    if (!intake && expectedRecordCount > 0) {
+      throw new Error('结构化解析缓存已失效，请重新上传原始文件后再确认导入。')
+    }
+    if (!intake?.records.length) return []
+    const messages: string[] = []
+    const chunkSize = 80
+    const sourceFiles = draft.rawMaterials.map((material) => ({
+      id: material.id,
+      materialId: material.id,
+      clientId: savedClient.id,
+      fileName: material.name,
+      contentType: material.contentType,
+      fileSize: material.size,
+      documentType: material.documentType || intake.documentTypes[0] || 'other_material',
+      sourceSystem: material.sourceSystem || draft.sourceType,
+      periodStart: material.periodStart || savedClient.periodStartDate,
+      periodEnd: material.periodEnd || savedClient.periodEndDate,
+      parseStatus: intake.conflicts.length ? 'needs_confirmation' : 'parsed',
+      storageKey: material.objectKey,
+      evidence: {
+        recordCounts: intake.recordCounts,
+        warnings: intake.warnings,
+        confirmationQuestions: material.confirmationQuestions || [],
+      },
+    }))
+
+    for (let offset = 0; offset < intake.records.length; offset += chunkSize) {
+      const records = intake.records.slice(offset, offset + chunkSize)
+      const recordIds = new Set(records.map((record) => record.id))
+      const isLastChunk = offset + records.length >= intake.records.length
+      const response = await apiSend<{ results: Array<{ status: string; message: string }> }>('/api/assistant/tools', 'POST', {
+        toolCalls: [{
+          name: 'save_standardized_tax_data',
+          arguments: {
+            batchId: draft.id,
+            clientId: savedClient.id,
+            clientName: savedClient.name,
+            clientCreditCode: savedClient.creditCode,
+            periodStart: savedClient.periodStartDate,
+            periodEnd: savedClient.periodEndDate,
+            status: isLastChunk
+              ? intake.conflicts.length || draft.confirmationQuestions.length ? 'pending_confirmation' : 'confirmed'
+              : 'importing',
+            sourceFiles,
+            records,
+            evidenceFields: intake.evidenceFields.filter((item) => recordIds.has(item.targetId)),
+            conflicts: offset === 0 ? intake.conflicts : [],
+            summary: { totalRecordCount: intake.records.length, recordCounts: intake.recordCounts, warnings: intake.warnings },
+          },
+          reason: `用户确认导入结构化税务资料，第 ${Math.floor(offset / chunkSize) + 1} 批`,
+          requiresConfirmation: false,
+        }],
+        allowSave: true,
+        currentDraft: { ...draft, client: savedClient },
+        assistantContext: buildAssistantContext(draft),
+      })
+      const failed = response.results.find((item) => item.status === 'failed' || item.status === 'rejected')
+      if (failed) throw new Error(failed.message)
+      messages.push(...response.results.map((item) => item.message).filter(Boolean))
+    }
+    return messages
+  }
+  const canParseAssistantFile = (fileName: string) => /\.(xlsx|xls|csv|tsv|txt|json|pdf)$/i.test(fileName)
   const importAssistantFile = async (file: File | null) => {
     if (!file) return
     setAssistantError('')
@@ -8404,14 +8540,35 @@ function AiAssistantPage({
           mappedFields: [],
           unmappedHeaders: [],
           patchPreview: {},
+          confirmationQuestions: enrichedRawMaterial.confirmationQuestions || [],
         })
+        if (enrichedRawMaterial.confirmationQuestions?.length) {
+          setActiveAssistantMessages((current) => [
+            ...current,
+            {
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              content: `客户确认问题：\n${enrichedRawMaterial.confirmationQuestions!.map((question) => `- ${question.question}`).join('\n')}`,
+            },
+          ])
+        }
         return
       }
       const fileBuffer = await file.arrayBuffer()
       const isExcelFile = /\.(xlsx|xls)$/i.test(file.name)
-      const parsedImport = isExcelFile
-        ? await parseClientImportWorkbook(fileBuffer)
-        : parseClientImportText(decodeClientImportText(fileBuffer))
+      const isPdfFile = /\.pdf$/i.test(file.name)
+      const parsedImport: ParsedClientImport = isExcelFile
+        ? await parseClientImportWorkbook(fileBuffer, file.name)
+        : isPdfFile
+          ? {
+              patch: {},
+              mappings: [],
+              unmappedHeaders: [],
+              detectedTables: ['PDF 文本提取'],
+              detectedSourceType: 'PDF 税务资料',
+              taxDataIntake: parseTaxDataPdfText(file.name, await extractPdfTextPages(fileBuffer)),
+            }
+          : parseClientImportText(decodeClientImportText(fileBuffer))
       const metadata = buildAssistantIntakeMetadata(file.name, parsedImport)
       const draft = addAssistantDraftFromParsedImport(parsedImport, file.name, {
         ...rawMaterial,
@@ -8440,7 +8597,7 @@ function AiAssistantPage({
         {
           id: crypto.randomUUID(),
           role: 'assistant',
-          content: `已读取「${file.name}」，整理出 ${draft.labels.length} 个可填字段，正在交给 AI 继续清洗。`,
+          content: `已读取「${file.name}」，整理出 ${draft.labels.length} 个档案字段和 ${parsedImport.taxDataIntake?.records.length || 0} 条标准记录，正在交给 AI 继续清洗。`,
         },
       ]
       setActiveAssistantMessages((current) => [
@@ -8448,13 +8605,13 @@ function AiAssistantPage({
         {
           id: crypto.randomUUID(),
           role: 'assistant',
-          content: `已读取「${file.name}」，整理出 ${draft.labels.length} 个可填字段。请确认后导入。`,
+          content: `已读取「${file.name}」，整理出 ${draft.labels.length} 个档案字段和 ${parsedImport.taxDataIntake?.records.length || 0} 条标准记录。请核对客户确认问题后导入。`,
         },
       ])
       await askAssistantToCleanUploadedDraft(draft, materialSummary, autoCleanMessages)
     } catch (error) {
       console.warn('Failed to import assistant file.', error)
-      setAssistantError('文件解析失败，请换一个 Excel、CSV、TSV、JSON 或文本文件。')
+      setAssistantError('文件解析失败，请检查 Excel、CSV、TSV、JSON、文本或 PDF 是否完整且未加密。')
     }
   }
   const importAssistantFiles = async (fileList: FileList | File[]) => {
@@ -8480,28 +8637,48 @@ function AiAssistantPage({
   const applyAssistantDraft = async (draft: AiAssistantDraft) => {
     setAssistantError('')
     setAssistantNotice('')
+    const expectedStructuredRecords = Object.values(draft.taxDataRecordCounts || {}).reduce((sum, value) => sum + value, 0)
+    if (expectedStructuredRecords > 0 && !structuredIntakeByDraftId.current.has(draft.id)) {
+      setAssistantError('结构化解析缓存已失效，请重新上传原始文件后再确认导入。')
+      return
+    }
     const result = await onApplyClientDraft(draft.client)
+    let structuredMessages: string[] = []
     if (result.status === 'saved' && result.client) {
       await executeAssistantSaveTool(result.client)
+      structuredMessages = await saveStructuredIntake(draft, result.client)
     }
-    setAssistantNotice(result.message)
+    const structuredNotice = structuredMessages.length
+      ? `；已分批保存 ${Object.values(draft.taxDataRecordCounts || {}).reduce((sum, value) => sum + value, 0)} 条标准记录`
+      : ''
+    setAssistantNotice(`${result.message}${structuredNotice}`)
     if (result.status === 'saved' && !result.message.includes('还缺')) {
       setActiveAssistantDrafts((current) => current.filter((item) => item.id !== draft.id))
+      structuredIntakeByDraftId.current.delete(draft.id)
     }
     setActiveAssistantMessages((current) => [
       ...current,
-      { id: crypto.randomUUID(), role: 'assistant', content: result.message },
+      { id: crypto.randomUUID(), role: 'assistant', content: `${result.message}${structuredNotice}` },
     ])
   }
   const applyCleaningMessageToDraft = (message: string) => {
-    const inferred = inferAssistantCleaningPatch(message)
-    if (!inferred) return null
-    const labels = Object.keys(inferred.patch).map(fieldLabel)
-    const changeDetail = inferred.changes.join('、')
+    const inferred = inferAssistantCleaningPatch(message, assistantDrafts[0]?.client)
+    const resolvedFields = resolvedConfirmationFields(message, inferred?.patch || {})
+    if (!inferred && !resolvedFields.size) return null
+    if (!assistantDrafts.length && !inferred) return null
+    const patch = inferred?.patch || {}
+    const labels = Object.keys(patch).map(fieldLabel)
+    const resolvedLabels = assistantDrafts[0]?.confirmationQuestions
+      .filter((question) => resolvedFields.has(question.field))
+      .map((question) => question.label) || []
+    const changeDetail = [
+      ...(inferred?.changes || []),
+      ...(resolvedLabels.length ? [`已确认：${resolvedLabels.join('、')}`] : []),
+    ].join('、')
     const now = formatDate()
 
     if (!assistantDrafts.length) {
-      const draft = buildAssistantDraft(inferred.patch, {
+      const draft = buildAssistantDraft(patch, {
         mappings: [],
         unmappedHeaders: [],
         detectedTables: [],
@@ -8518,7 +8695,8 @@ function AiAssistantPage({
 
     setActiveAssistantDrafts((current) => current.map((draft, index) => {
       if (index !== 0) return draft
-      const client = applyExplicitDerivedPatch(draft.client, inferred.patch, '用户对话明确值')
+      const client = applyExplicitDerivedPatch(draft.client, patch, '用户对话明确值')
+      const confirmationQuestions = draft.confirmationQuestions.filter((question) => !resolvedFields.has(question.field))
       return {
         ...draft,
         client,
@@ -8529,6 +8707,11 @@ function AiAssistantPage({
         ].slice(0, 8),
         updatedAt: now,
         missingSaveLabels: validateClientForSave(client).map((issue) => issue.label).slice(0, 6),
+        confirmationQuestions,
+        rawMaterials: draft.rawMaterials.map((material) => ({
+          ...material,
+          confirmationQuestions: (material.confirmationQuestions || []).filter((question) => !resolvedFields.has(question.field)),
+        })),
       }
     }))
     return { labels, detail: changeDetail }
@@ -8944,8 +9127,20 @@ function AiAssistantPage({
                     {draft.detectedTables.length ? (
                       <p>识别资料：{draft.detectedTables.join('、')}</p>
                     ) : null}
+                    {draft.taxDataRecordCounts && Object.keys(draft.taxDataRecordCounts).length ? (
+                      <p>标准记录：{Object.entries(draft.taxDataRecordCounts).map(([type, count]) => `${type} ${count} 条`).join('、')}</p>
+                    ) : null}
+                    {draft.taxDataWarnings?.length ? <p>解析提示：{draft.taxDataWarnings.slice(0, 3).join('；')}</p> : null}
                     {draft.missingSaveLabels.length ? (
                       <p>还需确认：{draft.missingSaveLabels.join('、')}</p>
+                    ) : null}
+                    {(draft.confirmationQuestions || []).length ? (
+                      <div className="assistant-clean-log">
+                        <strong>客户确认问题</strong>
+                        {(draft.confirmationQuestions || []).slice(0, 6).map((question) => (
+                          <span key={question.id}>{question.question}</span>
+                        ))}
+                      </div>
                     ) : null}
                     {draft.changeLog.length ? (
                       <div className="assistant-clean-log">
@@ -8959,7 +9154,10 @@ function AiAssistantPage({
                       <button type="button" className="primary-button compact-button" onClick={() => void applyAssistantDraft(draft)}>
                         <CheckCircle2 /> 确认导入
                       </button>
-                      <button type="button" className="secondary-button compact-button" onClick={() => setActiveAssistantDrafts((current) => current.filter((item) => item.id !== draft.id))}>
+                      <button type="button" className="secondary-button compact-button" onClick={() => {
+                        structuredIntakeByDraftId.current.delete(draft.id)
+                        setActiveAssistantDrafts((current) => current.filter((item) => item.id !== draft.id))
+                      }}>
                         取消
                       </button>
                     </div>

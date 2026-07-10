@@ -422,6 +422,161 @@ async function writeImportAudit(db, auth, toolCall, client, body, status) {
   return saved
 }
 
+function recordPayload(record) {
+  return normalizeObject(record.payload || record.data || record)
+}
+
+async function materializeStandardRecord(db, auth, batchId, record, defaultClientId, defaultSourceFileId, defaultPeriodStart, defaultPeriodEnd) {
+  const type = normalizeString(record.recordType || record.type || record.category, 80)
+  const payload = recordPayload(record)
+  const id = normalizeString(record.id || crypto.randomUUID(), 120)
+  const clientId = normalizeString(record.clientId || defaultClientId, 120)
+  const sourceFileId = normalizeString(record.sourceFileId || defaultSourceFileId, 120)
+  const periodStart = normalizeIsoDate(record.periodStart || defaultPeriodStart)
+  const periodEnd = normalizeIsoDate(record.periodEnd || defaultPeriodEnd)
+  const rawJson = JSON.stringify(payload)
+
+  if (type === 'account_balance' && clientId && periodStart && periodEnd && payload.accountCode && payload.accountName) {
+    await db.prepare(
+      `INSERT OR REPLACE INTO tax_data_account_balances (
+        id, owner_user_id, client_id, batch_id, source_file_id, period_start, period_end,
+        account_code, account_name, opening_debit, opening_credit, current_debit, current_credit,
+        ytd_debit, ytd_credit, ending_debit, ending_credit, raw_json, evidence_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      id, auth.user.id, clientId, batchId, sourceFileId, periodStart, periodEnd,
+      normalizeString(payload.accountCode, 80), normalizeString(payload.accountName, 240),
+      payload.openingDebit ?? null, payload.openingCredit ?? null, payload.currentDebit ?? null, payload.currentCredit ?? null,
+      payload.ytdDebit ?? null, payload.ytdCredit ?? null, payload.endingDebit ?? null, payload.endingCredit ?? null,
+      rawJson, JSON.stringify({ standardRecordId: id }),
+    ).run()
+    return true
+  }
+
+  if (type === 'ledger' && clientId) {
+    await db.prepare(
+      `INSERT OR REPLACE INTO tax_data_ledger_entries (
+        id, owner_user_id, client_id, batch_id, source_file_id, entry_date, voucher_no, account_code,
+        account_name, summary, debit_amount, credit_amount, direction, balance_amount, raw_json, evidence_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      id, auth.user.id, clientId, batchId, sourceFileId, normalizeIsoDate(payload.entryDate),
+      normalizeString(payload.voucherNo, 120), normalizeString(payload.accountCode, 80), normalizeString(payload.accountName, 240),
+      normalizeString(payload.summary, 500), payload.debitAmount ?? null, payload.creditAmount ?? null,
+      normalizeString(payload.direction, 20), payload.balanceAmount ?? null, rawJson, JSON.stringify({ standardRecordId: id }),
+    ).run()
+    return true
+  }
+
+  if (type === 'financial_statement' && clientId && periodStart && periodEnd && payload.lineName) {
+    const statementType = normalizeString(payload.statementType || record.recordSubtype || 'unknown', 80)
+    const parentId = `${batchId}:financial:${statementType}:${periodStart}:${periodEnd}`.slice(0, 120)
+    await db.prepare(
+      `INSERT OR IGNORE INTO tax_data_financial_statements (
+        id, owner_user_id, client_id, batch_id, source_file_id, statement_type, accounting_standard,
+        period_start, period_end, currency, totals_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'CNY', '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+    ).bind(parentId, auth.user.id, clientId, batchId, sourceFileId, statementType, normalizeString(payload.accountingStandard, 120), periodStart, periodEnd).run()
+    await db.prepare(
+      `INSERT OR REPLACE INTO tax_data_financial_statement_lines (
+        id, owner_user_id, statement_id, line_code, line_name, row_no, current_amount, cumulative_amount,
+        beginning_amount, ending_amount, raw_json, evidence_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      id, auth.user.id, parentId, normalizeString(payload.lineCode, 80), normalizeString(payload.lineName, 240),
+      Number.isFinite(Number(payload.rowNo)) ? Number(payload.rowNo) : null, payload.currentAmount ?? null,
+      payload.cumulativeAmount ?? null, payload.beginningAmount ?? null, payload.endingAmount ?? null,
+      rawJson, JSON.stringify({ standardRecordId: id }),
+    ).run()
+    return true
+  }
+
+  if (type === 'invoice_list' && clientId) {
+    await db.prepare(
+      `INSERT OR REPLACE INTO tax_data_invoice_lines (
+        id, owner_user_id, client_id, batch_id, source_file_id, invoice_direction, invoice_no, invoice_code,
+        invoice_date, counterparty_credit_code, counterparty_name, goods_name, amount, tax_amount,
+        effective_deduction_tax, invoice_status, raw_json, evidence_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      id, auth.user.id, clientId, batchId, sourceFileId, normalizeString(payload.invoiceDirection || 'unknown', 20),
+      normalizeString(payload.invoiceNo, 120), normalizeString(payload.invoiceCode, 80), normalizeIsoDate(payload.invoiceDate),
+      normalizeString(payload.counterpartyCreditCode, 80), normalizeString(payload.counterpartyName, 240), normalizeString(payload.goodsName, 500),
+      payload.amount ?? null, payload.taxAmount ?? null, payload.effectiveDeductionTax ?? null,
+      normalizeString(payload.invoiceStatus, 80), rawJson, JSON.stringify({ standardRecordId: id }),
+    ).run()
+    return true
+  }
+
+  if (type === 'payroll' && clientId && periodStart && periodEnd) {
+    const parentId = `${batchId}:payroll:${periodStart}:${periodEnd}`.slice(0, 120)
+    await db.prepare(
+      `INSERT OR IGNORE INTO tax_data_payroll_runs (
+        id, owner_user_id, client_id, batch_id, source_file_id, period_start, period_end, raw_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, '{}')`,
+    ).bind(parentId, auth.user.id, clientId, batchId, sourceFileId, periodStart, periodEnd).run()
+    await db.prepare(
+      `INSERT OR REPLACE INTO tax_data_payroll_lines (
+        id, owner_user_id, payroll_run_id, employee_name, id_type, id_number_masked, gross_pay,
+        social_security, medical_insurance, unemployment_insurance, housing_fund, taxable_income,
+        tax_rate, tax_withheld, raw_json, evidence_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      id, auth.user.id, parentId, normalizeString(payload.employeeName, 120), normalizeString(payload.idType, 80),
+      normalizeString(payload.idNumberMasked, 80), payload.grossPay ?? null, payload.socialSecurity ?? null,
+      payload.medicalInsurance ?? null, payload.unemploymentInsurance ?? null, payload.housingFund ?? null,
+      payload.taxableIncome ?? null, payload.taxRate ?? null, payload.taxWithheld ?? null,
+      rawJson, JSON.stringify({ standardRecordId: id }),
+    ).run()
+    return true
+  }
+
+  if (type === 'iit_withholding' && clientId && periodStart && periodEnd) {
+    const parentId = `${batchId}:iit:${periodStart}:${periodEnd}`.slice(0, 120)
+    await db.prepare(
+      `INSERT OR IGNORE INTO tax_data_iit_returns (
+        id, owner_user_id, client_id, batch_id, source_file_id, period_start, period_end, income_item, raw_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '{}')`,
+    ).bind(parentId, auth.user.id, clientId, batchId, sourceFileId, periodStart, periodEnd, normalizeString(payload.incomeItem, 120)).run()
+    await db.prepare(
+      `INSERT OR REPLACE INTO tax_data_iit_return_lines (
+        id, owner_user_id, iit_return_id, person_name, id_type, id_number_masked, income_item,
+        current_income, cumulative_income, cumulative_deduction, taxable_income, tax_rate,
+        tax_withheld, raw_json, evidence_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      id, auth.user.id, parentId, normalizeString(payload.personName, 120), normalizeString(payload.idType, 80),
+      normalizeString(payload.idNumberMasked, 80), normalizeString(payload.incomeItem, 120), payload.currentIncome ?? null,
+      payload.cumulativeIncome ?? null, payload.cumulativeDeduction ?? null, payload.taxableIncome ?? null,
+      payload.taxRate ?? null, payload.taxWithheld ?? null, rawJson, JSON.stringify({ standardRecordId: id }),
+    ).run()
+    return true
+  }
+
+  if (type === 'vat_return' && clientId && periodStart && periodEnd && payload.itemName) {
+    const returnType = normalizeString(payload.formName || record.recordSubtype || 'vat_return', 160)
+    const parentId = `${batchId}:vat:${periodStart}:${periodEnd}`.slice(0, 120)
+    await db.prepare(
+      `INSERT OR IGNORE INTO tax_data_vat_returns (
+        id, owner_user_id, client_id, batch_id, source_file_id, return_type, period_start, period_end, raw_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '{}')`,
+    ).bind(parentId, auth.user.id, clientId, batchId, sourceFileId, returnType, periodStart, periodEnd).run()
+    await db.prepare(
+      `INSERT OR REPLACE INTO tax_data_vat_return_lines (
+        id, owner_user_id, vat_return_id, form_name, row_no, item_name, current_amount,
+        cumulative_amount, current_tax, cumulative_tax, raw_json, evidence_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      id, auth.user.id, parentId, returnType, normalizeString(payload.rowNo, 40), normalizeString(payload.itemName, 300),
+      payload.currentAmount ?? null, payload.cumulativeAmount ?? null, payload.currentTax ?? null,
+      payload.cumulativeTax ?? null, rawJson, JSON.stringify({ standardRecordId: id }),
+    ).run()
+    return true
+  }
+
+  return false
+}
+
 async function saveStandardizedTaxData(db, auth, toolCall, client, body) {
   const args = toolCall.arguments || {}
   const now = nowIso()
@@ -564,6 +719,7 @@ async function saveStandardizedTaxData(db, auth, toolCall, client, body) {
       .run()
   }
 
+  let typedRecordCount = 0
   for (const record of records) {
     const recordType = normalizeString(record.recordType || record.type || record.category, 80)
     if (!recordType) continue
@@ -572,7 +728,17 @@ async function saveStandardizedTaxData(db, auth, toolCall, client, body) {
         `INSERT INTO tax_data_standard_records (
           id, owner_user_id, batch_id, client_id, source_file_id, record_type, record_subtype,
           period_start, period_end, record_json, confidence, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET
+          batch_id = excluded.batch_id,
+          client_id = excluded.client_id,
+          source_file_id = excluded.source_file_id,
+          record_type = excluded.record_type,
+          record_subtype = excluded.record_subtype,
+          period_start = excluded.period_start,
+          period_end = excluded.period_end,
+          record_json = excluded.record_json,
+          confidence = excluded.confidence`,
       )
       .bind(
         normalizeString(record.id || crypto.randomUUID(), 120),
@@ -588,6 +754,16 @@ async function saveStandardizedTaxData(db, auth, toolCall, client, body) {
         normalizeString(record.confidence || 'medium', 40),
       )
       .run()
+    if (await materializeStandardRecord(
+      db,
+      auth,
+      batchId,
+      record,
+      client?.id || normalizeString(record.clientId || args.clientId, 120),
+      normalizeString(record.sourceFileId || sourceFiles[0]?.id, 120),
+      periodStart,
+      periodEnd,
+    )) typedRecordCount += 1
   }
 
   for (const evidence of evidenceFields) {
@@ -652,6 +828,7 @@ async function saveStandardizedTaxData(db, auth, toolCall, client, body) {
     sourceFileCount: sourceFiles.length,
     periodCount: periods.length,
     recordCount: records.length,
+    typedRecordCount,
     evidenceCount: evidenceFields.length,
     conflictCount: conflicts.length,
   }
