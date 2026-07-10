@@ -2982,6 +2982,72 @@ function sanitizeAssistantAnswer(answer: string) {
     .replace(/点击页面上的[「“"]?提交[」”"]?按钮/g, '在对话里回复“确认导入”')
 }
 
+function isCurrentFileConfirmationQuestion(question: IntakeConfirmationQuestion) {
+  const allowedFields = new Set([
+    'documentType',
+    'period',
+    'unmappedHeaders',
+    'mappedFields',
+    'parserScope',
+    'periodNature',
+    'balanceNature',
+    'invoiceDirection',
+  ])
+  return allowedFields.has(question.field) || question.field.startsWith('crossMaterial.')
+}
+
+function filterCurrentFileConfirmationQuestions(questions: IntakeConfirmationQuestion[]) {
+  return questions.filter(isCurrentFileConfirmationQuestion)
+}
+
+function sanitizeIntakeStageAssistantAnswer(answer: string) {
+  return sanitizeAssistantAnswer(answer)
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => {
+      if (!line) return false
+      if (/分析.*(全年|全年度|几个月|某几个月|期间范围|范围)/.test(line)) return false
+      if (/企业基础信息|统一社会信用代码、地区、行业、纳税人类型、成立时间/.test(line)) return false
+      if (/还需要确认：.*(统一社会信用代码|地区|行业|纳税人类型|成立时间|分析期间范围)/.test(line)) return false
+      return true
+    })
+    .join('\n')
+}
+
+function assistantMessageBlocks(content: string) {
+  const blocks: Array<{ type: 'paragraph'; text: string } | { type: 'list'; items: string[] }> = []
+  let paragraph: string[] = []
+  let items: string[] = []
+  const flushParagraph = () => {
+    const text = paragraph.join(' ').trim()
+    if (text) blocks.push({ type: 'paragraph', text })
+    paragraph = []
+  }
+  const flushItems = () => {
+    if (items.length) blocks.push({ type: 'list', items })
+    items = []
+  }
+  content.split(/\n+/).forEach((rawLine) => {
+    const line = rawLine.trim()
+    if (!line) {
+      flushParagraph()
+      flushItems()
+      return
+    }
+    const item = line.match(/^[-•]\s*(.+)$/) || line.match(/^\d+[.、]\s*(.+)$/)
+    if (item) {
+      flushParagraph()
+      items.push(item[1].trim())
+      return
+    }
+    flushItems()
+    paragraph.push(line)
+  })
+  flushParagraph()
+  flushItems()
+  return blocks
+}
+
 function downloadClientImportTemplate() {
   const csv = createClientImportTemplateCsv()
   const blob = new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8' })
@@ -8010,6 +8076,7 @@ function AiAssistantPage({
   const activeAssistantThread = assistantThreads.find((thread) => thread.id === activeAssistantThreadId) || assistantThreads[0]
   const assistantMessages = activeAssistantThread?.messages || []
   const assistantDrafts = activeAssistantThread?.drafts || []
+  const showAssistantProcessingMessage = assistantLoading && assistantMessages.at(-1)?.role === 'user'
   const currentAssistantDraft = assistantDrafts[0]
   const currentMaterialSummary = activeAssistantThread?.latestMaterialSummary
   const currentUploadCount = currentAssistantDraft?.rawMaterials.length || 0
@@ -8224,15 +8291,15 @@ function AiAssistantPage({
     return { questions: uniqueByQuestion(questions).slice(0, 6), warnings: warnings.slice(0, 6) }
   }
   const assistantUploadCustomerMessage = (draft: AiAssistantDraft, fileName: string, recordCount: number) => {
-    const questionLines = draft.confirmationQuestions.slice(0, 6).map((question) => `- ${question.question}`)
-    const missingLabels = draft.missingSaveLabels.filter((label) => !draft.confirmationQuestions.some((question) => question.label === label))
+    const questionLines = filterCurrentFileConfirmationQuestions(draft.confirmationQuestions)
+      .slice(0, 6)
+      .map((question, index) => `${index + 1}. ${question.question}`)
     return [
       `我已读取「${fileName}」，识别到 ${recordCount} 条可收录数据。`,
       questionLines.length
-        ? `还有这些地方需要你确认：\n${questionLines.join('\n')}`
-        : '目前没有发现必须确认的疑点。',
-      missingLabels.length ? `为了建档完整，还需要补充：${missingLabels.join('、')}。` : '',
-      '确认无误后，直接在对话里回复“确认导入”或“按这个保存”，我会自动入库。',
+        ? `请先确认这个文件本身：\n${questionLines.join('\n')}`
+        : '这个文件本身暂未发现必须确认的疑点。',
+      '如果还有资料，请继续上传；如果这批资料已经传完，请回复“资料已传完”。确认无误后，也可以直接回复“确认导入”或“按这个保存”。',
     ].filter(Boolean).join('\n\n')
   }
   const buildAssistantDraft = (
@@ -8274,10 +8341,10 @@ function AiAssistantPage({
     const labels = Object.keys(patchData).map(fieldLabel)
     const now = formatDate()
     const rawMaterials = options.rawMaterial ? [options.rawMaterial] : []
-    const confirmationQuestions = uniqueByQuestion([
+    const confirmationQuestions = filterCurrentFileConfirmationQuestions(uniqueByQuestion([
       ...(options.confirmationQuestions || []),
       ...rawMaterials.flatMap((material) => material.confirmationQuestions || []),
-    ]).slice(0, 8)
+    ])).slice(0, 8)
     return {
       id: crypto.randomUUID(),
       targetMode,
@@ -8392,7 +8459,7 @@ function AiAssistantPage({
     setAssistantLoading(true)
     try {
       const response = await apiSend<AiAssistantResponse>('/api/ai/assistant', 'POST', {
-        message: '请基于刚上传的原始资料和当前上下文继续清洗：补充可以确定的字段，列出仍需客户确认的字段。不要要求用户点击页面保存、提交或确认导入按钮；用户只需要在对话中确认。',
+        message: '请基于刚上传的原始资料和当前上下文继续清洗。只允许补充资料中可以确定的字段，并只列出“当前这个文件本身”需要客户确认的问题，例如资料类型、资料所属期、未识别列、跨资料金额差异。不要询问分析全年还是某几个月；不要因为企业基础信息缺失就要求补统一社会信用代码、地区、行业、纳税人类型、成立时间；这些等客户明确说“资料已传完”或进入分析阶段后再问。不要要求用户点击页面保存、提交或确认导入按钮；用户只需要在对话中确认。',
         history: baseMessages.map((item) => ({ role: item.role, content: item.content })),
         client: draft.client,
         risks: [],
@@ -8402,16 +8469,13 @@ function AiAssistantPage({
       const toolResults: string[] = []
       const patchResult = applyAssistantAutoCleanPatch(response.draftPatch)
       if (patchResult) toolResults.push(`已更新清洗草稿：${patchResult.detail}`)
-      if (response.missingFields?.length) {
-        toolResults.push(`还需要确认：${response.missingFields.map((field) => field.label || field.field).join('、')}`)
-      }
       setActiveAssistantMessages((current) => [
         ...current,
         {
           id: crypto.randomUUID(),
           role: 'assistant',
           content: [
-            sanitizeAssistantAnswer(response.answer),
+            sanitizeIntakeStageAssistantAnswer(response.answer),
             ...toolResults,
           ].filter(Boolean).join('\n'),
           response,
@@ -9132,7 +9196,17 @@ function AiAssistantPage({
                 assistantMessages.map((item) => (
                   <article key={item.id} className={`ai-assistant-message ${item.role}`}>
                     <strong>{item.role === 'user' ? '你' : 'AI 助手'}</strong>
-                    <p>{item.content}</p>
+                    <div className="ai-assistant-message-content">
+                      {assistantMessageBlocks(item.content).map((block, index) => (
+                        block.type === 'list' ? (
+                          <ol key={`list-${index}`}>
+                            {block.items.map((listItem) => <li key={listItem}>{listItem}</li>)}
+                          </ol>
+                        ) : (
+                          <p key={`paragraph-${index}`}>{block.text}</p>
+                        )
+                      ))}
+                    </div>
                     {item.response?.clientVerified === false ? (
                       <small>当前企业尚未入库，本轮先按临时内容处理。</small>
                     ) : null}
@@ -9158,7 +9232,7 @@ function AiAssistantPage({
               ) : (
                 <div className="ai-assistant-empty-chat" aria-hidden="true" />
               )}
-              {assistantLoading ? (
+              {showAssistantProcessingMessage ? (
                 <article className="ai-assistant-message assistant">
                   <strong>AI 助手</strong>
                   <p>正在处理...</p>

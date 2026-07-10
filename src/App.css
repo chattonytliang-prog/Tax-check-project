@@ -3608,7 +3608,7 @@ textarea:focus {
 }
 
 .ai-assistant-message.assistant {
-  width: min(840px, 94%);
+  width: 100%;
   justify-self: start;
 }
 
@@ -3621,10 +3621,20 @@ textarea:focus {
 .ai-assistant-empty-chat p,
 .ai-assistant-message p,
 .ai-assistant-message li {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   color: #35474f;
   line-height: 1.72;
   overflow-wrap: anywhere;
+}
+
+.ai-assistant-message-content {
+  display: grid;
+  gap: 10px;
+}
+
+.ai-assistant-message-content p,
+.ai-assistant-message-content ol {
+  margin: 0;
 }
 
 .ai-assistant-message small {
@@ -3634,9 +3644,10 @@ textarea:focus {
   line-height: 1.55;
 }
 
-.ai-assistant-message ul {
+.ai-assistant-message ul,
+.ai-assistant-message ol {
   margin: 8px 0 0;
-  padding-left: 18px;
+  padding-left: 22px;
 }
 
 .assistant-hidden-file-input {
