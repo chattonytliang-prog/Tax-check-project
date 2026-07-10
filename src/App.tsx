@@ -8005,11 +8005,17 @@ function AiAssistantPage({
   const [assistantNotice, setAssistantNotice] = useState('')
   const [assistantDragActive, setAssistantDragActive] = useState(false)
   const [assistantThreadsHydrated, setAssistantThreadsHydrated] = useState(false)
+  const [assistantSidebarOpen, setAssistantSidebarOpen] = useState(false)
   const assistantFileInputRef = useRef<HTMLInputElement | null>(null)
   const structuredIntakeByDraftId = useRef(new Map<string, ParsedTaxDataIntake>())
   const activeAssistantThread = assistantThreads.find((thread) => thread.id === activeAssistantThreadId) || assistantThreads[0]
   const assistantMessages = activeAssistantThread?.messages || []
   const assistantDrafts = activeAssistantThread?.drafts || []
+  const currentAssistantDraft = assistantDrafts[0]
+  const currentMaterialSummary = activeAssistantThread?.latestMaterialSummary
+  const currentUploadCount = currentAssistantDraft?.rawMaterials.length || 0
+  const currentQuestionCount = currentAssistantDraft?.confirmationQuestions.length || 0
+  const currentRecordCount = Object.values(currentAssistantDraft?.taxDataRecordCounts || {}).reduce((sum, value) => sum + value, 0)
   useEffect(() => {
     window.localStorage.setItem(assistantThreadsStorageKey, JSON.stringify(assistantThreads.slice(0, 20)))
   }, [assistantThreads])
@@ -9041,8 +9047,11 @@ function AiAssistantPage({
           <p className="eyebrow">AI 工作台</p>
           <h2>AI 财税助手</h2>
         </div>
+        <button type="button" className="secondary-button compact-button" onClick={() => setAssistantSidebarOpen((open) => !open)}>
+          {assistantSidebarOpen ? '收起历史' : '历史对话'}
+        </button>
       </header>
-      <div className="assistant-workspace">
+      <div className={assistantSidebarOpen ? 'assistant-workspace history-open' : 'assistant-workspace'}>
         <aside className="assistant-thread-sidebar">
           <button type="button" className="primary-button compact-button assistant-new-thread" onClick={startAssistantThread}>
             <Plus /> 新对话
@@ -9183,6 +9192,32 @@ function AiAssistantPage({
             {assistantNotice ? <div className="ai-assistant-notice">{assistantNotice}</div> : null}
             {assistantError ? <div className="ai-assistant-error">{assistantError}</div> : null}
         </section>
+        <aside className="assistant-status-panel" aria-label="当前处理状态">
+          <div>
+            <span>当前企业</span>
+            <strong>{currentAssistantDraft?.client.name || selectedClient.name || '待确认'}</strong>
+          </div>
+          <div>
+            <span>已上传资料</span>
+            <strong>{currentUploadCount} 份</strong>
+            {currentMaterialSummary?.fileName ? <small>{currentMaterialSummary.fileName}</small> : null}
+          </div>
+          <div>
+            <span>待确认问题</span>
+            <strong>{currentQuestionCount} 项</strong>
+            <small>{currentQuestionCount ? '请直接在对话里回答' : '暂无必须确认项'}</small>
+          </div>
+          <div>
+            <span>可收录数据</span>
+            <strong>{currentRecordCount} 条</strong>
+            <small>{currentRecordCount ? '确认后自动入库' : '上传资料后自动识别'}</small>
+          </div>
+          <div>
+            <span>资料完整度</span>
+            <strong>{dataCompleteness.score}%</strong>
+            <small>{dataCompleteness.label}</small>
+          </div>
+        </aside>
       </div>
     </section>
   )
