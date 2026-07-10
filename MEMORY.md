@@ -13,3 +13,5 @@
 - Real customer Excel regression files exposed unsafe accounting-import mappings: account codes and statement row numbers were treated as amounts, bank balances were treated as collection flow, and compensation liabilities were treated as payroll expense.
 - Financial imports now distinguish two-row account-balance headers, side-by-side balance-sheet sections, blank amount cells, and in-workbook company/period metadata.
 - Balance-sheet balances and cash-flow payments must not be silently substituted for collection-flow or payroll-expense fields. Missing evidence remains missing and should be confirmed through conversation.
+- An assistant cleaning draft is the active company context. Figures, risks, and report facts from a separately selected company must not leak into that draft.
+- Period semantics are evidence: year-to-date profit/revenue/cost must remain cumulative and must never be rewritten as monthly figures.

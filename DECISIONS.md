@@ -58,3 +58,9 @@ Explicitly prohibited substitutions:
 - Opening balances or unrelated side-by-side statement values as current-period amounts
 
 Rationale: Filling more fields is not useful if it creates false tax-risk findings. The parser provides evidence-backed candidates; the AI asks for missing evidence and the deterministic host validates all writes.
+
+## 2026-07-10: Draft-Scoped Agent Context and Idempotent Writes
+
+Decision: When a cleaning draft exists, the model receives that draft as the active company context and does not receive another selected company's risks or report. One natural-language save authorization executes one client write, even if the model proposes multiple compatible save tools.
+
+Rationale: Cross-company context can contaminate financial fields, while duplicate save tools create repeated writes and misleading receipts. Draft scoping and write deduplication make the agent safe to use as the primary import operator.

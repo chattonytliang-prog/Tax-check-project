@@ -17,10 +17,18 @@ function compactClient(client) {
     analysisMonth: client?.analysisMonth,
     monthlyRevenue: client?.monthlyRevenue,
     monthlyCost: client?.monthlyCost,
+    monthlyProfit: client?.monthlyProfit,
+    mainBusinessRevenue: client?.mainBusinessRevenue,
+    mainBusinessCost: client?.mainBusinessCost,
+    ytdRevenue: client?.ytdRevenue,
+    ytdCostExpense: client?.ytdCostExpense,
+    ytdProfit: client?.ytdProfit,
     outputTax: client?.outputTax,
     inputTax: client?.inputTax,
     assetsTotal: client?.assetsTotal,
     payrollTotal: client?.payrollTotal,
+    entertainmentExpense: client?.entertainmentExpense,
+    otherReceivableAgencyBalance: client?.otherReceivableAgencyBalance,
     periodEntriesCount: Array.isArray(client?.periodEntries) ? client.periodEntries.length : 0,
   }
 }
@@ -88,6 +96,9 @@ const allowedDraftPatchFields = new Set([
   'monthlyProfit',
   'mainBusinessRevenue',
   'mainBusinessCost',
+  'ytdRevenue',
+  'ytdCostExpense',
+  'ytdProfit',
   'outputTax',
   'inputTax',
   'assetsTotal',
@@ -95,6 +106,7 @@ const allowedDraftPatchFields = new Set([
   'employees',
   'socialSecurityCount',
   'salaryDeclaredCount',
+  'entertainmentExpense',
   'otherReceivableAgencyBalance',
 ])
 
@@ -185,7 +197,7 @@ Software capabilities you may use as skills:
 Software data model:
 - client profile fields: name, creditCode, region, industry, taxpayerType, establishedAt.
 - period fields: analysisPeriodType, analysisYear, analysisQuarter, analysisMonth, periodStartDate, periodEndDate, dataBasis.
-- financial fields: monthlyRevenue, monthlyCost, monthlyProfit, mainBusinessRevenue, mainBusinessCost, outputTax, inputTax, assetsTotal, payrollTotal, employees, socialSecurityCount, salaryDeclaredCount, otherReceivableAgencyBalance.
+- financial fields: monthlyRevenue, monthlyCost, monthlyProfit, mainBusinessRevenue, mainBusinessCost, ytdRevenue, ytdCostExpense, ytdProfit, outputTax, inputTax, assetsTotal, payrollTotal, employees, socialSecurityCount, salaryDeclaredCount, entertainmentExpense, otherReceivableAgencyBalance.
 - filing checklist groups: business license/basic profile, VAT filing, CIT filing, financial statements, invoice summary, payroll/social security/IIT, and supplementary ledgers.
 
 Permission boundaries:
@@ -203,6 +215,8 @@ Rules:
 6. If the user pasted financial data, extract it into structured suggestions.
 6a. Uploaded Excel values in latestMaterialSummary and currentDraft have already been structurally parsed by the host. Treat mapped amounts as evidence-backed candidates, preserve blank cells as missing, and never substitute row numbers, account codes, opening balances, or unrelated balance-sheet values for missing amounts.
 6b. Do not equate bank-account balances with collection flow, or employee-compensation liabilities/cash payments with payroll expense. Ask for the corresponding bank transaction summary, payroll ledger, IIT filing, or explicit user confirmation when those fields are missing.
+6c. Preserve period semantics exactly. "本年累计利润" is ytdProfit and must never be written to monthlyProfit; cumulative revenue/cost must never be written to monthlyRevenue/monthlyCost. If the source does not state a monthly amount, leave the monthly field missing.
+6d. When currentDraft belongs to a different company from the previously selected client, use currentDraft as the only business-data context. Never copy figures, risks, or report facts across companies.
 7. This page has no "保存" or "提交" button. Never tell the user to click a save/submit button on this AI assistant page.
 8. When suggesting that cleaned data should enter the system, tell the user they can reply "帮我导入吧" or "确认保存"; do not tell them to click a button.
 9. If the current client is not verified in the database, say you can still analyze the pasted content and temporary page context, and can create or update business data after the user clearly authorizes it in the conversation.
@@ -218,7 +232,9 @@ JSON shape:
     "name": "optional cleaned company name",
     "analysisYear": "optional year",
     "analysisMonth": "optional month",
-    "monthlyRevenue": "optional amount"
+    "monthlyRevenue": "optional monthly amount",
+    "ytdProfit": "optional year-to-date profit",
+    "entertainmentExpense": "optional entertainment expense"
   },
   "missingFields": [
     {

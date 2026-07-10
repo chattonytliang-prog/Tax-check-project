@@ -2859,10 +2859,15 @@ function compactAssistantDraftForModel(draft?: AiAssistantDraft) {
       monthlyProfit: draft.client.monthlyProfit,
       mainBusinessRevenue: draft.client.mainBusinessRevenue,
       mainBusinessCost: draft.client.mainBusinessCost,
+      ytdRevenue: draft.client.ytdRevenue,
+      ytdCostExpense: draft.client.ytdCostExpense,
+      ytdProfit: draft.client.ytdProfit,
       outputTax: draft.client.outputTax,
       inputTax: draft.client.inputTax,
       assetsTotal: draft.client.assetsTotal,
       payrollTotal: draft.client.payrollTotal,
+      entertainmentExpense: draft.client.entertainmentExpense,
+      otherReceivableAgencyBalance: draft.client.otherReceivableAgencyBalance,
     },
     labels: draft.labels.slice(0, 30),
     missingSaveLabels: draft.missingSaveLabels,
@@ -7983,7 +7988,15 @@ function AiAssistantPage({
   const buildAssistantContext = (
     draftOverride?: AiAssistantDraft | null,
     materialSummaryOverride?: AssistantMaterialSummary | null,
-  ) => ({
+  ) => {
+    const contextDraft = draftOverride === undefined ? assistantDrafts[0] : draftOverride || undefined
+    const contextClient = contextDraft?.client || selectedClient
+    const contextRisks = contextDraft ? detectRisks(contextClient, managedRules) : risks
+    const contextReport = contextDraft ? undefined : report
+    const contextChecklist = filingChecklistForClient(contextClient)
+    const contextBasicFindings = basicComplianceFindings(contextClient)
+    const contextCompleteness = getDataCompleteness(contextClient, contextRisks)
+    return {
     activeThread: activeAssistantThread
       ? {
         id: activeAssistantThread.id,
@@ -7992,11 +8005,11 @@ function AiAssistantPage({
         draftCount: activeAssistantThread.drafts.length,
       }
       : null,
-    currentDraft: compactAssistantDraftForModel(draftOverride === undefined ? assistantDrafts[0] : draftOverride || undefined),
+    currentDraft: compactAssistantDraftForModel(contextDraft),
     latestMaterialSummary: materialSummaryOverride === undefined
       ? activeAssistantThread?.latestMaterialSummary || null
       : materialSummaryOverride,
-    filingChecklist: filingChecklist.map((item) => ({
+    filingChecklist: contextChecklist.map((item) => ({
       group: item.group,
       item: item.item,
       status: item.status,
@@ -8004,14 +8017,15 @@ function AiAssistantPage({
       note: item.note,
     })),
     workflowState: {
-      dataCompleteness,
-      basicComplianceFindings: basicFindings,
-      professionalRiskCount: risks.length,
-      professionalRiskLevel: getOverallLevel(risks),
-      hasReport: Boolean(report),
-      reportRiskLevel: report?.riskLevel || '',
+      dataCompleteness: contextCompleteness,
+      basicComplianceFindings: contextBasicFindings,
+      professionalRiskCount: contextRisks.length,
+      professionalRiskLevel: getOverallLevel(contextRisks),
+      hasReport: Boolean(contextReport),
+      reportRiskLevel: contextReport?.riskLevel || '',
     },
-  })
+    }
+  }
   const updateAssistantThreadTitle = (title: string) => {
     updateActiveAssistantThread((thread) => (
       thread.title === '新对话'
@@ -8173,9 +8187,9 @@ function AiAssistantPage({
       const response = await apiSend<AiAssistantResponse>('/api/ai/assistant', 'POST', {
         message: '请基于刚上传的原始资料和当前清洗草稿进行二次清洗：补充可以确定的字段，列出仍需客户确认的字段。不要保存入库，不要要求点击页面保存或提交。',
         history: baseMessages.map((item) => ({ role: item.role, content: item.content })),
-        client: selectedClient,
-        risks,
-        report,
+        client: draft.client,
+        risks: [],
+        report: null,
         assistantContext: buildAssistantContext(draft, materialSummary),
       })
       const toolResults: string[] = []
@@ -8245,6 +8259,11 @@ function AiAssistantPage({
     'create_import_audit_log',
     'save_current_draft',
   ])
+  const assistantClientWriteToolNames = new Set<AiAssistantToolCall['name']>([
+    'create_or_update_company',
+    'save_period_data',
+    'save_current_draft',
+  ])
   const executeAssistantSaveTool = async (
     client: Client,
     toolCalls: AiAssistantToolCall[] = [
@@ -8258,13 +8277,16 @@ function AiAssistantPage({
     draft?: AiAssistantDraft | null,
   ) => {
     try {
-      const response = await apiSend<{ results: Array<{ status: string; message: string }> }>('/api/assistant/tools', 'POST', {
+      const response = await apiSend<{ results: Array<{ name: AiAssistantToolCall['name']; status: string; message: string }> }>('/api/assistant/tools', 'POST', {
         toolCalls,
         allowSave: true,
         currentDraft: draft ? { ...draft, client } : { client },
         assistantContext: buildAssistantContext(draft || undefined),
       })
-      return response.results.map((item) => item.message).filter(Boolean)
+      return response.results
+        .filter((item) => !assistantClientWriteToolNames.has(item.name))
+        .map((item) => item.message)
+        .filter(Boolean)
     } catch (error) {
       console.warn('Assistant save tool fell back to existing save flow.', error)
       return []
@@ -8635,9 +8657,9 @@ function AiAssistantPage({
       const response = await apiSend<AiAssistantResponse>('/api/ai/assistant', 'POST', {
         message: cleanMessage,
         history: assistantMessages.map((item) => ({ role: item.role, content: item.content })),
-        client: selectedClient,
-        risks,
-        report,
+        client: assistantDrafts[0]?.client || selectedClient,
+        risks: assistantDrafts.length ? [] : risks,
+        report: assistantDrafts.length ? null : report,
         assistantContext: buildAssistantContext(),
       })
       setActiveAssistantMessages([

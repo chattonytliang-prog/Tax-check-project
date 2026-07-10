@@ -121,6 +121,21 @@ function normalizeToolCalls(value) {
     .slice(0, 8)
 }
 
+export function dedupeToolCalls(toolCalls) {
+  const primaryClientWrite = toolCalls.find((item) => item.name === 'save_current_draft')
+    || toolCalls.find((item) => item.name === 'save_period_data')
+    || toolCalls.find((item) => item.name === 'create_or_update_company')
+  const seen = new Set()
+  return toolCalls.filter((item) => {
+    if (clientWriteToolNames.has(item.name) && item !== primaryClientWrite) return false
+    if (primaryClientWrite && item.name === 'create_import_audit_log') return false
+    if (primaryClientWrite && cleaningDraftToolNames.has(item.name)) return false
+    if (seen.has(item.name)) return false
+    seen.add(item.name)
+    return true
+  })
+}
+
 function normalizeString(value, maxLength = 240) {
   return String(value || '').trim().slice(0, maxLength)
 }
@@ -384,7 +399,7 @@ export async function onRequestPost({ request, env }) {
     if (auth.response) return auth.response
 
     const body = await readJson(request)
-    const toolCalls = normalizeToolCalls(body?.toolCalls)
+    const toolCalls = dedupeToolCalls(normalizeToolCalls(body?.toolCalls))
     if (!toolCalls.length) return badRequest('Tool calls are required')
 
     const allowSave = body?.allowSave === true
