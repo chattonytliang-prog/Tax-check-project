@@ -72,6 +72,21 @@ function cleanToolArguments(value) {
   try { return JSON.parse(value) } catch { return {} }
 }
 
+function standardRecordCategoryName(recordType, recordSubtype) {
+  if (recordType === 'financial_statement' && recordSubtype === 'balance_sheet') return '资产负债表'
+  if (recordType === 'financial_statement' && recordSubtype === 'income_statement') return '利润表'
+  if (recordType === 'financial_statement' && recordSubtype === 'cash_flow_statement') return '现金流量表'
+  const names = {
+    account_balance: '科目余额表',
+    ledger: '明细账',
+    vat_return: '增值税申报表',
+    invoice_list: '发票清单',
+    payroll: '工资表',
+    iit_withholding: '个人所得税扣缴申报表',
+  }
+  return names[recordType] || recordSubtype || recordType
+}
+
 async function executeReadOnlyAgentTool(db, auth, toolCall, fallbackClientId) {
   const name = String(toolCall?.function?.name || '')
   const args = cleanToolArguments(toolCall?.function?.arguments)
@@ -140,7 +155,20 @@ async function executeReadOnlyAgentTool(db, auth, toolCall, fallbackClientId) {
        GROUP BY r.record_type, r.record_subtype, r.period_start, r.period_end
        ORDER BY r.period_start DESC, r.record_type LIMIT 200`,
     ).bind(auth.user.id, clientId, start, start, end, end).all()
-    return { client: owned, periodStart: start, periodEnd: end, records: result.results || [] }
+    return {
+      client: owned,
+      periodStart: start,
+      periodEnd: end,
+      records: (result.results || []).map((row) => ({
+        categoryName: standardRecordCategoryName(row.record_type, row.record_subtype),
+        recordType: row.record_type,
+        recordSubtype: row.record_subtype,
+        periodStart: row.period_start,
+        periodEnd: row.period_end,
+        recordCount: row.record_count,
+        sourceFiles: row.source_files,
+      })),
+    }
   }
   return { error: 'read-only tool is not allowed' }
 }
@@ -366,6 +394,7 @@ Rules:
 6e. currentDraft.confirmationQuestions contains deterministic questions raised by the host parser. Ask the unresolved questions directly, accept concise customer answers such as "是 3-6 月" or "这是进项发票", and never invent an answer. Confirmed answers may update the cleaning draft; unresolved items must remain pending_confirmation rather than being treated as final data.
 6f. assistantContext.taxDataArchive is the source of truth for whether a standard tax material exists in the selected period. Never claim that a category in collectedCategories is missing. Do not use another month to fill the selected period. If taxDataArchive conflicts with the legacy filingChecklist or sparse client profile fields, follow taxDataArchive and explain the period scope.
 6g. Before answering whether an uploaded file, financial statement, tax return, payroll, ledger, or invoice list exists or is missing, call get_tax_archive and/or get_source_files. A workbook may contain several statements. Never infer workbook contents from its file name alone.
+6h. If the user names several materials, answer each one explicitly as 已收录, 未收录, or 待确认, with its period and source file when available. Do not collapse 资产负债表、利润表、现金流量表 into the vague phrase 财务报表.
 7. This page has no "保存" or "提交" button. Never tell the user to click a save/submit button on this AI assistant page.
 8. When suggesting that cleaned data should enter the system, tell the user they can reply "帮我导入吧" or "确认保存"; do not tell them to click a button.
 9. If the current client is not verified in the database, say you can still analyze the pasted content and temporary page context, and can create or update business data after the user clearly authorizes it in the conversation.
