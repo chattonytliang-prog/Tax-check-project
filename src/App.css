@@ -2219,6 +2219,115 @@ th {
   border-color: rgba(12, 140, 130, 0.16);
 }
 
+.tax-data-detail-modal {
+  width: min(1320px, 100%);
+}
+
+.tax-data-slot-row.clickable {
+  cursor: pointer;
+}
+
+.tax-data-slot-row.clickable:hover,
+.tax-data-slot-row.clickable:focus-visible {
+  border-color: rgba(12, 140, 130, 0.52);
+  outline: none;
+}
+
+.tax-data-review-button {
+  align-self: center;
+  white-space: nowrap;
+}
+
+.tax-data-detail-section {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.tax-data-detail-section .panel-title {
+  margin: 0;
+}
+
+.tax-data-source-list {
+  display: grid;
+  gap: 8px;
+}
+
+.tax-data-source-list article {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.tax-data-source-list article div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.tax-data-source-list strong {
+  overflow-wrap: anywhere;
+}
+
+.tax-data-source-list small,
+.tax-data-source-unavailable,
+.tax-data-detail-status {
+  color: var(--muted);
+}
+
+.tax-data-table-wrap {
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.tax-data-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tax-data-detail-table th,
+.tax-data-detail-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.tax-data-detail-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-2);
+}
+
+.tax-data-detail-table dl,
+.tax-data-detail-table dl div {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.tax-data-detail-table dl div {
+  grid-template-columns: minmax(110px, 0.4fr) minmax(160px, 1fr);
+}
+
+.tax-data-detail-table dt {
+  color: var(--muted);
+}
+
+.tax-data-detail-table dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .intake-overview .eyebrow {
   margin-top: 0;
   color: var(--teal);

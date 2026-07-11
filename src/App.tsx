@@ -490,6 +490,53 @@ type TaxDataSummary = {
   }
 }
 
+type TaxDataDetail = {
+  sources: Array<{
+    id: string
+    file_name: string
+    content_type?: string
+    file_size?: number
+    document_type: string
+    period_start: string
+    period_end: string
+    parse_status: string
+    stored: boolean
+    created_at: string
+  }>
+  records: Array<{
+    id: string
+    source_file_id: string
+    record_type: string
+    record_subtype?: string
+    period_start: string
+    period_end: string
+    confidence: string
+    data: Record<string, unknown>
+  }>
+  evidence: Array<{
+    source_file_id: string
+    target_id?: string
+    target_field: string
+    raw_value?: string
+    normalized_value?: string
+    confidence: string
+    sheet_name?: string
+    row_no?: number
+    column_no?: number
+    page_no?: number
+    note?: string
+  }>
+  totalRecords: number
+  truncated: boolean
+}
+
+function displayTaxDataValue(value: unknown) {
+  if (value === null || value === undefined || value === '') return '-'
+  if (typeof value === 'number') return value.toLocaleString('zh-CN', { maximumFractionDigits: 6 })
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
 function taxDataSlotCoversMonth(slot: TaxDataSlot, month: string) {
   if (slot.status !== 'collected' || !month) return false
   const startMonth = (slot.periodStart || slot.periodEnd).slice(0, 7)
@@ -3950,6 +3997,10 @@ function App() {
   const [, setDataStatus] = useState<'loading' | 'connected' | 'fallback'>('loading')
   const [aiReportStage, setAiReportStage] = useState<'reviewing' | 'generating' | null>(null)
   const [taxDataSummary, setTaxDataSummary] = useState<TaxDataSummary | null>(null)
+  const [taxDataDetailSlot, setTaxDataDetailSlot] = useState<TaxDataSlot | null>(null)
+  const [taxDataDetail, setTaxDataDetail] = useState<TaxDataDetail | null>(null)
+  const [taxDataDetailLoading, setTaxDataDetailLoading] = useState(false)
+  const [taxDataDetailError, setTaxDataDetailError] = useState('')
 
   useEffect(() => {
     let active = true
@@ -4088,6 +4139,23 @@ function App() {
   }, [loggedIn, authUser])
 
   const selectedClient = clients.find((client) => client.id === selectedClientId) || clients[0]
+
+  async function openTaxDataDetail(slot: TaxDataSlot) {
+    if (!selectedClient?.id || !slot.sourceFiles.length) return
+    setTaxDataDetailSlot(slot)
+    setTaxDataDetail(null)
+    setTaxDataDetailError('')
+    setTaxDataDetailLoading(true)
+    try {
+      const sourceFileIds = slot.sourceFiles.map((file) => file.id).join(',')
+      const detail = await apiGet<TaxDataDetail>(`/api/tax-data/detail?clientId=${encodeURIComponent(selectedClient.id)}&slotId=${encodeURIComponent(slot.slotId)}&sourceFileIds=${encodeURIComponent(sourceFileIds)}`)
+      setTaxDataDetail(detail)
+    } catch (error) {
+      setTaxDataDetailError(error instanceof Error ? error.message : '资料详情读取失败')
+    } finally {
+      setTaxDataDetailLoading(false)
+    }
+  }
 
   useEffect(() => {
     if (!loggedIn || !selectedClient?.id) {
@@ -5937,7 +6005,19 @@ function App() {
                         </header>
                         <div className="tax-data-slot-list">
                           {selectedTaxDataSlots.map((slot) => (
-                            <div key={slot.id} className={slot.status === 'collected' ? 'tax-data-slot-row collected' : 'tax-data-slot-row missing'}>
+                            <div
+                              key={slot.id}
+                              className={slot.status === 'collected' ? 'tax-data-slot-row collected clickable' : 'tax-data-slot-row missing'}
+                              role={slot.status === 'collected' ? 'button' : undefined}
+                              tabIndex={slot.status === 'collected' ? 0 : undefined}
+                              onClick={() => slot.status === 'collected' && void openTaxDataDetail(slot)}
+                              onKeyDown={(event) => {
+                                if (slot.status === 'collected' && (event.key === 'Enter' || event.key === ' ')) {
+                                  event.preventDefault()
+                                  void openTaxDataDetail(slot)
+                                }
+                              }}
+                            >
                               <span className="tax-data-slot-state">{slot.status === 'collected' ? <CheckCircle2 /> : <AlertTriangle />}</span>
                               <div className="tax-data-slot-main">
                                 <strong>{slot.name}</strong>
@@ -5964,6 +6044,7 @@ function App() {
                                 </dl>
                               ) : null}
                               {slot.validationMessages.length ? <p>{slot.validationMessages[0]}</p> : null}
+                              {slot.status === 'collected' ? <button type="button" className="secondary-button compact-button tax-data-review-button" onClick={(event) => { event.stopPropagation(); void openTaxDataDetail(slot) }}>查看与核对</button> : null}
                             </div>
                           ))}
                         </div>
@@ -7089,7 +7170,89 @@ function App() {
             </div>
           </section>
         )}
+        <TaxDataDetailModal
+          slot={taxDataDetailSlot}
+          detail={taxDataDetail}
+          loading={taxDataDetailLoading}
+          error={taxDataDetailError}
+          onClose={() => setTaxDataDetailSlot(null)}
+        />
       </main>
+    </div>
+  )
+}
+
+function TaxDataDetailModal({ slot, detail, loading, error, onClose }: {
+  slot: TaxDataSlot | null
+  detail: TaxDataDetail | null
+  loading: boolean
+  error: string
+  onClose: () => void
+}) {
+  if (!slot) return null
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <section className="confirm-modal tax-data-detail-modal" role="dialog" aria-modal="true" aria-labelledby="tax-data-detail-title" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-title-row">
+          <div>
+            <p className="eyebrow">资料核对</p>
+            <h3 id="tax-data-detail-title">{slot.name}</h3>
+            <p className="section-helper">{slot.periodLabel} · 系统保存的标准数据与来源证据</p>
+          </div>
+          <button type="button" className="icon-text-button" onClick={onClose}>关闭</button>
+        </div>
+        {loading ? <p className="tax-data-detail-status">正在读取资料和标准数据...</p> : null}
+        {error ? <p className="period-warning">{error}</p> : null}
+        {detail ? (
+          <>
+            <section className="tax-data-detail-section">
+              <div className="panel-title"><h3>源文件</h3><span>{detail.sources.length} 个</span></div>
+              <div className="tax-data-source-list">
+                {detail.sources.map((source) => (
+                  <article key={source.id}>
+                    <FileText />
+                    <div><strong>{source.file_name}</strong><small>{source.period_start} 至 {source.period_end} · {source.parse_status}</small></div>
+                    {source.stored
+                      ? <a className="secondary-button compact-button" href={`/api/tax-data/source?sourceFileId=${encodeURIComponent(source.id)}`} target="_blank" rel="noreferrer">打开源文件</a>
+                      : <span className="tax-data-source-unavailable">仅保留归档索引</span>}
+                  </article>
+                ))}
+              </div>
+            </section>
+            <section className="tax-data-detail-section">
+              <div className="panel-title"><h3>处理后的标准数据</h3><span>{detail.totalRecords} 条</span></div>
+              {detail.records.length ? (
+                <div className="tax-data-table-wrap">
+                  <table className="tax-data-detail-table">
+                    <thead><tr><th>类型</th><th>期间</th><th>标准字段和值</th><th>可信度</th></tr></thead>
+                    <tbody>{detail.records.map((record) => (
+                      <tr key={record.id}>
+                        <td>{record.record_subtype || record.record_type}</td>
+                        <td>{record.period_start}<br />{record.period_end}</td>
+                        <td><dl>{Object.entries(record.data).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{displayTaxDataValue(value)}</dd></div>)}</dl></td>
+                        <td>{record.confidence}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                  {detail.truncated ? <p className="section-helper">当前展示前 500 条，完整记录仍保存在系统中。</p> : null}
+                </div>
+              ) : <p className="tax-data-detail-status">该归档已有汇总记录，但没有可展示的标准明细。</p>}
+            </section>
+            <section className="tax-data-detail-section">
+              <div className="panel-title"><h3>原值与字段对应</h3><span>{detail.evidence.length} 项证据</span></div>
+              {detail.evidence.length ? (
+                <div className="tax-data-table-wrap"><table className="tax-data-detail-table evidence-table">
+                  <thead><tr><th>源位置</th><th>标准字段</th><th>源文件原值</th><th>入库值</th><th>可信度</th></tr></thead>
+                  <tbody>{detail.evidence.map((item, index) => <tr key={`${item.target_id}-${item.target_field}-${index}`}>
+                    <td>{item.sheet_name ? `${item.sheet_name} ` : ''}{item.page_no ? `第${item.page_no}页 ` : ''}{item.row_no ? `第${item.row_no}行` : ''}</td>
+                    <td>{item.target_field}</td><td>{item.raw_value || '-'}</td><td>{item.normalized_value || '-'}</td><td>{item.confidence}</td>
+                  </tr>)}</tbody>
+                </table></div>
+              ) : <p className="tax-data-detail-status">本批资料没有单独保存字段级证据，请以源文件和标准数据逐项核对。</p>}
+            </section>
+          </>
+        ) : null}
+      </section>
     </div>
   )
 }
@@ -7837,6 +8000,72 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
             </button>
           </div>
         )}
+
+        {/* The archive detail modal is mounted by App so it remains available on the archive page.
+          <div className="modal-backdrop" role="presentation" onClick={() => setTaxDataDetailSlot(null)}>
+            <section className="confirm-modal tax-data-detail-modal" role="dialog" aria-modal="true" aria-labelledby="tax-data-detail-title" onClick={(event) => event.stopPropagation()}>
+              <div className="modal-title-row">
+                <div>
+                  <p className="eyebrow">资料核对</p>
+                  <h3 id="tax-data-detail-title">{taxDataDetailSlot.name}</h3>
+                  <p className="section-helper">{taxDataDetailSlot.periodLabel} · 系统保存的标准数据与来源证据</p>
+                </div>
+                <button type="button" className="icon-text-button" onClick={() => setTaxDataDetailSlot(null)}>关闭</button>
+              </div>
+              {taxDataDetailLoading ? <p className="tax-data-detail-status">正在读取资料和标准数据...</p> : null}
+              {taxDataDetailError ? <p className="period-warning">{taxDataDetailError}</p> : null}
+              {taxDataDetail ? (
+                <>
+                  <section className="tax-data-detail-section">
+                    <div className="panel-title"><h3>源文件</h3><span>{taxDataDetail.sources.length} 个</span></div>
+                    <div className="tax-data-source-list">
+                      {taxDataDetail.sources.map((source) => (
+                        <article key={source.id}>
+                          <FileText />
+                          <div><strong>{source.file_name}</strong><small>{source.period_start} 至 {source.period_end} · {source.parse_status}</small></div>
+                          {source.stored
+                            ? <a className="secondary-button compact-button" href={`/api/tax-data/source?sourceFileId=${encodeURIComponent(source.id)}`} target="_blank" rel="noreferrer">打开源文件</a>
+                            : <span className="tax-data-source-unavailable">仅保留归档索引</span>}
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                  <section className="tax-data-detail-section">
+                    <div className="panel-title"><h3>处理后的标准数据</h3><span>{taxDataDetail.totalRecords} 条</span></div>
+                    {taxDataDetail.records.length ? (
+                      <div className="tax-data-table-wrap">
+                        <table className="tax-data-detail-table">
+                          <thead><tr><th>类型</th><th>期间</th><th>标准字段和值</th><th>可信度</th></tr></thead>
+                          <tbody>{taxDataDetail.records.map((record) => (
+                            <tr key={record.id}>
+                              <td>{record.record_subtype || record.record_type}</td>
+                              <td>{record.period_start}<br />{record.period_end}</td>
+                              <td><dl>{Object.entries(record.data).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{displayTaxDataValue(value)}</dd></div>)}</dl></td>
+                              <td>{record.confidence}</td>
+                            </tr>
+                          ))}</tbody>
+                        </table>
+                        {taxDataDetail.truncated ? <p className="section-helper">当前展示前 500 条，完整记录仍保存在系统中。</p> : null}
+                      </div>
+                    ) : <p className="tax-data-detail-status">该归档已有汇总记录，但没有可展示的标准明细。</p>}
+                  </section>
+                  <section className="tax-data-detail-section">
+                    <div className="panel-title"><h3>原值与字段对应</h3><span>{taxDataDetail.evidence.length} 项证据</span></div>
+                    {taxDataDetail.evidence.length ? (
+                      <div className="tax-data-table-wrap"><table className="tax-data-detail-table evidence-table">
+                        <thead><tr><th>源位置</th><th>标准字段</th><th>源文件原值</th><th>入库值</th><th>可信度</th></tr></thead>
+                        <tbody>{taxDataDetail.evidence.map((item, index) => <tr key={`${item.target_id}-${item.target_field}-${index}`}>
+                          <td>{item.sheet_name ? `${item.sheet_name} ` : ''}{item.page_no ? `第${item.page_no}页 ` : ''}{item.row_no ? `第${item.row_no}行` : ''}</td>
+                          <td>{item.target_field}</td><td>{item.raw_value || '-'}</td><td>{item.normalized_value || '-'}</td><td>{item.confidence}</td>
+                        </tr>)}</tbody>
+                      </table></div>
+                    ) : <p className="tax-data-detail-status">本批资料没有单独保存字段级证据，请以源文件和标准数据逐项核对。</p>}
+                  </section>
+                </>
+              ) : null}
+            </section>
+          </div>
+        */}
       </section>
 
       <details className="intake-missing-details">
