@@ -1204,6 +1204,64 @@ td small,
   gap: 10px;
 }
 
+.tax-data-period-nav {
+  display: grid;
+  grid-template-columns: minmax(150px, auto) 110px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(12, 140, 130, 0.2);
+  border-radius: 8px;
+  background: #f7fbfb;
+}
+
+.tax-data-period-nav > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.tax-data-period-nav span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tax-data-period-nav strong {
+  font-size: 16px;
+}
+
+.tax-data-period-nav select {
+  min-height: 38px;
+  padding: 0 10px;
+}
+
+.tax-data-period-months {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(42px, 1fr));
+  gap: 5px;
+}
+
+.tax-data-period-months button {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--muted);
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tax-data-period-months button.has-data {
+  border-color: rgba(17, 153, 112, 0.42);
+  color: #147351;
+}
+
+.tax-data-period-months button.active {
+  border-color: #087f83;
+  color: #fff;
+  background: #087f83;
+  font-weight: 800;
+}
+
 .tax-data-board-summary div,
 .tax-data-empty,
 .tax-data-missing,
@@ -4926,6 +4984,14 @@ textarea:focus {
   .assistant-workspace.history-open,
   .sidebar nav {
     grid-template-columns: 1fr;
+  }
+
+  .tax-data-period-nav {
+    grid-template-columns: 1fr;
+  }
+
+  .tax-data-period-months {
+    grid-template-columns: repeat(6, minmax(42px, 1fr));
   }
 
   .assistant-workspace {

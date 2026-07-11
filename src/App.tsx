@@ -490,6 +490,13 @@ type TaxDataSummary = {
   }
 }
 
+function taxDataSlotCoversMonth(slot: TaxDataSlot, month: string) {
+  if (slot.status !== 'collected' || !month) return false
+  const startMonth = (slot.periodStart || slot.periodEnd).slice(0, 7)
+  const endMonth = (slot.periodEnd || slot.periodStart).slice(0, 7)
+  return Boolean(startMonth && endMonth && startMonth <= month && month <= endMonth)
+}
+
 const taxDataFolderOrder = [
   '增值税资料',
   '企业所得税资料',
@@ -3927,6 +3934,7 @@ function App() {
   const [editingRuleCode, setEditingRuleCode] = useState('')
   const [selectedPeriodEntryIds, setSelectedPeriodEntryIds] = useState<string[]>([])
   const [selectedTaxDataFolder, setSelectedTaxDataFolder] = useState('增值税资料')
+  const [selectedTaxDataMonth, setSelectedTaxDataMonth] = useState('')
   const [bossPeriodStart, setBossPeriodStart] = useState('')
   const [bossPeriodEnd, setBossPeriodEnd] = useState('')
   const [riskDetectionStep, setRiskDetectionStep] = useState<RiskDetectionStep>('client')
@@ -4141,9 +4149,60 @@ function App() {
     : selectedClient
   const reportPageRisks = selectedReport ? reportRiskList(selectedReport) : currentRisks
   const activeTaxDataSummary = taxDataSummary?.clientId === selectedClient?.id ? taxDataSummary : null
+  const taxDataPeriodYears = useMemo(() => {
+    const years = new Set<string>()
+    for (const entry of selectedClient?.periodEntries || []) {
+      entry.months.forEach((month) => years.add(month.slice(0, 4)))
+      if (entry.analysisYear) years.add(entry.analysisYear)
+    }
+    for (const slot of activeTaxDataSummary?.slots || []) {
+      if (slot.periodStart) years.add(slot.periodStart.slice(0, 4))
+      if (slot.periodEnd) years.add(slot.periodEnd.slice(0, 4))
+    }
+    if (!years.size) years.add(String(new Date().getFullYear()))
+    return Array.from(years).filter(Boolean).sort((a, b) => Number(b) - Number(a))
+  }, [activeTaxDataSummary, selectedClient])
+  const defaultTaxDataMonth = useMemo(() => {
+    const collectedMonths = (activeTaxDataSummary?.slots || [])
+      .filter((slot) => slot.status === 'collected')
+      .map((slot) => (slot.periodEnd || slot.periodStart).slice(0, 7))
+      .filter(Boolean)
+      .sort()
+    const fallbackYear = taxDataPeriodYears[0] || String(new Date().getFullYear())
+    return collectedMonths.at(-1) || `${fallbackYear}-01`
+  }, [activeTaxDataSummary, taxDataPeriodYears])
+  const effectiveTaxDataMonth = selectedTaxDataMonth && taxDataPeriodYears.includes(selectedTaxDataMonth.slice(0, 4))
+    ? selectedTaxDataMonth
+    : defaultTaxDataMonth
+  const periodScopedTaxDataSlots = useMemo(() => {
+    const slotsById = new Map<string, TaxDataSlot[]>()
+    for (const slot of activeTaxDataSummary?.slots || []) {
+      const items = slotsById.get(slot.slotId) || []
+      items.push(slot)
+      slotsById.set(slot.slotId, items)
+    }
+    return Array.from(slotsById.values()).flatMap((items) => {
+      const matching = items.filter((slot) => taxDataSlotCoversMonth(slot, effectiveTaxDataMonth))
+      if (matching.length) return matching
+      const base = items.find((slot) => slot.status === 'missing') || items[0]
+      return [{
+        ...base,
+        id: `period-missing:${base.slotId}:${effectiveTaxDataMonth}`,
+        status: 'missing' as const,
+        periodStart: '',
+        periodEnd: '',
+        periodLabel: '待收录',
+        recordCount: 0,
+        sourceFileCount: 0,
+        keyValues: [],
+        validationMessages: [],
+        sourceFiles: [],
+      }]
+    })
+  }, [activeTaxDataSummary, effectiveTaxDataMonth])
   const taxDataSlotsByGroup = useMemo(() => {
     const groups = new Map<string, TaxDataSlot[]>()
-    for (const slot of activeTaxDataSummary?.slots || []) {
+    for (const slot of periodScopedTaxDataSlots) {
       const items = groups.get(slot.group) || []
       items.push(slot)
       groups.set(slot.group, items)
@@ -4151,7 +4210,7 @@ function App() {
     return taxDataFolderOrder
       .filter((group) => groups.has(group))
       .map((group) => [group, groups.get(group) || []] as [string, TaxDataSlot[]])
-  }, [activeTaxDataSummary])
+  }, [periodScopedTaxDataSlots])
   const taxDataFolderSummaries = useMemo(() => {
     return taxDataSlotsByGroup.map(([group, slots]) => {
       const categories = new Map<string, boolean>()
@@ -4175,9 +4234,31 @@ function App() {
   const selectedTaxDataFolderSummary = taxDataFolderSummaries.find((folder) => folder.group === selectedTaxDataFolder)
     || taxDataFolderSummaries[0]
   const selectedTaxDataSlots = selectedTaxDataFolderSummary?.slots || []
-  const activeTaxDataSourceFileCount = useMemo(() => new Set(
-    (activeTaxDataSummary?.slots || []).flatMap((slot) => slot.sourceFiles.map((file) => file.id)),
-  ).size, [activeTaxDataSummary])
+  const periodTaxDataStats = useMemo(() => {
+    const collected = periodScopedTaxDataSlots.filter((slot) => slot.status === 'collected')
+    return {
+      collectedCategoryCount: new Set(collected.map((slot) => slot.slotId)).size,
+      totalCategoryCount: new Set(periodScopedTaxDataSlots.map((slot) => slot.slotId)).size,
+      sourceFileCount: new Set(collected.flatMap((slot) => slot.sourceFiles.map((file) => file.id))).size,
+      recordCount: collected.reduce((sum, slot) => sum + slot.recordCount, 0),
+      missingCount: new Set(periodScopedTaxDataSlots.filter((slot) => slot.status === 'missing').map((slot) => slot.slotId)).size,
+    }
+  }, [periodScopedTaxDataSlots])
+  const taxDataMonthsWithData = useMemo(() => new Set(
+    (activeTaxDataSummary?.slots || []).filter((slot) => slot.status === 'collected').flatMap((slot) => {
+      const start = (slot.periodStart || slot.periodEnd).slice(0, 7)
+      const end = (slot.periodEnd || slot.periodStart).slice(0, 7)
+      if (!start || !end) return []
+      const months: string[] = []
+      let cursor = monthIndex(start)
+      const last = monthIndex(end)
+      while (cursor <= last && months.length < 120) {
+        months.push(monthFromIndex(cursor))
+        cursor += 1
+      }
+      return months
+    }),
+  ), [activeTaxDataSummary])
 
   const clientRows = useMemo(() => {
     return clients
@@ -5755,26 +5836,54 @@ function App() {
                   </div>
                 </div>
                 <section className="tax-data-board" aria-label="企业资料完整性看板">
+                  <div className="tax-data-period-nav">
+                    <div>
+                      <span>查看资料期间</span>
+                      <strong>{effectiveTaxDataMonth ? `${effectiveTaxDataMonth.slice(0, 4)}年${Number(effectiveTaxDataMonth.slice(5, 7))}月` : '请选择月份'}</strong>
+                    </div>
+                    <select
+                      aria-label="资料年份"
+                      value={effectiveTaxDataMonth.slice(0, 4) || taxDataPeriodYears[0] || ''}
+                      onChange={(event) => setSelectedTaxDataMonth(`${event.target.value}-${effectiveTaxDataMonth.slice(5, 7) || '01'}`)}
+                    >
+                      {taxDataPeriodYears.map((year) => <option key={year} value={year}>{year}年</option>)}
+                    </select>
+                    <div className="tax-data-period-months">
+                      {monthNames.map((label, index) => {
+                        const month = `${effectiveTaxDataMonth.slice(0, 4) || taxDataPeriodYears[0]}-${String(index + 1).padStart(2, '0')}`
+                        return (
+                          <button
+                            key={month}
+                            type="button"
+                            className={`${effectiveTaxDataMonth === month ? 'active' : ''}${taxDataMonthsWithData.has(month) ? ' has-data' : ''}`}
+                            onClick={() => setSelectedTaxDataMonth(month)}
+                          >
+                            {label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
                   <div className="tax-data-board-summary">
                     <div>
                       <span>已收录资料类别</span>
-                      <strong>{activeTaxDataSummary?.stats.collectedSlotCount || 0}/{activeTaxDataSummary?.stats.totalSlotCount || 18}</strong>
+                      <strong>{periodTaxDataStats.collectedCategoryCount}/{periodTaxDataStats.totalCategoryCount || 18}</strong>
                     </div>
                     <div>
                       <span>来源文件</span>
-                      <strong>{activeTaxDataSourceFileCount} 个</strong>
+                      <strong>{periodTaxDataStats.sourceFileCount} 个</strong>
                     </div>
                     <div>
                       <span>标准记录</span>
-                      <strong>{activeTaxDataSummary?.stats.recordCount || 0} 条</strong>
+                      <strong>{periodTaxDataStats.recordCount} 条</strong>
                     </div>
                     <div>
-                      <span>待确认</span>
+                      <span>待确认（全部期间）</span>
                       <strong>{activeTaxDataSummary?.pendingConfirmationCount || 0} 项</strong>
                     </div>
                     <div>
                       <span>缺失资料</span>
-                      <strong>{activeTaxDataSummary?.missingSlots.length || 0} 项</strong>
+                      <strong>{periodTaxDataStats.missingCount} 项</strong>
                     </div>
                   </div>
                   {taxDataFolderSummaries.length ? (
