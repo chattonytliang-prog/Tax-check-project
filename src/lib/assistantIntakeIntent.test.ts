@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hasDirectIntakeAuthorization, instantAssistantReply } from './assistantIntakeIntent'
+import { binaryAssistantReplyMessage, hasDirectIntakeAuthorization, instantAssistantReply, isBinaryAssistantQuestion } from './assistantIntakeIntent'
 
 describe('hasDirectIntakeAuthorization', () => {
   it.each([
@@ -31,5 +31,17 @@ describe('instantAssistantReply', () => {
 
   it('leaves business questions to the Agent', () => {
     expect(instantAssistantReply('2026年3月有没有利润表')).toBe('')
+  })
+})
+
+describe('binary assistant questions', () => {
+  it('recognizes closed questions and preserves question context in replies', () => {
+    const question = '增值税申报表（2026年3月）是否已上传？'
+    expect(isBinaryAssistantQuestion(question)).toBe(true)
+    expect(binaryAssistantReplyMessage(question, '是')).toBe('针对“增值税申报表（2026年3月）是否已上传”，我的回答是：是。')
+  })
+
+  it('does not add binary controls to open questions', () => {
+    expect(isBinaryAssistantQuestion('请说明这份资料对应哪个期间？')).toBe(false)
   })
 })

@@ -17,3 +17,11 @@ export function instantAssistantReply(message: string) {
   if (/^(谢谢|感谢|多谢|thankyou|thanks)$/.test(text)) return '不客气。'
   return ''
 }
+
+export function isBinaryAssistantQuestion(text: string) {
+  return /(是否|有没有|有无|可否|能否|是不是|是否已|是否可以|可不可以)/.test(text)
+}
+
+export function binaryAssistantReplyMessage(question: string, answer: '是' | '否') {
+  return `针对“${question.replace(/[？?。]+$/, '')}”，我的回答是：${answer}。`
+}

@@ -4166,6 +4166,34 @@ textarea:focus {
   margin: 0;
 }
 
+.assistant-binary-actions {
+  display: inline-flex;
+  gap: 5px;
+  margin-left: 10px;
+  vertical-align: middle;
+}
+
+.assistant-binary-actions button {
+  min-width: 42px;
+  min-height: 28px;
+  border: 1px solid rgba(8, 127, 131, 0.35);
+  border-radius: 5px;
+  color: #086d70;
+  background: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.assistant-binary-actions button:hover:not(:disabled) {
+  color: #fff;
+  background: #087f83;
+}
+
+.assistant-binary-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .ai-assistant-message small {
   display: block;
   margin-top: 8px;

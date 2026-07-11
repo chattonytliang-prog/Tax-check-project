@@ -71,7 +71,7 @@ import {
 } from './lib/clientImportParser'
 import { extractPdfTextPages } from './lib/pdfTextExtractor'
 import { parseTaxDataPdfText, type ParsedTaxDataIntake } from './lib/taxDataIntakeParser'
-import { hasDirectIntakeAuthorization, instantAssistantReply } from './lib/assistantIntakeIntent'
+import { binaryAssistantReplyMessage, hasDirectIntakeAuthorization, instantAssistantReply, isBinaryAssistantQuestion } from './lib/assistantIntakeIntent'
 import {
   classifyIntakeMaterial,
   detectIntakePeriod,
@@ -9839,7 +9839,17 @@ function AiAssistantPage({
                       {assistantMessageBlocks(item.content).map((block, index) => (
                         block.type === 'list' ? (
                           <ol key={`list-${index}`}>
-                            {block.items.map((listItem) => <li key={listItem}>{listItem}</li>)}
+                            {block.items.map((listItem) => (
+                              <li key={listItem}>
+                                <span>{listItem}</span>
+                                {item.role === 'assistant' && isBinaryAssistantQuestion(listItem) ? (
+                                  <span className="assistant-binary-actions" aria-label={`回答：${listItem}`}>
+                                    <button type="button" onClick={() => void askAssistant(binaryAssistantReplyMessage(listItem, '是'))} disabled={assistantLoading}>是</button>
+                                    <button type="button" onClick={() => void askAssistant(binaryAssistantReplyMessage(listItem, '否'))} disabled={assistantLoading}>否</button>
+                                  </span>
+                                ) : null}
+                              </li>
+                            ))}
                           </ol>
                         ) : (
                           <p key={`paragraph-${index}`}>{block.text}</p>
