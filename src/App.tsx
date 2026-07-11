@@ -10,6 +10,8 @@ import {
   ClipboardList,
   Download,
   FileText,
+  Folder,
+  FolderOpen,
   Gauge,
   Info,
   LayoutDashboard,
@@ -477,6 +479,29 @@ type TaxDataSummary = {
     totalSlotCount: number
     recordCount: number
   }
+}
+
+const taxDataFolderOrder = [
+  '增值税资料',
+  '企业所得税资料',
+  '个人所得税与薪酬',
+  '财务报表',
+  '账簿资料',
+  '发票资料',
+  '其他支撑资料',
+]
+
+function taxDataPeriodTypeLabel(periodType: TaxDataSlot['periodType']) {
+  if (periodType === 'quarter') return '按季度'
+  if (periodType === 'year') return '按年度'
+  if (periodType === 'range') return '按期间'
+  return '按月'
+}
+
+function taxDataParserTypeLabel(parserType: string) {
+  if (parserType === 'source_evidence') return '原始证据'
+  if (parserType.includes('fixed')) return '标准模板'
+  return '字段映射'
 }
 
 type ManagedRule = {
@@ -3892,6 +3917,7 @@ function App() {
   const [ruleDraft, setRuleDraft] = useState<ManagedRule>(emptyManagedRule)
   const [editingRuleCode, setEditingRuleCode] = useState('')
   const [selectedPeriodEntryIds, setSelectedPeriodEntryIds] = useState<string[]>([])
+  const [selectedTaxDataFolder, setSelectedTaxDataFolder] = useState('增值税资料')
   const [bossPeriodStart, setBossPeriodStart] = useState('')
   const [bossPeriodEnd, setBossPeriodEnd] = useState('')
   const [riskDetectionStep, setRiskDetectionStep] = useState<RiskDetectionStep>('client')
@@ -4113,8 +4139,28 @@ function App() {
       items.push(slot)
       groups.set(slot.group, items)
     }
-    return Array.from(groups.entries())
+    return taxDataFolderOrder
+      .filter((group) => groups.has(group))
+      .map((group) => [group, groups.get(group) || []] as [string, TaxDataSlot[]])
   }, [activeTaxDataSummary])
+  const taxDataFolderSummaries = useMemo(() => {
+    return taxDataSlotsByGroup.map(([group, slots]) => {
+      const collected = slots.filter((slot) => slot.status === 'collected').length
+      const missing = slots.length - collected
+      const hasValidation = slots.some((slot) => slot.validationMessages.length)
+      const status = activeTaxDataSummary?.pendingConfirmationCount && hasValidation
+        ? 'pending'
+        : missing === 0 && slots.length > 0
+          ? 'complete'
+          : collected > 0
+            ? 'partial'
+            : 'missing'
+      return { group, slots, collected, missing, total: slots.length, status }
+    })
+  }, [taxDataSlotsByGroup, activeTaxDataSummary?.pendingConfirmationCount])
+  const selectedTaxDataFolderSummary = taxDataFolderSummaries.find((folder) => folder.group === selectedTaxDataFolder)
+    || taxDataFolderSummaries[0]
+  const selectedTaxDataSlots = selectedTaxDataFolderSummary?.slots || []
 
   const clientRows = useMemo(() => {
     return clients
@@ -5694,7 +5740,7 @@ function App() {
                   <div className="tax-data-board-summary">
                     <div>
                       <span>已收录槽位</span>
-                      <strong>{activeTaxDataSummary?.stats.collectedSlotCount || 0}/{activeTaxDataSummary?.stats.totalSlotCount || 9}</strong>
+                      <strong>{activeTaxDataSummary?.stats.collectedSlotCount || 0}/{activeTaxDataSummary?.stats.totalSlotCount || 18}</strong>
                     </div>
                     <div>
                       <span>标准记录</span>
@@ -5709,63 +5755,70 @@ function App() {
                       <strong>{activeTaxDataSummary?.missingSlots.length || 0} 项</strong>
                     </div>
                   </div>
-                  {taxDataSlotsByGroup.length ? (
-                    <div className="tax-data-slot-groups">
-                      {taxDataSlotsByGroup.map(([group, slots]) => (
-                        <article key={group} className="tax-data-slot-group">
-                          <header>
-                            <strong>{group}</strong>
-                            <small>{slots.filter((slot) => slot.status === 'collected').length}/{slots.length} 个槽位已收录</small>
-                          </header>
-                          <div className="tax-data-slot-grid">
-                            {slots.slice(0, 12).map((slot) => (
-                              <div key={slot.id} className={slot.status === 'collected' ? 'tax-data-slot-card collected' : 'tax-data-slot-card missing'}>
-                                <div>
-                                  <span>{slot.name}</span>
-                                  <strong>{slot.status === 'collected' ? slot.periodLabel : '待收录'}</strong>
-                                </div>
+                  {taxDataFolderSummaries.length ? (
+                    <>
+                      <div className="tax-data-folder-grid" aria-label="资料分类">
+                        {taxDataFolderSummaries.map((folder, index) => {
+                          const active = folder.group === selectedTaxDataFolderSummary?.group
+                          return (
+                            <button
+                              key={folder.group}
+                              type="button"
+                              className={`tax-data-folder-tile ${folder.status}${active ? ' active' : ''}`}
+                              onClick={() => setSelectedTaxDataFolder(folder.group)}
+                            >
+                              <span className="tax-data-folder-index">{String(index + 1).padStart(2, '0')}</span>
+                              <span className="tax-data-folder-icon">{active ? <FolderOpen /> : <Folder />}</span>
+                              <strong>{folder.group}</strong>
+                              <small>{folder.collected}/{folder.total} 个槽位已收录</small>
+                              <em>{folder.status === 'complete' ? '齐全' : folder.status === 'partial' ? '部分缺失' : folder.status === 'pending' ? '待确认' : '缺资料'}</em>
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <article className="tax-data-folder-detail">
+                        <header>
+                          <div>
+                            <span>{selectedTaxDataFolderSummary?.group}</span>
+                            <strong>{selectedTaxDataFolderSummary?.status === 'complete' ? '资料齐全' : selectedTaxDataFolderSummary?.status === 'partial' ? '资料部分收录' : '资料待补齐'}</strong>
+                          </div>
+                          <small>{selectedTaxDataFolderSummary?.collected || 0}/{selectedTaxDataFolderSummary?.total || 0} 个槽位已收录</small>
+                        </header>
+                        <div className="tax-data-slot-list">
+                          {selectedTaxDataSlots.map((slot) => (
+                            <div key={slot.id} className={slot.status === 'collected' ? 'tax-data-slot-row collected' : 'tax-data-slot-row missing'}>
+                              <span className="tax-data-slot-state">{slot.status === 'collected' ? <CheckCircle2 /> : <AlertTriangle />}</span>
+                              <div className="tax-data-slot-main">
+                                <strong>{slot.name}</strong>
                                 <small>
                                   {slot.status === 'collected'
-                                    ? `${slot.recordCount} 条记录 · ${slot.sourceFileCount} 个来源文件`
-                                    : `${slot.periodType === 'quarter' ? '按季度' : slot.periodType === 'year' ? '按年度' : slot.periodType === 'range' ? '按期间' : '按月'}收录 · ${slot.parserType.includes('fixed') ? '标准模板' : '字段映射'}`}
+                                    ? `${slot.periodLabel} · ${slot.recordCount} 条记录 · ${slot.sourceFileCount} 个来源文件`
+                                    : `${taxDataPeriodTypeLabel(slot.periodType)}收录 · ${taxDataParserTypeLabel(slot.parserType)}`}
                                 </small>
-                                {slot.description ? <p>{slot.description}</p> : null}
-                                {slot.keyValues.length ? (
-                                  <dl>
-                                    {slot.keyValues.slice(0, 4).map(([label, value]) => (
-                                      <div key={`${slot.id}-${label}`}>
-                                        <dt>{label}</dt>
-                                        <dd>{value}</dd>
-                                      </div>
-                                    ))}
-                                  </dl>
-                                ) : null}
-                                {slot.validationMessages.length ? (
-                                  <ul>
-                                    {slot.validationMessages.slice(0, 2).map((message) => (
-                                      <li key={`${slot.id}-${message}`}>{message}</li>
-                                    ))}
-                                  </ul>
-                                ) : null}
                                 {slot.sourceFiles[0]?.file_name ? <em>{slot.sourceFiles[0].file_name}</em> : null}
                               </div>
-                            ))}
-                          </div>
-                        </article>
-                      ))}
-                    </div>
+                              {slot.keyValues.length ? (
+                                <dl>
+                                  {slot.keyValues.slice(0, 3).map(([label, value]) => (
+                                    <div key={`${slot.id}-${label}`}>
+                                      <dt>{label}</dt>
+                                      <dd>{value}</dd>
+                                    </div>
+                                  ))}
+                                </dl>
+                              ) : null}
+                              {slot.validationMessages.length ? <p>{slot.validationMessages[0]}</p> : null}
+                            </div>
+                          ))}
+                        </div>
+                      </article>
+                    </>
                   ) : (
                     <div className="tax-data-empty">
                       <strong>还没有标准资料槽位</strong>
                       <p>在 AI 财税助手上传并确认导入后，增值税申报表、附表四、工资表、科目余额表等会自动出现在这里。</p>
                     </div>
                   )}
-                  {activeTaxDataSummary?.missingSlots.length ? (
-                    <div className="tax-data-missing">
-                      <strong>当前缺失</strong>
-                      <span>{activeTaxDataSummary.missingSlots.slice(0, 10).join('、')}</span>
-                    </div>
-                  ) : null}
                 </section>
                 <div className="archive-year-list">
                   {selectedClientPeriodYears.map((year) => (

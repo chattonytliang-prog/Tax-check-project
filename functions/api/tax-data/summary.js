@@ -34,6 +34,9 @@ const SLOT_CATALOG = [
   { id: 'cit-quarterly-prepayment', group: '企业所得税资料', name: '企业所得税季度预缴申报表', periodType: 'quarter', parserType: 'fixed_template' },
   { id: 'cit-annual-return', group: '企业所得税资料', name: '企业所得税年度申报表', periodType: 'year', parserType: 'fixed_template' },
   { id: 'cit-adjustment', group: '企业所得税资料', name: '纳税调整明细', periodType: 'year', parserType: 'fixed_or_mapped_table' },
+  { id: 'support-contracts', group: '其他支撑资料', name: '合同', periodType: 'range', parserType: 'source_evidence' },
+  { id: 'support-explanations', group: '其他支撑资料', name: '说明文件', periodType: 'range', parserType: 'source_evidence' },
+  { id: 'support-attachments', group: '其他支撑资料', name: '其他附件', periodType: 'range', parserType: 'source_evidence' },
 ]
 
 const VAT_MAIN_KEY_ROWS = [

@@ -1240,6 +1240,217 @@ td small,
   gap: 12px;
 }
 
+.tax-data-folder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.tax-data-folder-tile {
+  position: relative;
+  display: grid;
+  min-height: 118px;
+  gap: 7px;
+  align-content: start;
+  justify-items: start;
+  border: 1px solid rgba(12, 140, 130, 0.18);
+  border-radius: 8px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tax-data-folder-tile::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-left: 5px solid rgba(148, 163, 184, 0.7);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.tax-data-folder-tile.complete::before {
+  border-left-color: #169b6b;
+}
+
+.tax-data-folder-tile.partial::before,
+.tax-data-folder-tile.pending::before {
+  border-left-color: #d9821f;
+}
+
+.tax-data-folder-tile.missing::before {
+  border-left-color: #d14b4b;
+}
+
+.tax-data-folder-tile.active {
+  border-color: rgba(8, 116, 129, 0.5);
+  background: #f8ffff;
+  box-shadow: 0 12px 28px rgba(9, 65, 76, 0.12);
+}
+
+.tax-data-folder-index {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.tax-data-folder-icon svg {
+  width: 24px;
+  height: 24px;
+  color: var(--teal);
+  stroke-width: 2.2;
+}
+
+.tax-data-folder-tile strong {
+  font-size: 15px;
+}
+
+.tax-data-folder-tile small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tax-data-folder-tile em {
+  align-self: end;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: rgba(209, 75, 75, 0.1);
+  color: #a73434;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.tax-data-folder-tile.complete em {
+  background: rgba(22, 155, 107, 0.12);
+  color: #0f7a55;
+}
+
+.tax-data-folder-tile.partial em,
+.tax-data-folder-tile.pending em {
+  background: rgba(217, 130, 31, 0.13);
+  color: #9f5b16;
+}
+
+.tax-data-folder-detail {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(12, 140, 130, 0.16);
+  border-radius: 8px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.tax-data-folder-detail header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: end;
+  border-bottom: 1px solid rgba(12, 140, 130, 0.12);
+  padding-bottom: 10px;
+}
+
+.tax-data-folder-detail header div {
+  display: grid;
+  gap: 4px;
+}
+
+.tax-data-folder-detail header span,
+.tax-data-folder-detail header small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tax-data-folder-detail header strong {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.tax-data-slot-list {
+  display: grid;
+  gap: 8px;
+}
+
+.tax-data-slot-row {
+  display: grid;
+  grid-template-columns: 28px minmax(220px, 1fr) minmax(180px, 0.8fr);
+  gap: 12px;
+  align-items: center;
+  border: 1px solid rgba(12, 140, 130, 0.12);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(248, 252, 252, 0.82);
+}
+
+.tax-data-slot-row.missing {
+  border-color: rgba(209, 75, 75, 0.24);
+  background: rgba(255, 250, 250, 0.82);
+}
+
+.tax-data-slot-state svg {
+  width: 21px;
+  height: 21px;
+  color: #169b6b;
+}
+
+.tax-data-slot-row.missing .tax-data-slot-state svg {
+  color: #d14b4b;
+}
+
+.tax-data-slot-main {
+  display: grid;
+  gap: 4px;
+}
+
+.tax-data-slot-main small,
+.tax-data-slot-main em,
+.tax-data-slot-row p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.tax-data-slot-main em {
+  overflow: hidden;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tax-data-slot-row dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.tax-data-slot-row dl div {
+  display: grid;
+  gap: 2px;
+  border-radius: 6px;
+  padding: 6px;
+  background: white;
+}
+
+.tax-data-slot-row dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.tax-data-slot-row dd {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.tax-data-slot-row p {
+  grid-column: 2 / -1;
+  margin: 0;
+  color: #9f5b16;
+}
+
 .tax-data-slot-group {
   display: grid;
   gap: 10px;
@@ -4678,6 +4889,8 @@ textarea:focus {
   .stat-grid,
   .result-summary,
   .tax-data-board-summary,
+  .tax-data-folder-grid,
+  .tax-data-slot-row,
   .boss-period-brief,
   .boss-dashboard,
   .analytics-grid,
