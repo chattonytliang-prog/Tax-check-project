@@ -44,6 +44,7 @@ export async function onRequestPost({ request, env }) {
     if (auth.response) return auth.response
     const formData = await request.formData()
     const sourceFileId = String(formData.get('sourceFileId') || '').trim()
+    const submittedFileName = String(formData.get('fileName') || '').trim()
     const file = formData.get('file')
     if (!sourceFileId || !(file instanceof File)) return badRequest('sourceFileId and file are required')
     if (file.size > 8 * 1024 * 1024) return badRequest('File is too large')
@@ -53,7 +54,7 @@ export async function onRequestPost({ request, env }) {
        WHERE id = ? AND owner_user_id = ? LIMIT 1`,
     ).bind(sourceFileId, auth.user.id).first()
     if (!row) return new Response('Source file not found', { status: 404 })
-    if (String(file.name) !== String(row.file_name)) return badRequest('File name does not match the archived source')
+    if (String(submittedFileName || file.name) !== String(row.file_name)) return badRequest('File name does not match the archived source')
     const bucket = getMaterialsBucket(env)
     if (!bucket) return new Response('Material storage is unavailable', { status: 503 })
     const safeName = String(row.file_name).replace(/[\\/:*?"<>|]/g, '_').slice(0, 160)
