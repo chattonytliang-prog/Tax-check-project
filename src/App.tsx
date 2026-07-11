@@ -4154,22 +4154,30 @@ function App() {
   }, [activeTaxDataSummary])
   const taxDataFolderSummaries = useMemo(() => {
     return taxDataSlotsByGroup.map(([group, slots]) => {
-      const collected = slots.filter((slot) => slot.status === 'collected').length
-      const missing = slots.length - collected
+      const categories = new Map<string, boolean>()
+      for (const slot of slots) {
+        categories.set(slot.slotId, Boolean(categories.get(slot.slotId)) || slot.status === 'collected')
+      }
+      const collected = Array.from(categories.values()).filter(Boolean).length
+      const total = categories.size
+      const missing = total - collected
       const hasValidation = slots.some((slot) => slot.validationMessages.length)
       const status = activeTaxDataSummary?.pendingConfirmationCount && hasValidation
         ? 'pending'
-        : missing === 0 && slots.length > 0
+        : missing === 0 && total > 0
           ? 'complete'
           : collected > 0
             ? 'partial'
             : 'missing'
-      return { group, slots, collected, missing, total: slots.length, status }
+      return { group, slots, collected, missing, total, status }
     })
   }, [taxDataSlotsByGroup, activeTaxDataSummary?.pendingConfirmationCount])
   const selectedTaxDataFolderSummary = taxDataFolderSummaries.find((folder) => folder.group === selectedTaxDataFolder)
     || taxDataFolderSummaries[0]
   const selectedTaxDataSlots = selectedTaxDataFolderSummary?.slots || []
+  const activeTaxDataSourceFileCount = useMemo(() => new Set(
+    (activeTaxDataSummary?.slots || []).flatMap((slot) => slot.sourceFiles.map((file) => file.id)),
+  ).size, [activeTaxDataSummary])
 
   const clientRows = useMemo(() => {
     return clients
@@ -5746,11 +5754,15 @@ function App() {
                     </button>
                   </div>
                 </div>
-                <section className="tax-data-board" aria-label="企业资料槽位看板">
+                <section className="tax-data-board" aria-label="企业资料完整性看板">
                   <div className="tax-data-board-summary">
                     <div>
-                      <span>已收录槽位</span>
+                      <span>已收录资料类别</span>
                       <strong>{activeTaxDataSummary?.stats.collectedSlotCount || 0}/{activeTaxDataSummary?.stats.totalSlotCount || 18}</strong>
+                    </div>
+                    <div>
+                      <span>来源文件</span>
+                      <strong>{activeTaxDataSourceFileCount} 个</strong>
                     </div>
                     <div>
                       <span>标准记录</span>
@@ -5780,7 +5792,7 @@ function App() {
                               <span className="tax-data-folder-index">{String(index + 1).padStart(2, '0')}</span>
                               <span className="tax-data-folder-icon">{active ? <FolderOpen /> : <Folder />}</span>
                               <strong>{folder.group}</strong>
-                              <small>{folder.collected}/{folder.total} 个槽位已收录</small>
+                              <small>{folder.collected}/{folder.total} 类资料已收录</small>
                               <em>{folder.status === 'complete' ? '齐全' : folder.status === 'partial' ? '部分缺失' : folder.status === 'pending' ? '待确认' : '缺资料'}</em>
                             </button>
                           )
@@ -5792,7 +5804,7 @@ function App() {
                             <span>{selectedTaxDataFolderSummary?.group}</span>
                             <strong>{selectedTaxDataFolderSummary?.status === 'complete' ? '资料齐全' : selectedTaxDataFolderSummary?.status === 'partial' ? '资料部分收录' : '资料待补齐'}</strong>
                           </div>
-                          <small>{selectedTaxDataFolderSummary?.collected || 0}/{selectedTaxDataFolderSummary?.total || 0} 个槽位已收录</small>
+                          <small>{selectedTaxDataFolderSummary?.collected || 0}/{selectedTaxDataFolderSummary?.total || 0} 类资料已收录</small>
                         </header>
                         <div className="tax-data-slot-list">
                           {selectedTaxDataSlots.map((slot) => (
@@ -5830,7 +5842,7 @@ function App() {
                     </>
                   ) : (
                     <div className="tax-data-empty">
-                      <strong>还没有标准资料槽位</strong>
+                      <strong>还没有已收录的标准资料</strong>
                       <p>在 AI 财税助手上传并确认导入后，增值税申报表、附表四、工资表、科目余额表等会自动出现在这里。</p>
                     </div>
                   )}
