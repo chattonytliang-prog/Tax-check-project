@@ -480,7 +480,7 @@ type TaxDataSlot = {
 type TaxDataSummary = {
   clientId: string
   slots: TaxDataSlot[]
-  slotCatalog?: Array<Pick<TaxDataSlot, 'slotId' | 'group' | 'name' | 'periodType' | 'parserType' | 'standardTemplate' | 'description'>>
+  slotCatalog?: Array<Pick<TaxDataSlot, 'group' | 'name' | 'periodType' | 'parserType' | 'standardTemplate' | 'description'> & { id?: string; slotId?: string }>
   missingSlots: string[]
   pendingConfirmationCount?: number
   stats: {
@@ -488,6 +488,10 @@ type TaxDataSummary = {
     totalSlotCount: number
     recordCount: number
   }
+}
+
+function taxDataCatalogSlotId(item: { id?: string; slotId?: string }) {
+  return item.slotId || item.id || ''
 }
 
 type TaxDataDetail = {
@@ -8828,7 +8832,7 @@ function AiAssistantPage({
       period: taxDataMonth,
       sourceOfTruth: 'standard_tax_data_archive',
       collectedCategories: Array.from(new Set(collectedTaxDataSlots.map((slot) => slot.name))),
-      missingCategories: taxDataCatalog.filter((item) => !collectedTaxDataIds.has(item.slotId)).map((item) => item.name),
+      missingCategories: taxDataCatalog.filter((item) => !collectedTaxDataIds.has(taxDataCatalogSlotId(item))).map((item) => item.name),
       sourceFiles: Array.from(new Set(collectedTaxDataSlots.flatMap((slot) => slot.sourceFiles.map((file) => file.file_name)))),
       recordCount: collectedTaxDataSlots.reduce((sum, slot) => sum + slot.recordCount, 0),
     } : null,
@@ -9702,13 +9706,23 @@ function AiAssistantPage({
       const collectedSlots = taxDataSummary.slots.filter((slot) => taxDataSlotCoversMonth(slot, taxDataMonth))
       const collectedIds = new Set(collectedSlots.map((slot) => slot.slotId))
       const collectedNames = Array.from(new Set(collectedSlots.map((slot) => slot.name)))
-      const missingNames = taxDataSummary.slotCatalog.filter((item) => !collectedIds.has(item.slotId)).map((item) => item.name)
+      const missingItems = taxDataSummary.slotCatalog.filter((item) => !collectedIds.has(taxDataCatalogSlotId(item)))
+      const missingNames = missingItems.map((item) => item.name)
+      const historicalCoverage = missingItems.flatMap((item) => {
+        const slotId = taxDataCatalogSlotId(item)
+        const periods = Array.from(new Set(taxDataSummary.slots
+          .filter((slot) => slot.status === 'collected' && slot.slotId === slotId && !taxDataSlotCoversMonth(slot, taxDataMonth))
+          .map((slot) => slot.periodLabel)
+          .filter(Boolean)))
+        return periods.length ? [`${item.name}（${periods.join('、')}）`] : []
+      })
       appendAssistantSystemMessage([
         `我按标准资料库核对了 ${taxDataMonth} 的企业资料：`,
-        `已收录（${collectedNames.length}类）：${collectedNames.join('、') || '暂无'}。`,
-        `尚未收录（${missingNames.length}类）：${missingNames.join('、') || '无'}。`,
-        '以上以已入库原始文件和标准记录为准，不会把其他月份的资料算入本期。',
-      ].join('\n\n'))
+        `本期已收录（${collectedNames.length}类）：${collectedNames.join('、') || '暂无'}。`,
+        `本期尚未收录（${missingNames.length}类）：${missingNames.join('、') || '无'}。`,
+        historicalCoverage.length ? `以下资料已在其他期间收录，本期仍缺：${historicalCoverage.join('、')}。` : '',
+        '以上按期间分别判断；其他月份已有的资料不会误报为从未上传。',
+      ].filter(Boolean).join('\n\n'))
       return
     }
     appendAssistantSystemMessage(`我按报税资料口径整理了当前客户资料清单：\n\n${summarizeFilingChecklist()}`)
