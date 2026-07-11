@@ -346,6 +346,13 @@ function normalizeAssistantContext(value) {
   }
 }
 
+function reasoningConfig(message) {
+  const needsDeepReasoning = /(分析|风险|原因|测算|计算|报告|方案|建议|判断|解释|整改|筹划)/.test(message)
+  return needsDeepReasoning
+    ? { thinking: { type: 'enabled' }, reasoning_effort: 'high' }
+    : { thinking: { type: 'disabled' }, reasoning_effort: 'low' }
+}
+
 function buildPrompt({ message, history, client, clientVerified, risks, report, assistantContext }) {
   return `You are an AI tax workbench assistant embedded in a Chinese tax risk checking product.
 
@@ -491,6 +498,7 @@ export async function onRequestPost({ request, env }) {
     const clientVerified = Boolean(ownedClient)
 
     const model = env.DEEPSEEK_MODEL || DEFAULT_MODEL
+    const reasoning = reasoningConfig(cleanMessage)
     const messages = [
       {
         role: 'system',
@@ -523,6 +531,7 @@ export async function onRequestPost({ request, env }) {
         temperature: 0.2,
         max_tokens: 3200,
         response_format: { type: 'json_object' },
+        ...reasoning,
       }),
     })
 
@@ -568,6 +577,7 @@ export async function onRequestPost({ request, env }) {
           temperature: 0.2,
           max_tokens: 3200,
           response_format: { type: 'json_object' },
+          ...reasoning,
         }),
       })
       if (!response.ok) {

@@ -9,3 +9,11 @@ export function hasDirectIntakeAuthorization(message: string) {
     || /确认导入|按这个保存|先收录|先入库|都收录进去/.test(text)
   )
 }
+
+export function instantAssistantReply(message: string) {
+  const text = message.replace(/[\s，。！？!?、,.]/g, '').toLowerCase()
+  if (/^(你好|您好|嗨|哈喽|hello|hi)$/.test(text)) return '你好，我在。你可以直接上传资料，或者告诉我需要查询哪家企业、哪个期间。'
+  if (/^(在吗|在不在|有人吗)$/.test(text)) return '在。请直接告诉我需要处理什么。'
+  if (/^(谢谢|感谢|多谢|thankyou|thanks)$/.test(text)) return '不客气。'
+  return ''
+}

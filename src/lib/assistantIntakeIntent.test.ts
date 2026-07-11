@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hasDirectIntakeAuthorization } from './assistantIntakeIntent'
+import { hasDirectIntakeAuthorization, instantAssistantReply } from './assistantIntakeIntent'
 
 describe('hasDirectIntakeAuthorization', () => {
   it.each([
@@ -19,5 +19,17 @@ describe('hasDirectIntakeAuthorization', () => {
     '怎么导入？',
   ])('does not infer authorization from questions or negation: %s', (message) => {
     expect(hasDirectIntakeAuthorization(message)).toBe(false)
+  })
+})
+
+describe('instantAssistantReply', () => {
+  it('answers conversational no-op messages without invoking the model', () => {
+    expect(instantAssistantReply('你好！')).toContain('你好')
+    expect(instantAssistantReply('在吗')).toContain('在')
+    expect(instantAssistantReply('谢谢')).toBe('不客气。')
+  })
+
+  it('leaves business questions to the Agent', () => {
+    expect(instantAssistantReply('2026年3月有没有利润表')).toBe('')
   })
 })

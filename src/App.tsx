@@ -71,7 +71,7 @@ import {
 } from './lib/clientImportParser'
 import { extractPdfTextPages } from './lib/pdfTextExtractor'
 import { parseTaxDataPdfText, type ParsedTaxDataIntake } from './lib/taxDataIntakeParser'
-import { hasDirectIntakeAuthorization } from './lib/assistantIntakeIntent'
+import { hasDirectIntakeAuthorization, instantAssistantReply } from './lib/assistantIntakeIntent'
 import {
   classifyIntakeMaterial,
   detectIntakePeriod,
@@ -9678,6 +9678,11 @@ function AiAssistantPage({
     setAssistantInput('')
     updateAssistantThreadTitle(cleanMessage)
     setActiveAssistantMessages(nextMessages)
+    const instantReply = instantAssistantReply(cleanMessage)
+    if (instantReply) {
+      setActiveAssistantMessages([...nextMessages, { id: crypto.randomUUID(), role: 'assistant', content: instantReply }])
+      return
+    }
     if (parsedTextDraft) {
       setActiveAssistantMessages([
         ...nextMessages,
