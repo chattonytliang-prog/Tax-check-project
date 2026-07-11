@@ -426,6 +426,63 @@ function recordPayload(record) {
   return normalizeObject(record.payload || record.data || record)
 }
 
+function stableHash(value) {
+  const text = String(value || '')
+  let hash = 2166136261
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(36)
+}
+
+function stableRecordBusinessKey(type, subtype, payload) {
+  return [
+    payload.sourceRowNo,
+    payload.entryDate,
+    payload.voucherNo,
+    payload.accountCode,
+    payload.accountName,
+    payload.summary,
+    payload.lineCode,
+    payload.lineName,
+    payload.rowNo,
+    payload.itemName,
+    payload.invoiceNo,
+    payload.invoiceCode,
+    payload.invoiceDate,
+    payload.employeeName,
+    payload.personName,
+    payload.idNumberMasked,
+    payload.incomeItem,
+    subtype,
+    type,
+  ].filter((item) => item !== undefined && item !== null && item !== '').join('|')
+}
+
+function stableStandardRecordId(record, defaultSourceFileId = '', defaultPeriodStart = '', defaultPeriodEnd = '') {
+  const type = normalizeString(record.recordType || record.type || record.category, 80)
+  const subtype = normalizeString(record.recordSubtype || record.subtype, 80)
+  const payload = recordPayload(record)
+  const sourceFileId = normalizeString(record.sourceFileId || defaultSourceFileId, 120)
+  const periodStart = normalizeIsoDate(record.periodStart || defaultPeriodStart)
+  const periodEnd = normalizeIsoDate(record.periodEnd || defaultPeriodEnd)
+  if (!sourceFileId || !type) return normalizeString(record.id || crypto.randomUUID(), 120)
+  const businessKey = stableRecordBusinessKey(type, subtype, payload) || JSON.stringify(payload)
+  return `std_${stableHash([sourceFileId, type, subtype, periodStart, periodEnd, businessKey].join('::'))}`
+}
+
+function stabilizeRecords(records, defaultSourceFileId, defaultPeriodStart, defaultPeriodEnd) {
+  const idMap = new Map()
+  const stableRecords = records.map((record) => {
+    const oldId = normalizeString(record.id, 120)
+    const stableId = stableStandardRecordId(record, defaultSourceFileId, defaultPeriodStart, defaultPeriodEnd)
+    if (oldId && oldId !== stableId) idMap.set(oldId, stableId)
+    return { ...record, id: stableId }
+  })
+  return { records: stableRecords, idMap }
+}
+
 async function runStatements(db, statements, chunkSize = 50) {
   const prepared = statements.filter(Boolean)
   if (!prepared.length) return
@@ -443,11 +500,11 @@ async function runStatements(db, statements, chunkSize = 50) {
 async function materializeStandardRecord(db, auth, batchId, record, defaultClientId, defaultSourceFileId, defaultPeriodStart, defaultPeriodEnd) {
   const type = normalizeString(record.recordType || record.type || record.category, 80)
   const payload = recordPayload(record)
-  const id = normalizeString(record.id || crypto.randomUUID(), 120)
   const clientId = normalizeString(record.clientId || defaultClientId, 120)
   const sourceFileId = normalizeString(record.sourceFileId || defaultSourceFileId, 120)
   const periodStart = normalizeIsoDate(record.periodStart || defaultPeriodStart)
   const periodEnd = normalizeIsoDate(record.periodEnd || defaultPeriodEnd)
+  const id = stableStandardRecordId(record, sourceFileId, periodStart, periodEnd)
   const rawJson = JSON.stringify(payload)
 
   if (type === 'account_balance' && clientId && periodStart && periodEnd && payload.accountCode && payload.accountName) {
@@ -621,9 +678,13 @@ async function saveStandardizedTaxData(db, auth, toolCall, client, body) {
   const periodStart = normalizeIsoDate(args.periodStart || body?.currentDraft?.client?.periodStartDate)
   const periodEnd = normalizeIsoDate(args.periodEnd || body?.currentDraft?.client?.periodEndDate)
   const sourceFiles = normalizeSourceFiles(args, body, client)
-  const records = normalizeArray(args.records || args.standardRecords, 200)
+  const stabilized = stabilizeRecords(normalizeArray(args.records || args.standardRecords, 200), sourceFiles[0]?.id, periodStart, periodEnd)
+  const records = stabilized.records
   const periods = normalizeArray(args.periods, 40)
-  const evidenceFields = normalizeArray(args.evidenceFields || args.evidence, 300)
+  const evidenceFields = normalizeArray(args.evidenceFields || args.evidence, 300).map((evidence) => ({
+    ...evidence,
+    targetId: stabilized.idMap.get(normalizeString(evidence.targetId, 120)) || evidence.targetId,
+  }))
   const conflicts = normalizeArray(args.conflicts, 80)
 
   await ensureTaxDataIntakeTables(db)
