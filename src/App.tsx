@@ -5671,6 +5671,7 @@ function App() {
             reports={reports}
             onApplyClientDraft={(draftClient) => applyAssistantClientDraft(draftClient)}
             onGenerateReport={() => createReport(true)}
+            onTaxDataSummaryUpdate={setTaxDataSummary}
           />
         )}
 
@@ -8259,6 +8260,7 @@ function AiAssistantPage({
   reports,
   onApplyClientDraft,
   onGenerateReport,
+  onTaxDataSummaryUpdate,
 }: {
   clients: Client[]
   selectedClientId: string
@@ -8266,6 +8268,7 @@ function AiAssistantPage({
   reports: Report[]
   onApplyClientDraft: (draftClient: Client) => Promise<AssistantDraftApplyResult>
   onGenerateReport: () => Promise<void>
+  onTaxDataSummaryUpdate: (summary: TaxDataSummary) => void
 }) {
   const temporaryAssistantClient = useMemo(() => (
     deriveClientMetrics({ ...blankClient, id: 'assistant-temp-client', name: '待录入企业' })
@@ -8803,6 +8806,20 @@ function AiAssistantPage({
       confirmationQuestions,
     }
   }
+  const hasDirectIntakeAuthorization = (message: string) => (
+    /(都|全部|全都|直接|先).{0,8}(收录|导入|入库|保存|建档)/.test(message)
+    || /(收录|导入|入库|保存).{0,8}(完|后).{0,8}(再|再来|再告诉|再问)/.test(message)
+    || /确认导入|按这个保存|先收录|先入库|都收录进去/.test(message)
+  )
+  const requiredConfirmationQuestions = (draft: AiAssistantDraft) => (
+    draft.confirmationQuestions.filter((question) => question.severity === 'required')
+  )
+  const saveDraftAndStructuredIntake = async (draft: AiAssistantDraft) => {
+    const result = await onApplyClientDraft(draft.client)
+    if (result.status !== 'saved' || !result.client) return { result, messages: [] as string[] }
+    const messages = await saveStructuredIntake(draft, result.client)
+    return { result, messages }
+  }
   const assistantBackendWriteToolNames = new Set<AiAssistantToolCall['name']>([
     'save_cleaning_draft',
     'create_or_update_company',
@@ -8852,7 +8869,7 @@ function AiAssistantPage({
     if (!intake && expectedRecordCount > 0) {
       throw new Error('结构化解析缓存已失效，请重新上传原始文件后再确认导入。')
     }
-    if (!intake?.records.length) return []
+    if (!intake) return []
     const messages: string[] = []
     const chunkSize = 80
     const sourceFiles = draft.rawMaterials.map((material) => ({
@@ -8875,10 +8892,12 @@ function AiAssistantPage({
       },
     }))
 
-    for (let offset = 0; offset < intake.records.length; offset += chunkSize) {
+    const chunkOffsets = intake.records.length ? Array.from({ length: Math.ceil(intake.records.length / chunkSize) }, (_, index) => index * chunkSize) : [0]
+    for (const offset of chunkOffsets) {
       const records = intake.records.slice(offset, offset + chunkSize)
       const recordIds = new Set(records.map((record) => record.id))
       const isLastChunk = offset + records.length >= intake.records.length
+      const requiredQuestions = requiredConfirmationQuestions(draft)
       const response = await apiSend<{ results: Array<{ status: string; message: string }> }>('/api/assistant/tools', 'POST', {
         toolCalls: [{
           name: 'save_standardized_tax_data',
@@ -8890,12 +8909,24 @@ function AiAssistantPage({
             periodStart: savedClient.periodStartDate,
             periodEnd: savedClient.periodEndDate,
             status: isLastChunk
-              ? intake.conflicts.length || draft.confirmationQuestions.length ? 'pending_confirmation' : 'confirmed'
+              ? intake.conflicts.length || requiredQuestions.length ? 'pending_confirmation' : 'confirmed'
               : 'importing',
             sourceFiles,
             records,
-            evidenceFields: intake.evidenceFields.filter((item) => recordIds.has(item.targetId)),
-            conflicts: offset === 0 ? intake.conflicts : [],
+            evidenceFields: records.length ? intake.evidenceFields.filter((item) => recordIds.has(item.targetId)) : [],
+            conflicts: offset === 0
+              ? [
+                  ...intake.conflicts,
+                  ...requiredQuestions.map((question) => ({
+                    conflictType: 'customer_confirmation_required',
+                    fieldName: question.field,
+                    incomingValue: question.question,
+                    severity: question.severity === 'required' ? 'medium' : 'low',
+                    status: 'open',
+                    sourceFileIds: draft.rawMaterials.map((material) => material.id),
+                  })),
+                ]
+              : [],
             summary: { totalRecordCount: intake.records.length, recordCounts: intake.recordCounts, warnings: intake.warnings },
           },
           reason: `用户确认导入结构化税务资料，第 ${Math.floor(offset / chunkSize) + 1} 批`,
@@ -9001,6 +9032,41 @@ function AiAssistantPage({
         },
       }
       updateAssistantThreadTitle(file.name, draft.client.name)
+      if (hasDirectIntakeAuthorization(userNote)) {
+        const requiredQuestions = requiredConfirmationQuestions(draft)
+        const saved = await saveDraftAndStructuredIntake(draft)
+        const recordCount = parsedImport.taxDataIntake?.records.length || 0
+        const sourceFileCount = draft.rawMaterials.length || 1
+        if (saved.result.client?.id) {
+          try {
+            const refreshed = await apiGet<TaxDataSummary>(`/api/tax-data/summary?clientId=${encodeURIComponent(saved.result.client.id)}`)
+            onTaxDataSummaryUpdate(refreshed)
+          } catch (error) {
+            console.warn('Failed to refresh tax data summary after direct intake.', error)
+          }
+        }
+        setActiveAssistantMessages((current) => [
+          ...current,
+          {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: [
+              `已直接收录「${file.name}」。`,
+              `原始资料：${sourceFileCount} 个；标准记录：${recordCount} 条。`,
+              saved.messages.length ? saved.messages.join('\n') : '',
+              requiredQuestions.length
+                ? `仍需客户后续确认 ${requiredQuestions.length} 项：${requiredQuestions.map((question) => question.label).join('、')}。我已先入库并标记待确认。`
+                : '未发现必须阻断入库的问题；资料类型和期间已按系统识别结果入档。',
+              saved.result.message,
+            ].filter(Boolean).join('\n'),
+          },
+        ])
+        if (!requiredQuestions.length) {
+          setActiveAssistantDrafts((current) => current.filter((item) => item.id !== draft.id))
+          structuredIntakeByDraftId.current.delete(draft.id)
+        }
+        return
+      }
       const autoCleanMessages: AiAssistantMessage[] = [
         ...contextMessages,
         {
