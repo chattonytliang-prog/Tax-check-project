@@ -9507,26 +9507,25 @@ function AiAssistantPage({
                   <strong>{thread.title}</strong>
                   <small>{thread.messages.length} 条消息 · {thread.drafts.length} 个草稿</small>
                 </span>
-                {assistantThreads.length > 1 ? (
-                  <i
-                    role="button"
-                    tabIndex={0}
-                    aria-label="删除对话"
-                    onClick={(event) => {
+                <i
+                  role="button"
+                  tabIndex={0}
+                  aria-label="删除对话"
+                  title="删除对话"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    removeAssistantThread(thread.id)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
                       event.stopPropagation()
                       removeAssistantThread(thread.id)
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        event.stopPropagation()
-                        removeAssistantThread(thread.id)
-                      }
-                    }}
-                  >
-                    <Trash2 />
-                  </i>
-                ) : null}
+                    }
+                  }}
+                >
+                  <Trash2 />
+                </i>
               </button>
             ))}
           </div>
