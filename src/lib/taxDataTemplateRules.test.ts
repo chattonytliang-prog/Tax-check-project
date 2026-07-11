@@ -64,4 +64,16 @@ describe('tax data template rules', () => {
     expect(parsed.records).toHaveLength(8)
     expect(parsed.templateMatches[0]).toMatchObject({ templateId: 'vat_schedule_4_tax_credit_pdf_v1', autoImportEligible: true })
   })
+
+  it('keeps all three statements from one financial batch workbook', () => {
+    const common = [['编制单位：测试企业', '2026年3月', '单位：元']]
+    const parsed = parseTaxDataWorkbook('测试企业2026年3月批量导出.xls', [
+      { name: '资产负债表', rows: [['资产负债表'], ['会小企01表'], ...common, ['资产', '行次', '期末余额', '年初余额', '负债和所有者权益', '行次', '期末余额', '年初余额'], ['货币资金', '1', '100', '80', '应付账款', '31', '20', '10']] },
+      { name: '利润表', rows: [['利润表'], ['会小企02表'], ...common, ['项目', '行次', '本年累计金额', '本期金额'], ['营业收入', '1', '100', '30']] },
+      { name: '现金流量表', rows: [['现金流量表'], ['会小企03表'], ...common, ['项目', '行次', '本年累计金额', '本期金额'], ['销售商品收到的现金', '1', '100', '30']] },
+    ])
+
+    expect(new Set(parsed.records.map((record) => record.recordSubtype))).toEqual(new Set(['balance_sheet', 'income_statement', 'cash_flow_statement']))
+    expect(parsed.templateMatches.every((match) => match.templateId === 'small_enterprise_financial_batch_excel_v1' && match.autoImportEligible)).toBe(true)
+  })
 })

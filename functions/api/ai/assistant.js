@@ -4,6 +4,147 @@ import { requireUser } from '../auth/_auth.js'
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
 const DEFAULT_MODEL = 'deepseek-v4-pro'
 
+const readOnlyAgentTools = [
+  {
+    type: 'function',
+    function: {
+      name: 'get_tax_archive',
+      description: '查询当前企业指定期间已入库的标准税务资料类别、记录数和来源文件。回答资料是否存在或缺失前必须调用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          clientId: { type: 'string' },
+          periodStart: { type: 'string', description: 'YYYY-MM-DD，可选' },
+          periodEnd: { type: 'string', description: 'YYYY-MM-DD，可选' },
+        },
+        required: ['clientId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_source_files',
+      description: '查询当前企业已上传并归档的来源文件、识别类型、期间和解析状态。',
+      parameters: {
+        type: 'object',
+        properties: { clientId: { type: 'string' } },
+        required: ['clientId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_customer_memory',
+      description: '检索当前企业已经确认的长期记忆，例如会计软件、固定文件格式、字段映射和客户口径。',
+      parameters: {
+        type: 'object',
+        properties: { clientId: { type: 'string' }, query: { type: 'string' } },
+        required: ['clientId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_agent_knowledge',
+      description: '检索税务资料 Agent 的工作规则、资料判断优先级和权限边界。',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string' } },
+        required: ['query'],
+      },
+    },
+  },
+]
+
+const agentKnowledge = [
+  { title: '资料事实优先级', content: '标准资料库记录 > 已归档来源文件 > 企业画像字段 > 对话推断。标准资料库已存在的资料不得报告为缺失。' },
+  { title: '期间隔离', content: '资料完整性必须按所选期间判断。其他月份存在同类资料，不代表当前月份齐全；总览只能表示历史上曾收录。' },
+  { title: '批量文件', content: '整批上传必须保留全部来源文件上下文，不得只依据最后一个文件。一个批量导出工作簿可以同时包含资产负债表、利润表和现金流量表。' },
+  { title: '权限边界', content: '企业业务资料可在用户明确授权后通过白名单工具写入。规则库、公式、认证权限、数据库结构、核心报告与风险逻辑只读。' },
+]
+
+function cleanToolArguments(value) {
+  if (!value) return {}
+  if (typeof value === 'object') return value
+  try { return JSON.parse(value) } catch { return {} }
+}
+
+async function executeReadOnlyAgentTool(db, auth, toolCall, fallbackClientId) {
+  const name = String(toolCall?.function?.name || '')
+  const args = cleanToolArguments(toolCall?.function?.arguments)
+  const clientId = String(args.clientId || fallbackClientId || '').trim()
+  if (name === 'search_agent_knowledge') {
+    const terms = String(args.query || '').toLowerCase().split(/\s+/).filter(Boolean)
+    const matches = agentKnowledge.filter((item) => !terms.length || terms.some((term) => `${item.title}${item.content}`.toLowerCase().includes(term)))
+    return { entries: (matches.length ? matches : agentKnowledge).slice(0, 6) }
+  }
+  if (!clientId) return { error: 'clientId is required' }
+  const owned = await db.prepare('SELECT id, name FROM clients WHERE id = ? AND owner_user_id = ?').bind(clientId, auth.user.id).first()
+  if (!owned) return { error: 'client not found or not authorized' }
+  if (name === 'get_source_files') {
+    const result = await db.prepare(
+      `SELECT id, file_name, document_type, period_start, period_end, parse_status, evidence_json, created_at
+       FROM tax_data_source_files
+       WHERE owner_user_id = ? AND client_id = ?
+       ORDER BY created_at DESC LIMIT 100`,
+    ).bind(auth.user.id, clientId).all()
+    return {
+      client: owned,
+      files: (result.results || []).map((row) => {
+        let evidence = {}
+        try { evidence = JSON.parse(row.evidence_json || '{}') } catch { evidence = {} }
+        return {
+          id: row.id,
+          fileName: row.file_name,
+          documentType: row.document_type,
+          periodStart: row.period_start,
+          periodEnd: row.period_end,
+          parseStatus: row.parse_status,
+          recordCounts: evidence.recordCounts || {},
+          templates: Array.isArray(evidence.templateMatches)
+            ? evidence.templateMatches.map((item) => ({ templateId: item.templateId, templateName: item.templateName, matched: item.matched, autoImportEligible: item.autoImportEligible }))
+            : [],
+        }
+      }),
+    }
+  }
+  if (name === 'search_customer_memory') {
+    const query = String(args.query || '').trim()
+    try {
+      const result = await db.prepare(
+        `SELECT memory_key, memory_value, source, confidence, updated_at
+         FROM assistant_customer_memories
+         WHERE owner_user_id = ? AND client_id = ?
+           AND (? = '' OR memory_key LIKE ? OR memory_value LIKE ?)
+         ORDER BY updated_at DESC LIMIT 50`,
+      ).bind(auth.user.id, clientId, query, `%${query}%`, `%${query}%`).all()
+      return { client: owned, memories: result.results || [] }
+    } catch {
+      return { client: owned, memories: [] }
+    }
+  }
+  if (name === 'get_tax_archive') {
+    const start = String(args.periodStart || '').slice(0, 10)
+    const end = String(args.periodEnd || '').slice(0, 10)
+    const result = await db.prepare(
+      `SELECT r.record_type, r.record_subtype, r.period_start, r.period_end,
+              COUNT(*) AS record_count, GROUP_CONCAT(DISTINCT f.file_name) AS source_files
+       FROM tax_data_standard_records r
+       LEFT JOIN tax_data_source_files f ON f.id = r.source_file_id AND f.owner_user_id = r.owner_user_id
+       WHERE r.owner_user_id = ? AND r.client_id = ?
+         AND (? = '' OR COALESCE(r.period_end, r.period_start, '') >= ?)
+         AND (? = '' OR COALESCE(r.period_start, r.period_end, '') <= ?)
+       GROUP BY r.record_type, r.record_subtype, r.period_start, r.period_end
+       ORDER BY r.period_start DESC, r.record_type LIMIT 200`,
+    ).bind(auth.user.id, clientId, start, start, end, end).all()
+    return { client: owned, periodStart: start, periodEnd: end, records: result.results || [] }
+  }
+  return { error: 'read-only tool is not allowed' }
+}
+
 function compactClient(client) {
   return {
     id: client?.id,
@@ -205,6 +346,7 @@ Software data model:
 - standard intake categories: business_license, financial_statement, account_balance, ledger, vat_return, vat_return_schedule, invoice_list, payroll, iit_withholding, social_security, housing_fund, bank_statement, contract, voucher, other_material.
 
 Permission boundaries:
+- You have read-only tools for the standard tax archive, source files, and Agent knowledge. Use them instead of guessing from a compressed summary.
 - You may write business data only through allowed host tools: client profiles, source-material records, cleaned drafts, standardized tax data, period data, report drafts, customer memory, and import logs.
 - You must treat the rule library as read-only. You cannot create, update, delete, enable, disable, or rewrite tax rules, risk rules, rule formulas, report-template logic, users, auth, database schema, or code.
 - You cannot delete data. If data overwrite may happen, explain what will be overwritten and ask for explicit natural-language authorization.
@@ -223,6 +365,7 @@ Rules:
 6d. When currentDraft belongs to a different company from the previously selected client, use currentDraft as the only business-data context. Never copy figures, risks, or report facts across companies.
 6e. currentDraft.confirmationQuestions contains deterministic questions raised by the host parser. Ask the unresolved questions directly, accept concise customer answers such as "是 3-6 月" or "这是进项发票", and never invent an answer. Confirmed answers may update the cleaning draft; unresolved items must remain pending_confirmation rather than being treated as final data.
 6f. assistantContext.taxDataArchive is the source of truth for whether a standard tax material exists in the selected period. Never claim that a category in collectedCategories is missing. Do not use another month to fill the selected period. If taxDataArchive conflicts with the legacy filingChecklist or sparse client profile fields, follow taxDataArchive and explain the period scope.
+6g. Before answering whether an uploaded file, financial statement, tax return, payroll, ledger, or invoice list exists or is missing, call get_tax_archive and/or get_source_files. A workbook may contain several statements. Never infer workbook contents from its file name alone.
 7. This page has no "保存" or "提交" button. Never tell the user to click a save/submit button on this AI assistant page.
 8. When suggesting that cleaned data should enter the system, tell the user they can reply "帮我导入吧" or "确认保存"; do not tell them to click a button.
 9. If the current client is not verified in the database, say you can still analyze the pasted content and temporary page context, and can create or update business data after the user clearly authorizes it in the conversation.
@@ -319,7 +462,25 @@ export async function onRequestPost({ request, env }) {
     const clientVerified = Boolean(ownedClient)
 
     const model = env.DEEPSEEK_MODEL || DEFAULT_MODEL
-    const response = await fetch(DEEPSEEK_API_URL, {
+    const messages = [
+      {
+        role: 'system',
+        content: 'You are a careful Chinese tax workbench Agent. Use read-only tools for business facts. Return strict JSON only after tool results are available.',
+      },
+      {
+        role: 'user',
+        content: buildPrompt({
+          message: cleanMessage,
+          history: cleanHistory,
+          client,
+          clientVerified,
+          risks,
+          report,
+          assistantContext: cleanAssistantContext,
+        }),
+      },
+    ]
+    let response = await fetch(DEEPSEEK_API_URL, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${env.DEEPSEEK_API_KEY}`,
@@ -327,24 +488,9 @@ export async function onRequestPost({ request, env }) {
       },
       body: JSON.stringify({
         model,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a careful Chinese tax workbench assistant. Return strict JSON only.',
-          },
-          {
-            role: 'user',
-            content: buildPrompt({
-              message: cleanMessage,
-              history: cleanHistory,
-              client,
-              clientVerified,
-              risks,
-              report,
-              assistantContext: cleanAssistantContext,
-            }),
-          },
-        ],
+        messages,
+        tools: readOnlyAgentTools,
+        tool_choice: 'auto',
         temperature: 0.2,
         max_tokens: 3200,
         response_format: { type: 'json_object' },
@@ -362,7 +508,45 @@ export async function onRequestPost({ request, env }) {
       )
     }
 
-    const data = await response.json()
+    let data = await response.json()
+    const firstMessage = data?.choices?.[0]?.message || {}
+    if (Array.isArray(firstMessage.tool_calls) && firstMessage.tool_calls.length) {
+      messages.push({
+        role: 'assistant',
+        content: firstMessage.content || '',
+        tool_calls: firstMessage.tool_calls,
+      })
+      for (const toolCall of firstMessage.tool_calls.slice(0, 6)) {
+        const result = await executeReadOnlyAgentTool(db, auth, toolCall, client.id)
+        messages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          name: toolCall.function?.name,
+          content: JSON.stringify(result),
+        })
+      }
+      response = await fetch(DEEPSEEK_API_URL, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${env.DEEPSEEK_API_KEY}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          tools: readOnlyAgentTools,
+          tool_choice: 'none',
+          temperature: 0.2,
+          max_tokens: 3200,
+          response_format: { type: 'json_object' },
+        }),
+      })
+      if (!response.ok) {
+        const detail = await response.text()
+        return json({ error: 'AI assistant tool follow-up failed', detail: detail.slice(0, 500) }, { status: 502 })
+      }
+      data = await response.json()
+    }
     const content = data?.choices?.[0]?.message?.content?.trim() || ''
     let parsed = parseJsonObject(content)
     if (!parsed && content) {
