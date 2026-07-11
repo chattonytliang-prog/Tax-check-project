@@ -5672,7 +5672,7 @@ function App() {
           </section>
         )}
 
-        {page === 'assistant' && (
+        <div style={page === 'assistant' ? { display: 'contents' } : { display: 'none' }} aria-hidden={page !== 'assistant'}>
           <AiAssistantPage
             clients={clients}
             selectedClientId={selectedClientId}
@@ -5682,7 +5682,7 @@ function App() {
             onGenerateReport={() => createReport(true)}
             onTaxDataSummaryUpdate={setTaxDataSummary}
           />
-        )}
+        </div>
 
         {page === 'clients' && (
           <section className="page">
@@ -8312,6 +8312,15 @@ function AiAssistantPage({
     setAssistantThreadState((current) => ({ ...current, activeId }))
   }
   const [assistantLoading, setAssistantLoading] = useState(false)
+  const [assistantProgress, setAssistantProgress] = useState<{
+    totalFiles: number
+    currentFile: number
+    completedFiles: number
+    fileName: string
+    recordCount: number
+    startedAt: number
+    elapsedSeconds: number
+  } | null>(null)
   const [assistantError, setAssistantError] = useState('')
   const [assistantNotice, setAssistantNotice] = useState('')
   const [assistantDragActive, setAssistantDragActive] = useState(false)
@@ -8323,6 +8332,22 @@ function AiAssistantPage({
   const assistantMessages = activeAssistantThread?.messages || []
   const assistantDrafts = activeAssistantThread?.drafts || []
   const showAssistantProcessingMessage = assistantLoading && assistantMessages.at(-1)?.role === 'user'
+  const assistantProgressText = (() => {
+    if (!assistantProgress) return '正在处理...'
+    const remainingFiles = assistantProgress.totalFiles - assistantProgress.completedFiles
+    const elapsedSeconds = Math.max(1, assistantProgress.elapsedSeconds)
+    const estimatedSeconds = assistantProgress.completedFiles > 0
+      ? Math.ceil((elapsedSeconds / assistantProgress.completedFiles) * remainingFiles)
+      : 0
+    const estimate = estimatedSeconds > 0
+      ? `预计剩余约 ${estimatedSeconds >= 60 ? `${Math.ceil(estimatedSeconds / 60)} 分钟` : `${estimatedSeconds} 秒`}`
+      : '预计需要 1-3 分钟'
+    return [
+      `正在处理 ${assistantProgress.currentFile}/${assistantProgress.totalFiles}：${assistantProgress.fileName}`,
+      `已完成 ${assistantProgress.completedFiles}/${assistantProgress.totalFiles} 个文件，已收录 ${assistantProgress.recordCount} 条标准记录。${estimate}。`,
+      '可以切换到其他页面，处理会继续进行。',
+    ].join('\n')
+  })()
   const currentAssistantDraft = assistantDrafts[0]
   const currentMaterialSummary = activeAssistantThread?.latestMaterialSummary
   const currentUploadCount = currentAssistantDraft?.rawMaterials.length || 0
@@ -9405,16 +9430,41 @@ function AiAssistantPage({
       updateAssistantThreadTitle(cleanMessage || filesToImport[0]?.name || '上传资料')
       setActiveAssistantMessages(nextMessages)
       setAssistantLoading(true)
+      const processingStartedAt = Date.now()
+      setAssistantProgress({
+        totalFiles: filesToImport.length,
+        currentFile: 1,
+        completedFiles: 0,
+        fileName: filesToImport[0]?.name || '上传资料',
+        recordCount: 0,
+        startedAt: processingStartedAt,
+        elapsedSeconds: 0,
+      })
       try {
         const outcomes: Array<Awaited<ReturnType<typeof importAssistantFile>>> = []
         let preferredClient = clients.find((client) => filesToImport.some((file) => extractCompanyNameFromText(file.name) === client.name))
-        for (const file of filesToImport) {
+        for (const [fileIndex, file] of filesToImport.entries()) {
+          setAssistantProgress((current) => ({
+            totalFiles: filesToImport.length,
+            currentFile: fileIndex + 1,
+            completedFiles: fileIndex,
+            fileName: file.name,
+            recordCount: current?.recordCount || 0,
+            startedAt: current?.startedAt || processingStartedAt,
+            elapsedSeconds: current?.elapsedSeconds || 0,
+          }))
           const outcome = await importAssistantFile(file, cleanMessage, nextMessages, {
             silentDirectResult: directIntake && filesToImport.length > 1,
             preferredClient,
           })
           outcomes.push(outcome)
           if (outcome?.status === 'saved' && outcome.client) preferredClient = outcome.client
+          setAssistantProgress((current) => current ? {
+            ...current,
+            completedFiles: fileIndex + 1,
+            recordCount: current.recordCount + (outcome?.status === 'saved' ? outcome.recordCount : 0),
+            elapsedSeconds: Math.max(1, (Date.now() - current.startedAt) / 1000),
+          } : current)
         }
         if (directIntake && filesToImport.length > 1) {
           const saved = outcomes.filter((outcome) => outcome?.status === 'saved')
@@ -9439,6 +9489,7 @@ function AiAssistantPage({
           ])
         }
       } finally {
+        setAssistantProgress(null)
         setAssistantLoading(false)
       }
       return
@@ -9648,7 +9699,7 @@ function AiAssistantPage({
               {showAssistantProcessingMessage ? (
                 <article className="ai-assistant-message assistant">
                   <strong>AI 助手</strong>
-                  <p>正在处理...</p>
+                  {assistantProgressText.split('\n').map((line) => <p key={line}>{line}</p>)}
                 </article>
               ) : null}
             </div>
