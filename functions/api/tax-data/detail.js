@@ -129,18 +129,18 @@ export async function onRequestGet({ request, env }) {
     const standardRecordCount = Number(countRows[0]?.count) || 0
     records = records.map((record) => ({ ...record, data: parseJson(record.record_json), record_json: undefined }))
     if (!records.length) records = await typedRecords(db, auth.user.id, clientId, allowedIds, slotId)
-    const recordIds = records.map((record) => record.id)
-    const evidenceTargetSql = recordIds.length ? ` AND (target_id IS NULL OR target_id IN (${recordIds.map(() => '?').join(',')}))` : ''
+    const recordIds = new Set(records.map((record) => record.id))
     const evidence = await all(
       db,
       `SELECT source_file_id, target_id, target_field, raw_value, normalized_value,
               confidence, sheet_name, row_no, column_no, page_no, note
        FROM tax_data_evidence_fields
-       WHERE owner_user_id = ? AND source_file_id IN (${allowedPlaceholders})${evidenceTargetSql}
+       WHERE owner_user_id = ? AND source_file_id IN (${allowedPlaceholders})
        ORDER BY source_file_id, sheet_name, page_no, row_no, column_no
        LIMIT 500`,
-      auth.user.id, ...allowedIds, ...recordIds,
+      auth.user.id, ...allowedIds,
     )
+    const relevantEvidence = evidence.filter((item) => !item.target_id || !recordIds.size || recordIds.has(item.target_id))
 
     return json({
       sources: sources.map((source) => ({
@@ -151,7 +151,7 @@ export async function onRequestGet({ request, env }) {
         evidence_json: undefined,
       })),
       records,
-      evidence,
+      evidence: relevantEvidence,
       totalRecords: standardRecordCount || records.length,
       truncated: (standardRecordCount || records.length) > records.length,
     })
