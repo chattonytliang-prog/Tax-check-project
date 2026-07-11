@@ -2547,6 +2547,25 @@ function coerceImportedClientPatch(patch: Record<string, unknown>) {
   return coerced
 }
 
+function extractCompanyNameFromText(text: string) {
+  const suffixPattern = '(?:有限责任公司|股份有限公司|有限公司|公司|集团|工作室|中心|店|个体工商户)'
+  const normalized = text
+    .replace(/\.[^.]+$/, '')
+    .replace(/[（）()[\]【】《》]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const tokens = normalized
+    .split(/[_\-—,，;；\s]+/)
+    .map((token) => token.trim())
+    .filter(Boolean)
+  const tokenCompany = tokens.find((token) => new RegExp(`^[\\u4e00-\\u9fa5A-Za-z0-9·]{2,60}${suffixPattern}$`).test(token))
+  if (tokenCompany) return tokenCompany
+  const matches = normalized.match(new RegExp(`[\\u4e00-\\u9fa5A-Za-z0-9·]{2,60}${suffixPattern}`, 'g')) || []
+  return matches
+    .map((match) => match.replace(/^(?:明细账|全部科目|科目余额表|余额表|资产负债表|利润表|现金流量表|工资表|发票清单|增值税申报表|客户资料|资料)+/, ''))
+    .find((match) => match.length >= 4) || ''
+}
+
 function inferClientPatchFromFileName(fileName: string): Partial<Client> {
   const baseName = fileName.replace(/\.[^.]+$/, '')
   const periodMatch = baseName.match(/(20\d{2})[年.\-/]?\s*(0?[1-9]|1[0-2])\s*月?/)
@@ -2554,11 +2573,14 @@ function inferClientPatchFromFileName(fileName: string): Partial<Client> {
   const year = periodMatch?.[1] || rangePeriodMatch?.[1] || ''
   const month = periodMatch?.[2] || rangePeriodMatch?.[2] || ''
   const periodMonth = year && month ? `${year}-${month.padStart(2, '0')}` : ''
-  const name = baseName
+  const inferredCompanyName = extractCompanyNameFromText(baseName)
+  const name = inferredCompanyName || baseName
     .replace(/[（(].*?[）)]/g, '')
     .replace(/20\d{2}[年.\-/]?\s*(0?[1-9]|1[0-2])\s*月?/g, '')
+    .replace(/20\d{2}\s*(0[1-9]|1[0-2])\s*[-至到]\s*20\d{2}\s*(0[1-9]|1[0-2])/g, '')
+    .replace(/\b20\d{6}\b/g, '')
     .replace(/[_\-—]+/g, ' ')
-    .replace(/余额表|批量导出|科目余额表|资产负债表|利润表|现金流量表|导出/g, '')
+    .replace(/明细账|全部科目|余额表|批量导出|科目余额表|资产负债表|利润表|现金流量表|导出/g, '')
     .trim()
   return {
     ...(name ? { name } : {}),
@@ -2902,6 +2924,10 @@ function assistantThreadTitleFromText(text: string) {
   const cleanText = text.replace(/\s+/g, ' ').trim()
   if (!cleanText) return '新对话'
   return cleanText.length > 18 ? `${cleanText.slice(0, 18)}...` : cleanText
+}
+
+function looksLikeAssistantFileTitle(title: string) {
+  return /[_]|\.xlsx?$|\.pdf$|明细账|科目|余额表|工资表|申报表|发票|资料/.test(title)
 }
 
 function uniqueByQuestion(questions: IntakeConfirmationQuestion[]) {
@@ -8185,10 +8211,11 @@ function AiAssistantPage({
     },
     }
   }
-  const updateAssistantThreadTitle = (title: string) => {
+  const updateAssistantThreadTitle = (title: string, preferredTitle?: string) => {
+    const nextTitle = assistantThreadTitleFromText(preferredTitle || extractCompanyNameFromText(title) || title)
     updateActiveAssistantThread((thread) => (
-      thread.title === '新对话'
-        ? { ...thread, title: assistantThreadTitleFromText(title), updatedAt: formatDate() }
+      thread.title === '新对话' || looksLikeAssistantFileTitle(thread.title)
+        ? { ...thread, title: nextTitle, updatedAt: formatDate() }
         : thread
     ))
   }
@@ -8758,7 +8785,7 @@ function AiAssistantPage({
           ...coerceImportedClientPatch(parsedImport.patch),
         },
       }
-      updateAssistantThreadTitle(file.name)
+      updateAssistantThreadTitle(file.name, draft.client.name)
       const autoCleanMessages: AiAssistantMessage[] = [
         ...assistantMessages,
         {
