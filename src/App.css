@@ -1192,6 +1192,146 @@ td small,
   font-weight: 900;
 }
 
+.tax-data-board {
+  display: grid;
+  gap: 14px;
+  margin: 18px 0;
+}
+
+.tax-data-board-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tax-data-board-summary div,
+.tax-data-empty,
+.tax-data-missing,
+.tax-data-slot-group {
+  border: 1px solid rgba(12, 140, 130, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.tax-data-board-summary div {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+}
+
+.tax-data-board-summary span,
+.tax-data-slot-card small,
+.tax-data-slot-card em,
+.tax-data-slot-group small,
+.tax-data-missing span,
+.tax-data-empty p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.tax-data-board-summary strong {
+  color: var(--ink);
+  font-size: 22px;
+}
+
+.tax-data-slot-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.tax-data-slot-group {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.tax-data-slot-group header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.tax-data-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+.tax-data-slot-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(12, 140, 130, 0.18);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(237, 249, 251, 0.68);
+}
+
+.tax-data-slot-card div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.tax-data-slot-card span {
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.tax-data-slot-card strong {
+  color: var(--ink);
+}
+
+.tax-data-slot-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.tax-data-slot-card dl div {
+  display: grid;
+  gap: 2px;
+  border-radius: 6px;
+  padding: 7px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.tax-data-slot-card dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.tax-data-slot-card dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.tax-data-slot-card em {
+  overflow: hidden;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tax-data-empty,
+.tax-data-missing {
+  padding: 12px;
+}
+
+.tax-data-empty p {
+  margin: 6px 0 0;
+}
+
+.tax-data-missing {
+  display: grid;
+  gap: 6px;
+  background: rgba(183, 106, 32, 0.08);
+}
+
 .selected-group-panel {
   margin-bottom: 16px;
   padding: 18px;
@@ -4519,6 +4659,7 @@ textarea:focus {
 
   .stat-grid,
   .result-summary,
+  .tax-data-board-summary,
   .boss-period-brief,
   .boss-dashboard,
   .analytics-grid,

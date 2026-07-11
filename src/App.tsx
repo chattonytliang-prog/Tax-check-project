@@ -439,6 +439,37 @@ type AssistantDraftApplyResult = {
   client?: Client
 }
 
+type TaxDataSlot = {
+  id: string
+  group: string
+  name: string
+  status: 'collected' | 'missing'
+  periodStart: string
+  periodEnd: string
+  periodLabel: string
+  recordCount: number
+  sourceFileCount: number
+  keyValues: Array<[string, string]>
+  sourceFiles: Array<{
+    id: string
+    file_name: string
+    document_type: string
+    period_start: string
+    period_end: string
+  }>
+}
+
+type TaxDataSummary = {
+  clientId: string
+  slots: TaxDataSlot[]
+  missingSlots: string[]
+  stats: {
+    collectedSlotCount: number
+    totalSlotCount: number
+    recordCount: number
+  }
+}
+
 type ManagedRule = {
   code: string
   name: string
@@ -3865,6 +3896,7 @@ function App() {
   const [rulePage, setRulePage] = useState(1)
   const [, setDataStatus] = useState<'loading' | 'connected' | 'fallback'>('loading')
   const [aiReportStage, setAiReportStage] = useState<'reviewing' | 'generating' | null>(null)
+  const [taxDataSummary, setTaxDataSummary] = useState<TaxDataSummary | null>(null)
 
   useEffect(() => {
     let active = true
@@ -4003,6 +4035,27 @@ function App() {
   }, [loggedIn, authUser])
 
   const selectedClient = clients.find((client) => client.id === selectedClientId) || clients[0]
+
+  useEffect(() => {
+    if (!loggedIn || !selectedClient?.id) {
+      return
+    }
+    let active = true
+    async function loadTaxDataSummary() {
+      try {
+        const response = await apiGet<TaxDataSummary>(`/api/tax-data/summary?clientId=${encodeURIComponent(selectedClient.id)}`)
+        if (active) setTaxDataSummary(response)
+      } catch (error) {
+        console.warn('Failed to load tax data summary.', error)
+        if (active) setTaxDataSummary(null)
+      }
+    }
+    loadTaxDataSummary()
+    return () => {
+      active = false
+    }
+  }, [loggedIn, selectedClient?.id])
+
   const selectedReport = reports.find((report) => report.id === selectedReportId)
   const selectedPeriodEntryIdSet = useMemo(() => new Set(selectedPeriodEntryIds), [selectedPeriodEntryIds])
   const selectedPeriodEntries = useMemo(() => {
@@ -4043,6 +4096,16 @@ function App() {
     ? clients.find((client) => client.id === selectedReport.clientId) || clientFromReport(selectedReport)
     : selectedClient
   const reportPageRisks = selectedReport ? reportRiskList(selectedReport) : currentRisks
+  const activeTaxDataSummary = taxDataSummary?.clientId === selectedClient?.id ? taxDataSummary : null
+  const taxDataSlotsByGroup = useMemo(() => {
+    const groups = new Map<string, TaxDataSlot[]>()
+    for (const slot of activeTaxDataSummary?.slots || []) {
+      const items = groups.get(slot.group) || []
+      items.push(slot)
+      groups.set(slot.group, items)
+    }
+    return Array.from(groups.entries())
+  }, [activeTaxDataSummary])
 
   const clientRows = useMemo(() => {
     return clients
@@ -5618,6 +5681,67 @@ function App() {
                     </button>
                   </div>
                 </div>
+                <section className="tax-data-board" aria-label="企业资料槽位看板">
+                  <div className="tax-data-board-summary">
+                    <div>
+                      <span>已收录槽位</span>
+                      <strong>{activeTaxDataSummary?.stats.collectedSlotCount || 0}/{activeTaxDataSummary?.stats.totalSlotCount || 9}</strong>
+                    </div>
+                    <div>
+                      <span>标准记录</span>
+                      <strong>{activeTaxDataSummary?.stats.recordCount || 0} 条</strong>
+                    </div>
+                    <div>
+                      <span>缺失资料</span>
+                      <strong>{activeTaxDataSummary?.missingSlots.length || 0} 项</strong>
+                    </div>
+                  </div>
+                  {taxDataSlotsByGroup.length ? (
+                    <div className="tax-data-slot-groups">
+                      {taxDataSlotsByGroup.map(([group, slots]) => (
+                        <article key={group} className="tax-data-slot-group">
+                          <header>
+                            <strong>{group}</strong>
+                            <small>{slots.length} 个已收录槽位</small>
+                          </header>
+                          <div className="tax-data-slot-grid">
+                            {slots.slice(0, 8).map((slot) => (
+                              <div key={slot.id} className="tax-data-slot-card collected">
+                                <div>
+                                  <span>{slot.name}</span>
+                                  <strong>{slot.periodLabel}</strong>
+                                </div>
+                                <small>{slot.recordCount} 条记录 · {slot.sourceFileCount} 个来源文件</small>
+                                {slot.keyValues.length ? (
+                                  <dl>
+                                    {slot.keyValues.slice(0, 4).map(([label, value]) => (
+                                      <div key={`${slot.id}-${label}`}>
+                                        <dt>{label}</dt>
+                                        <dd>{value}</dd>
+                                      </div>
+                                    ))}
+                                  </dl>
+                                ) : null}
+                                {slot.sourceFiles[0]?.file_name ? <em>{slot.sourceFiles[0].file_name}</em> : null}
+                              </div>
+                            ))}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="tax-data-empty">
+                      <strong>还没有标准资料槽位</strong>
+                      <p>在 AI 财税助手上传并确认导入后，增值税申报表、附表四、工资表、科目余额表等会自动出现在这里。</p>
+                    </div>
+                  )}
+                  {activeTaxDataSummary?.missingSlots.length ? (
+                    <div className="tax-data-missing">
+                      <strong>当前缺失</strong>
+                      <span>{activeTaxDataSummary.missingSlots.slice(0, 10).join('、')}</span>
+                    </div>
+                  ) : null}
+                </section>
                 <div className="archive-year-list">
                   {selectedClientPeriodYears.map((year) => (
                     <article key={year} className="archive-year-card">
