@@ -23,6 +23,7 @@ export type IntakeConfirmationQuestionInput = {
     taxDataIntake?: {
       records: unknown[]
       warnings: string[]
+      autoImportEligible?: boolean
     }
   }
 }
@@ -69,6 +70,10 @@ export function buildIntakeConfirmationQuestions(input: IntakeConfirmationQuesti
   const mappedCount = input.parsedImport?.mappings.length || 0
   const unmappedHeaders = input.parsedImport?.unmappedHeaders || []
   const standardRecordCount = input.parsedImport?.taxDataIntake?.records.length || 0
+
+  // A deterministic template has already verified type, period, structure, and rows.
+  // Asking the customer to reconfirm those facts adds friction without reducing risk.
+  if (input.parsedImport?.taxDataIntake?.autoImportEligible) return questions
 
   if (input.classification.documentType === 'other_material' || input.classification.confidence === 'low') {
     pushUnique(questions, {

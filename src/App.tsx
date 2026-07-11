@@ -71,6 +71,7 @@ import {
 } from './lib/clientImportParser'
 import { extractPdfTextPages } from './lib/pdfTextExtractor'
 import { parseTaxDataPdfText, type ParsedTaxDataIntake } from './lib/taxDataIntakeParser'
+import { hasDirectIntakeAuthorization } from './lib/assistantIntakeIntent'
 import {
   classifyIntakeMaterial,
   detectIntakePeriod,
@@ -8569,9 +8570,12 @@ function AiAssistantPage({
       sourceType: string
       confirmationQuestions?: IntakeConfirmationQuestion[]
       taxDataIntake?: ParsedTaxDataIntake
+      preferredClient?: Client
     },
   ) => {
-    const targetMode: Exclude<AiAssistantTargetMode, 'auto'> = clients.length === 0
+    const targetMode: Exclude<AiAssistantTargetMode, 'auto'> = options.preferredClient
+      ? 'existing'
+      : clients.length === 0
       ? 'new'
       : patchData.name && !clients.some((client) => (
           client.creditCode && patchData.creditCode
@@ -8581,7 +8585,7 @@ function AiAssistantPage({
           ? 'new'
           : 'existing'
     const matchedClient = targetMode === 'existing'
-      ? clients.find((client) => (
+      ? options.preferredClient || clients.find((client) => (
         (patchData.creditCode && client.creditCode === patchData.creditCode)
         || (patchData.name && client.name === patchData.name)
       )) || (!patchData.name && !patchData.creditCode ? selectedClient : null)
@@ -8629,7 +8633,7 @@ function AiAssistantPage({
       taxDataWarnings: options.taxDataIntake?.warnings,
     }
   }
-  const addAssistantDraftFromParsedImport = (parsedImport: ParsedClientImport, fileName?: string, rawMaterial?: AssistantRawMaterial) => {
+  const addAssistantDraftFromParsedImport = (parsedImport: ParsedClientImport, fileName?: string, rawMaterial?: AssistantRawMaterial, preferredClient?: Client) => {
     const patchData = {
       ...(fileName ? inferClientPatchFromFileName(fileName) : {}),
       ...coerceImportedClientPatch(parsedImport.patch),
@@ -8645,6 +8649,7 @@ function AiAssistantPage({
       detectedTables: parsedImport.detectedTables,
       sourceType: parsedImport.detectedSourceType || (fileName ? '上传资料' : '粘贴资料'),
       taxDataIntake: parsedImport.taxDataIntake,
+      preferredClient,
     })
     const crossMaterialCheck = buildCrossMaterialConfirmationQuestions(draft, parsedImport.taxDataIntake)
     if (crossMaterialCheck.questions.length || crossMaterialCheck.warnings.length) {
@@ -8819,11 +8824,6 @@ function AiAssistantPage({
       confirmationQuestions,
     }
   }
-  const hasDirectIntakeAuthorization = (message: string) => (
-    /(都|全部|全都|直接|先).{0,8}(收录|导入|入库|保存|建档)/.test(message)
-    || /(收录|导入|入库|保存).{0,8}(完|后).{0,8}(再|再来|再告诉|再问)/.test(message)
-    || /确认导入|按这个保存|先收录|先入库|都收录进去/.test(message)
-  )
   const requiredConfirmationQuestions = (draft: AiAssistantDraft) => (
     draft.confirmationQuestions.filter((question) => question.severity === 'required')
   )
@@ -8963,7 +8963,12 @@ function AiAssistantPage({
     return messages
   }
   const canParseAssistantFile = (fileName: string) => /\.(xlsx|xls|csv|tsv|txt|json|pdf)$/i.test(fileName)
-  const importAssistantFile = async (file: File | null, userNote = '', contextMessages = assistantMessages) => {
+  const importAssistantFile = async (
+    file: File | null,
+    userNote = '',
+    contextMessages = assistantMessages,
+    options: { silentDirectResult?: boolean; preferredClient?: Client } = {},
+  ) => {
     if (!file) return
     setAssistantError('')
     setAssistantNotice('')
@@ -9034,7 +9039,7 @@ function AiAssistantPage({
         ...rawMaterial,
         ...metadata,
         sourceType: parsedImport.detectedSourceType || '上传资料',
-      })
+      }, options.preferredClient)
       if (!draft) {
         setAssistantError('未识别到可填入系统的字段。')
         return
@@ -9057,24 +9062,30 @@ function AiAssistantPage({
         if (intake?.records.length && !intake.autoImportEligible) {
           const failedChecks = intake.templateMatches
             .flatMap((match) => match.validations.filter((validation) => validation.blocking && validation.status === 'failed').map((validation) => `${match.templateName}：${validation.label}`))
-          setActiveAssistantMessages((current) => [
-            ...current,
-            {
-              id: crypto.randomUUID(),
-              role: 'assistant',
-              content: [
-                `「${file.name}」未自动入库。`,
-                '系统已识别到数据，但正式模板校验未全部通过；为避免错档，原始文件和标准记录均未写入业务数据。',
-                failedChecks.length ? `需要确认：${failedChecks.join('、')}。` : '需要确认文件类型、期间或模板版本。',
-              ].join('\n'),
-            },
-          ])
-          return
+          const reason = failedChecks.length ? failedChecks.join('、') : '文件类型、期间或模板版本需要确认'
+          if (!options.silentDirectResult) {
+            setActiveAssistantMessages((current) => [
+              ...current,
+              {
+                id: crypto.randomUUID(),
+                role: 'assistant',
+                content: `「${file.name}」未自动入库。模板校验未全部通过；为避免错档，业务数据未写入。需要确认：${reason}。`,
+              },
+            ])
+          }
+          return { status: 'blocked' as const, fileName: file.name, recordCount: intake.records.length, reason }
         }
         const requiredQuestions = requiredConfirmationQuestions(draft)
         const saved = await saveDraftAndStructuredIntake(draft)
         const recordCount = parsedImport.taxDataIntake?.records.length || 0
         const sourceFileCount = draft.rawMaterials.length || 1
+        if (saved.result.status !== 'saved' || !saved.result.client) {
+          const reason = saved.result.message || '企业归属尚未确定'
+          if (!options.silentDirectResult) {
+            setActiveAssistantMessages((current) => [...current, { id: crypto.randomUUID(), role: 'assistant', content: `「${file.name}」暂未入库：${reason}` }])
+          }
+          return { status: 'blocked' as const, fileName: file.name, recordCount, reason }
+        }
         if (saved.result.client?.id) {
           try {
             const refreshed = await apiGet<TaxDataSummary>(`/api/tax-data/summary?clientId=${encodeURIComponent(saved.result.client.id)}`)
@@ -9083,27 +9094,27 @@ function AiAssistantPage({
             console.warn('Failed to refresh tax data summary after direct intake.', error)
           }
         }
-        setActiveAssistantMessages((current) => [
-          ...current,
-          {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            content: [
-              `已直接收录「${file.name}」。`,
-              `原始资料：${sourceFileCount} 个；标准记录：${recordCount} 条。`,
-              saved.messages.length ? saved.messages.join('\n') : '',
-              requiredQuestions.length
-                ? `仍需客户后续确认 ${requiredQuestions.length} 项：${requiredQuestions.map((question) => question.label).join('、')}。我已先入库并标记待确认。`
-                : '未发现必须阻断入库的问题；资料类型和期间已按系统识别结果入档。',
-              saved.result.message,
-            ].filter(Boolean).join('\n'),
-          },
-        ])
+        if (!options.silentDirectResult) {
+          setActiveAssistantMessages((current) => [
+            ...current,
+            {
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              content: [
+                `已直接收录「${file.name}」。`,
+                `原始资料：${sourceFileCount} 个；标准记录：${recordCount} 条。`,
+                requiredQuestions.length
+                  ? `仍有 ${requiredQuestions.length} 项真实冲突待确认：${requiredQuestions.map((question) => question.label).join('、')}。`
+                  : '模板、期间和逐条数据校验均已通过。',
+              ].join('\n'),
+            },
+          ])
+        }
         if (!requiredQuestions.length) {
           setActiveAssistantDrafts((current) => current.filter((item) => item.id !== draft.id))
           structuredIntakeByDraftId.current.delete(draft.id)
         }
-        return
+        return { status: 'saved' as const, fileName: file.name, recordCount, client: saved.result.client, pendingCount: requiredQuestions.length }
       }
       const autoCleanMessages: AiAssistantMessage[] = [
         ...contextMessages,
@@ -9134,6 +9145,7 @@ function AiAssistantPage({
     } catch (error) {
       console.warn('Failed to import assistant file.', error)
       setAssistantError('文件解析失败，请检查 Excel、CSV、TSV、JSON、文本或 PDF 是否完整且未加密。')
+      return { status: 'failed' as const, fileName: file?.name || '未知文件', recordCount: 0, reason: error instanceof Error ? error.message : String(error) }
     }
   }
   const handleAssistantDrop = (event: React.DragEvent<HTMLElement>) => {
@@ -9375,7 +9387,10 @@ function AiAssistantPage({
     const cleanMessage = message.trim()
     if ((!cleanMessage && !assistantPendingFiles.length) || assistantLoading) return
     if (assistantPendingFiles.length) {
-      const filesToImport = assistantPendingFiles
+      const directIntake = hasDirectIntakeAuthorization(cleanMessage)
+      const filesToImport = directIntake
+        ? [...assistantPendingFiles].sort((left, right) => Number(Boolean(extractCompanyNameFromText(right.name))) - Number(Boolean(extractCompanyNameFromText(left.name))))
+        : assistantPendingFiles
       const attachmentSummary = filesToImport.map((file) => `- ${file.name}`).join('\n')
       const userContent = [
         attachmentSummary ? `上传文件：\n${attachmentSummary}` : '',
@@ -9391,8 +9406,37 @@ function AiAssistantPage({
       setActiveAssistantMessages(nextMessages)
       setAssistantLoading(true)
       try {
+        const outcomes: Array<Awaited<ReturnType<typeof importAssistantFile>>> = []
+        let preferredClient = clients.find((client) => filesToImport.some((file) => extractCompanyNameFromText(file.name) === client.name))
         for (const file of filesToImport) {
-          await importAssistantFile(file, cleanMessage, nextMessages)
+          const outcome = await importAssistantFile(file, cleanMessage, nextMessages, {
+            silentDirectResult: directIntake && filesToImport.length > 1,
+            preferredClient,
+          })
+          outcomes.push(outcome)
+          if (outcome?.status === 'saved' && outcome.client) preferredClient = outcome.client
+        }
+        if (directIntake && filesToImport.length > 1) {
+          const saved = outcomes.filter((outcome) => outcome?.status === 'saved')
+          const exceptions = outcomes.filter((outcome) => outcome?.status === 'blocked' || outcome?.status === 'failed')
+          const pending = saved.filter((outcome) => (outcome?.pendingCount || 0) > 0)
+          const recordCount = saved.reduce((sum, outcome) => sum + (outcome?.recordCount || 0), 0)
+          setActiveAssistantMessages((current) => [
+            ...current,
+            {
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              content: [
+                `整批处理完成：已收录 ${saved.length}/${filesToImport.length} 个文件，共 ${recordCount} 条标准记录。`,
+                preferredClient?.name ? `归档企业：${preferredClient.name}。` : '',
+                exceptions.length
+                  ? `有 ${exceptions.length} 个文件未入库，需要确认：\n${exceptions.map((outcome) => `- ${outcome?.fileName}：${outcome && 'reason' in outcome ? outcome.reason : '解析失败'}`).join('\n')}`
+                  : pending.length
+                    ? `有 ${pending.length} 个文件存在跨资料冲突，已标记待确认：\n${pending.map((outcome) => `- ${outcome?.fileName}：${outcome?.pendingCount} 项`).join('\n')}`
+                    : '全部文件均已通过模板、期间和逐条数据校验，无需重复确认。',
+              ].filter(Boolean).join('\n\n'),
+            },
+          ])
         }
       } finally {
         setAssistantLoading(false)

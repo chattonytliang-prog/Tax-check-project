@@ -76,4 +76,20 @@ describe('buildIntakeConfirmationQuestions', () => {
 
     expect(questions.some((item) => item.field === 'periodNature')).toBe(true)
   })
+
+  it('does not ask the customer to reconfirm facts already proven by a deterministic template', () => {
+    const questions = buildIntakeConfirmationQuestions({
+      fileName: '科目余额表_2026年3月-2026年3月_测试企业.xls',
+      classification: baseClassification,
+      period: monthlyPeriod,
+      parsedImport: {
+        mappings: [],
+        unmappedHeaders: ['非标准展示列'],
+        detectedTables: ['科目余额表'],
+        taxDataIntake: { records: [{}], warnings: [], autoImportEligible: true },
+      },
+    })
+
+    expect(questions).toEqual([])
+  })
 })
