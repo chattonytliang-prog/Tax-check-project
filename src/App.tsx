@@ -71,7 +71,7 @@ import {
 } from './lib/clientImportParser'
 import { extractPdfTextPages } from './lib/pdfTextExtractor'
 import { parseTaxDataPdfText, type ParsedTaxDataIntake } from './lib/taxDataIntakeParser'
-import { binaryAssistantReplyMessage, hasDirectIntakeAuthorization, instantAssistantReply, isBinaryAssistantQuestion } from './lib/assistantIntakeIntent'
+import { binaryAssistantReplyMessage, hasDirectIntakeAuthorization, instantAssistantReply, isArchiveChecklistQuestion, isBinaryAssistantQuestion } from './lib/assistantIntakeIntent'
 import {
   classifyIntakeMaterial,
   detectIntakePeriod,
@@ -9910,6 +9910,10 @@ function AiAssistantPage({
     const instantReply = instantAssistantReply(cleanMessage)
     if (instantReply) {
       setActiveAssistantMessages([...nextMessages, { id: crypto.randomUUID(), role: 'assistant', content: instantReply }])
+      return
+    }
+    if (isArchiveChecklistQuestion(cleanMessage)) {
+      runAssistantChecklist()
       return
     }
     if (parsedTextDraft) {

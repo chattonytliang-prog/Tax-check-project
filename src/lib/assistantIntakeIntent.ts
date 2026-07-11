@@ -22,6 +22,15 @@ export function isBinaryAssistantQuestion(text: string) {
   return /(是否|有没有|有无|可否|能否|是不是|是否已|是否可以|可不可以)/.test(text)
 }
 
+export function isArchiveChecklistQuestion(message: string) {
+  const text = message.replace(/\s+/g, '')
+  return (
+    /(还|目前|现在|当前|本月|这个月)?.{0,5}(缺|少|欠).{0,8}(什么|哪些)?.{0,4}(资料|材料|文件|表)/.test(text)
+    || /(已有|已经有|已上传|已收录|有了).{0,8}(什么|哪些)?.{0,4}(资料|材料|文件|表)/.test(text)
+    || /(资料|材料|文件).{0,5}(齐不齐|齐全吗|完整吗|还缺|缺哪些)/.test(text)
+  )
+}
+
 export function binaryAssistantReplyMessage(question: string, answer: '是' | '否') {
   return `针对“${question.replace(/[？?。]+$/, '')}”，我的回答是：${answer}。`
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { binaryAssistantReplyMessage, hasDirectIntakeAuthorization, instantAssistantReply, isBinaryAssistantQuestion } from './assistantIntakeIntent'
+import { binaryAssistantReplyMessage, hasDirectIntakeAuthorization, instantAssistantReply, isArchiveChecklistQuestion, isBinaryAssistantQuestion } from './assistantIntakeIntent'
 
 describe('hasDirectIntakeAuthorization', () => {
   it.each([
@@ -43,5 +43,14 @@ describe('binary assistant questions', () => {
 
   it('does not add binary controls to open questions', () => {
     expect(isBinaryAssistantQuestion('请说明这份资料对应哪个期间？')).toBe(false)
+  })
+})
+
+describe('archive checklist questions', () => {
+  it('routes deterministic archive questions without invoking the model', () => {
+    expect(isArchiveChecklistQuestion('还缺什么资料目前')).toBe(true)
+    expect(isArchiveChecklistQuestion('2026年3月已经有哪些资料？')).toBe(true)
+    expect(isArchiveChecklistQuestion('资料齐全吗')).toBe(true)
+    expect(isArchiveChecklistQuestion('帮我分析税务风险')).toBe(false)
   })
 })
