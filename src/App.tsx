@@ -465,6 +465,14 @@ type TaxDataSlot = {
     period_start: string
     period_end: string
     parse_status?: string
+    auto_import_eligible?: boolean
+    template_matches?: Array<{
+      templateId: string
+      templateName: string
+      version: number
+      matched: boolean
+      autoImportEligible: boolean
+    }>
   }>
 }
 
@@ -5797,6 +5805,11 @@ function App() {
                                     : `${taxDataPeriodTypeLabel(slot.periodType)}收录 · ${taxDataParserTypeLabel(slot.parserType)}`}
                                 </small>
                                 {slot.sourceFiles[0]?.file_name ? <em>{slot.sourceFiles[0].file_name}</em> : null}
+                                {slot.sourceFiles[0]?.template_matches?.[0] ? (
+                                  <span className={slot.sourceFiles[0].auto_import_eligible ? 'tax-data-template-state passed' : 'tax-data-template-state failed'}>
+                                    {slot.sourceFiles[0].auto_import_eligible ? '模板校验通过' : '模板待复核'} · {slot.sourceFiles[0].template_matches[0].templateName} v{slot.sourceFiles[0].template_matches[0].version}
+                                  </span>
+                                ) : null}
                               </div>
                               {slot.keyValues.length ? (
                                 <dl>
@@ -8870,6 +8883,11 @@ function AiAssistantPage({
       throw new Error('结构化解析缓存已失效，请重新上传原始文件后再确认导入。')
     }
     if (!intake) return []
+    if (intake.records.length && !intake.autoImportEligible) {
+      const failures = intake.templateMatches
+        .flatMap((match) => match.validations.filter((validation) => validation.blocking && validation.status === 'failed').map((validation) => `${match.templateName}：${validation.label}`))
+      throw new Error(`模板校验未通过，已阻止写入业务数据。${failures.length ? `请复核：${failures.join('、')}。` : ''}`)
+    }
     const messages: string[] = []
     const chunkSize = 80
     const sourceFiles = draft.rawMaterials.map((material) => ({
@@ -8888,6 +8906,8 @@ function AiAssistantPage({
       evidence: {
         recordCounts: intake.recordCounts,
         warnings: intake.warnings,
+        templateMatches: intake.templateMatches,
+        autoImportEligible: intake.autoImportEligible,
         confirmationQuestions: material.confirmationQuestions || [],
       },
     }))
@@ -8909,7 +8929,7 @@ function AiAssistantPage({
             periodStart: savedClient.periodStartDate,
             periodEnd: savedClient.periodEndDate,
             status: isLastChunk
-              ? intake.conflicts.length || requiredQuestions.length ? 'pending_confirmation' : 'confirmed'
+              ? !intake.autoImportEligible || intake.conflicts.length || requiredQuestions.length ? 'pending_confirmation' : 'confirmed'
               : 'importing',
             sourceFiles,
             records,
@@ -9033,6 +9053,24 @@ function AiAssistantPage({
       }
       updateAssistantThreadTitle(file.name, draft.client.name)
       if (hasDirectIntakeAuthorization(userNote)) {
+        const intake = parsedImport.taxDataIntake
+        if (intake?.records.length && !intake.autoImportEligible) {
+          const failedChecks = intake.templateMatches
+            .flatMap((match) => match.validations.filter((validation) => validation.blocking && validation.status === 'failed').map((validation) => `${match.templateName}：${validation.label}`))
+          setActiveAssistantMessages((current) => [
+            ...current,
+            {
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              content: [
+                `「${file.name}」未自动入库。`,
+                '系统已识别到数据，但正式模板校验未全部通过；为避免错档，原始文件和标准记录均未写入业务数据。',
+                failedChecks.length ? `需要确认：${failedChecks.join('、')}。` : '需要确认文件类型、期间或模板版本。',
+              ].join('\n'),
+            },
+          ])
+          return
+        }
         const requiredQuestions = requiredConfirmationQuestions(draft)
         const saved = await saveDraftAndStructuredIntake(draft)
         const recordCount = parsedImport.taxDataIntake?.records.length || 0

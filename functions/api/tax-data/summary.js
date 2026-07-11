@@ -121,13 +121,21 @@ async function sourceFilesByIds(db, ownerUserId, ids) {
   const placeholders = cleanIds.map(() => '?').join(',')
   const rows = await all(
     db,
-    `SELECT id, file_name, document_type, period_start, period_end, parse_status
+    `SELECT id, file_name, document_type, period_start, period_end, parse_status, evidence_json
      FROM tax_data_source_files
      WHERE owner_user_id = ? AND id IN (${placeholders})`,
     ownerUserId,
     ...cleanIds,
   )
-  return new Map(rows.map((row) => [row.id, row]))
+  return new Map(rows.map((row) => {
+    let evidence = {}
+    try { evidence = JSON.parse(row.evidence_json || '{}') } catch { evidence = {} }
+    return [row.id, {
+      ...row,
+      template_matches: Array.isArray(evidence.templateMatches) ? evidence.templateMatches : [],
+      auto_import_eligible: evidence.autoImportEligible === true,
+    }]
+  }))
 }
 
 function vatKeyValues(row) {

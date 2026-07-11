@@ -1,4 +1,5 @@
 import type { IntakeDocumentType } from './intakeClassifier'
+import { matchPdfTemplate, matchWorkbookTemplate, type TemplateMatch, type TemplateValidation } from './taxDataTemplateRules'
 
 export type IntakeSheet = {
   name: string
@@ -44,6 +45,8 @@ export type ParsedTaxDataIntake = {
   conflicts: StandardTaxConflict[]
   warnings: string[]
   recordCounts: Record<string, number>
+  templateMatches: TemplateMatch[]
+  autoImportEligible: boolean
 }
 
 type Period = { periodStart?: string; periodEnd?: string }
@@ -83,7 +86,18 @@ function monthPeriod(year: string, month: string): Period {
   }
 }
 
+function shortDateMonthPeriod(text: string): Period {
+  const match = text.match(/(?:^|\s)(\d{1,2})\/(\d{1,2})\/(\d{2})(?:\s|$)/)
+  return match ? monthPeriod(`20${match[3]}`, match[1]) : {}
+}
+
 export function detectTaxDataPeriod(text: string): Period {
+  const earlyCompactRange = text.match(/(20\d{2})(\d{2})\s*[-~—]\s*(20\d{2})(\d{2})/)
+  if (earlyCompactRange) {
+    return { periodStart: monthPeriod(earlyCompactRange[1], earlyCompactRange[2]).periodStart, periodEnd: monthPeriod(earlyCompactRange[3], earlyCompactRange[4]).periodEnd }
+  }
+  const earlyCompact = text.match(/(20\d{2})(\d{2})(?!\d)/)
+  if (earlyCompact) return monthPeriod(earlyCompact[1], earlyCompact[2])
   const range = text.match(/(20\d{2})\s*[年./-]\s*(\d{1,2})\s*[月./-](?:\s*\d{1,2}\s*日?)?\s*(?:至|到|[-~—])\s*(20\d{2})\s*[年./-]\s*(\d{1,2})(?:\s*[月./-]\s*(\d{1,2})\s*日?)?/)
   if (range) {
     const start = monthPeriod(range[1], range[2])
@@ -232,28 +246,41 @@ function parseFinancialStatement(sheet: IntakeSheet, period: Period) {
 }
 
 function parsePayroll(sheet: IntakeSheet, period: Period) {
-  const header = findHeaderRow(sheet.rows, [/姓名/, /身份证件号码|证件号码/, /工资|应发工资/, /税率|应纳税所得额/])
-  if (header < 0) return []
-  const headers = sheet.rows[header]
-  const idx = {
-    employeeName: headerIndex(headers, [/姓名/]), idType: headerIndex(headers, [/身份证件类型|证件类型/]), idNumber: headerIndex(headers, [/身份证件号码|证件号码/]),
-    grossPay: headerIndex(headers, [/^工资$|应发工资|收入额/]), pension: headerIndex(headers, [/养老保险/]), medicalInsurance: headerIndex(headers, [/医疗保险/]),
-    unemploymentInsurance: headerIndex(headers, [/失业保险/]), housingFund: headerIndex(headers, [/住房公积金|住房基金/]), taxableIncome: headerIndex(headers, [/应纳税所得额/]),
-    taxRate: headerIndex(headers, [/税率|预扣率/]), taxWithheld: headerIndex(headers, [/应补退税额|应纳税额|已扣缴税额/]),
-  }
-  return sheet.rows.slice(header + 1).flatMap((row, offset) => {
-    const employeeName = clean(row[idx.employeeName])
-    if (!employeeName || /合计/.test(employeeName)) return []
-    const pension = amount(row[idx.pension])
-    const medical = amount(row[idx.medicalInsurance])
-    const unemployment = amount(row[idx.unemploymentInsurance])
-    return [makeRecord('payroll', 'payroll_line', {
-      employeeName, idType: clean(row[idx.idType]), idNumberMasked: maskId(row[idx.idNumber]), grossPay: amount(row[idx.grossPay]),
-      socialSecurity: [pension, medical, unemployment].reduce<number>((sum, value) => sum + (value || 0), 0), medicalInsurance: medical,
-      unemploymentInsurance: unemployment, housingFund: amount(row[idx.housingFund]), taxableIncome: amount(row[idx.taxableIncome]),
-      taxRate: amount(row[idx.taxRate]), taxWithheld: amount(row[idx.taxWithheld]), sourceRowNo: header + offset + 2,
-    }, period)]
+  const headerRows = sheet.rows.map((row, index) => ({ row, index })).filter(({ row }) => (
+    row.some((cell) => normalized(cell) === '姓名')
+    && row.some((cell) => /身份证件号码|证件号码/.test(normalized(cell)))
+    && row.some((cell) => /^工资$|应发工资/.test(normalized(cell)))
+  ))
+  const records: StandardTaxRecord[] = []
+  headerRows.forEach(({ row: headers, index: header }, blockIndex) => {
+    const idx = {
+      employeeName: headerIndex(headers, [/姓名/]), idType: headerIndex(headers, [/身份证件类型|证件类型/]), idNumber: headerIndex(headers, [/身份证件号码|证件号码/]),
+      grossPay: headerIndex(headers, [/^工资$|应发工资|收入额/]), pension: headerIndex(headers, [/养老保险/]), medicalInsurance: headerIndex(headers, [/医疗保险/]),
+      unemploymentInsurance: headerIndex(headers, [/失业保险/]), housingFund: headerIndex(headers, [/住房公积金|住房基金/]), taxableIncome: headerIndex(headers, [/应纳税所得额/]),
+      taxRate: headerIndex(headers, [/税率|预扣率/]), taxWithheld: headerIndex(headers, [/应补退税额|应纳税额|已扣缴税额/]),
+    }
+    const blockStart = header + 1
+    const blockEnd = headerRows[blockIndex + 1]?.index ?? sheet.rows.length
+    const context = sheet.rows.slice(Math.max(0, header - 4), header).flat().join(' ')
+    const detectedBlockPeriod = detectTaxDataPeriod(context)
+    const blockPeriod = detectedBlockPeriod.periodStart ? detectedBlockPeriod : shortDateMonthPeriod(context)
+    const effectivePeriod = blockPeriod.periodStart && blockPeriod.periodEnd ? blockPeriod : period
+    sheet.rows.slice(blockStart, blockEnd).forEach((dataRow, offset) => {
+      const employeeName = clean(dataRow[idx.employeeName])
+      const idNumber = clean(dataRow[idx.idNumber])
+      if (!employeeName || /姓名|合计|单位/.test(employeeName) || !idNumber) return
+      const pension = amount(dataRow[idx.pension])
+      const medical = amount(dataRow[idx.medicalInsurance])
+      const unemployment = amount(dataRow[idx.unemploymentInsurance])
+      records.push(makeRecord('payroll', 'payroll_line', {
+        employeeName, idType: clean(dataRow[idx.idType]), idNumberMasked: maskId(idNumber), grossPay: amount(dataRow[idx.grossPay]),
+        socialSecurity: [pension, medical, unemployment].reduce<number>((sum, value) => sum + (value || 0), 0), pensionInsurance: pension,
+        medicalInsurance: medical, unemploymentInsurance: unemployment, housingFund: amount(dataRow[idx.housingFund]), taxableIncome: amount(dataRow[idx.taxableIncome]),
+        taxRate: amount(dataRow[idx.taxRate]), taxWithheld: amount(dataRow[idx.taxWithheld]), sourceRowNo: blockStart + offset + 1,
+      }, effectivePeriod))
+    })
   })
+  return records
 }
 
 function parseIit(sheet: IntakeSheet, period: Period) {
@@ -304,6 +331,7 @@ function parseInvoice(sheet: IntakeSheet, period: Period) {
 }
 
 function classifySheet(fileName: string, sheet: IntakeSheet): IntakeDocumentType {
+  if (/^(目录|封面|横向封面)$/.test(sheet.name.trim())) return 'other_material'
   const sample = `${fileName} ${sheet.name} ${sheet.rows.slice(0, 10).flat().join(' ')}`
   if (/明细账|凭证字号/.test(sample)) return 'ledger'
   if (/科目余额表|期初余额.*本期发生额.*期末余额/.test(sample)) return 'account_balance'
@@ -315,7 +343,77 @@ function classifySheet(fileName: string, sheet: IntakeSheet): IntakeDocumentType
 }
 
 function emptyResult(): ParsedTaxDataIntake {
-  return { documentTypes: [], records: [], evidenceFields: [], conflicts: [], warnings: [], recordCounts: {} }
+  return { documentTypes: [], records: [], evidenceFields: [], conflicts: [], warnings: [], recordCounts: {}, templateMatches: [], autoImportEligible: false }
+}
+
+function addTemplateConflict(result: ParsedTaxDataIntake, match: TemplateMatch, sourceName: string) {
+  if (match.autoImportEligible) return
+  const failures = match.validations.filter((item) => item.blocking && item.status === 'failed').map((item) => item.label).join('、')
+  result.conflicts.push({
+    conflictType: 'template_validation_failed',
+    fieldName: match.templateId,
+    incomingValue: `${sourceName}：${failures || '模板未通过自动入库校验'}`,
+    severity: 'high',
+    status: 'open',
+  })
+}
+
+function numeric(value: unknown) {
+  const number = Number(value ?? 0)
+  return Number.isFinite(number) ? number : 0
+}
+
+function recordIntegrityValidation(match: TemplateMatch, records: StandardTaxRecord[]): TemplateValidation {
+  let invalidCount = 0
+  let detail = `已核验 ${records.length} 条记录的必需字段`
+  if (match.documentType === 'account_balance') {
+    const seen = new Set<string>()
+    records.forEach((record) => {
+      const code = clean(record.payload.accountCode)
+      const duplicate = !code || seen.has(code)
+      seen.add(code)
+      const opening = numeric(record.payload.openingDebit) - numeric(record.payload.openingCredit)
+      const movement = numeric(record.payload.currentDebit) - numeric(record.payload.currentCredit)
+      const ending = numeric(record.payload.endingDebit) - numeric(record.payload.endingCredit)
+      if (duplicate || !clean(record.payload.accountName) || Math.abs(opening + movement - ending) > 0.011) invalidCount += 1
+    })
+    detail = invalidCount ? `${invalidCount} 条科目记录存在重复编码、必需字段缺失或期末余额勾稽差异` : `${records.length} 条科目记录编码唯一，且期初余额 + 本期发生 = 期末余额`
+  } else if (match.documentType === 'ledger') {
+    records.forEach((record) => {
+      const debit = Math.abs(numeric(record.payload.debitAmount))
+      const credit = Math.abs(numeric(record.payload.creditAmount))
+      if (!clean(record.payload.entryDate) || !clean(record.payload.accountCode) || !clean(record.payload.accountName) || (debit > 0 && credit > 0)) invalidCount += 1
+    })
+    detail = invalidCount ? `${invalidCount} 条明细记录存在必需字段缺失或借贷同时有值` : `${records.length} 条明细记录日期、科目和借贷方向结构有效`
+  } else if (match.documentType === 'invoice_list') {
+    records.forEach((record) => {
+      if (!clean(record.payload.invoiceNo) || !clean(record.payload.invoiceDate) || record.payload.amount === null || record.payload.taxAmount === null) invalidCount += 1
+    })
+    detail = invalidCount ? `${invalidCount} 条发票缺少号码、日期、金额或税额` : `${records.length} 条发票号码、日期、金额和税额完整`
+  } else if (match.documentType === 'payroll' || match.documentType === 'iit_withholding') {
+    records.forEach((record) => {
+      const name = clean(record.payload.employeeName || record.payload.personName)
+      if (!name || !clean(record.payload.idNumberMasked)) invalidCount += 1
+    })
+    detail = invalidCount ? `${invalidCount} 条人员记录缺少姓名或脱敏证件索引` : `${records.length} 条人员记录具备姓名和脱敏证件索引`
+  } else if (match.documentType === 'vat_return' || match.documentType === 'vat_return_schedule') {
+    const rowNos = records.map((record) => clean(record.payload.rowNo)).filter(Boolean)
+    invalidCount = rowNos.length !== new Set(rowNos).size ? 1 : 0
+    const requiredRows = match.documentType === 'vat_return' ? ['1', '11', '12', '19'] : ['1', '2', '3', '4', '5', '6', '7', '8']
+    const missingRows = requiredRows.filter((rowNo) => !rowNos.some((value) => value === rowNo || value.startsWith(`${rowNo}=`)))
+    invalidCount += missingRows.length
+    detail = invalidCount ? `申报表存在重复栏次或缺少关键栏次：${missingRows.join('、') || '重复栏次'}` : `关键栏次 ${requiredRows.join('、')} 均已落表且无重复`
+  }
+  return {
+    code: 'record_integrity', label: '逐条数据校验', status: invalidCount ? 'failed' : 'passed', blocking: true, detail,
+  }
+}
+
+function finalizeTemplateMatch(match: TemplateMatch, records: StandardTaxRecord[]) {
+  match.validations.push(recordIntegrityValidation(match, records))
+  match.autoImportEligible = match.matched && match.validations.every((item) => !item.blocking || item.status === 'passed')
+  match.confidence = match.autoImportEligible ? 'high' : match.matched ? 'medium' : 'low'
+  return match
 }
 
 export function parseTaxDataWorkbook(fileName: string, sheets: IntakeSheet[]): ParsedTaxDataIntake {
@@ -332,7 +430,25 @@ export function parseTaxDataWorkbook(fileName: string, sheets: IntakeSheet[]): P
     if (documentType === 'payroll') records = parsePayroll(sheet, period)
     if (documentType === 'iit_withholding') records = parseIit(sheet, period)
     if (documentType === 'invoice_list') records = parseInvoice(sheet, period)
+    const nonEmptyRows = sheet.rows.filter((row) => row.some((cell) => clean(cell))).length
+    if (!records.length && nonEmptyRows <= 3) return
+    if (!records.length && documentType === 'ledger') {
+      const hasTransaction = sheet.rows.some((row) => row.some((cell) => /^记[-－]?\d+/.test(clean(cell))))
+      if (!hasTransaction) return
+    }
     if (!records.length) result.warnings.push(`${sheet.name} 已识别为${documentType}，但未找到可落表的数据行。`)
+    const rawTemplateMatch = matchWorkbookTemplate(fileName, sheet, documentType, Boolean(period.periodStart && period.periodEnd), records.length)
+    const templateMatch = rawTemplateMatch ? finalizeTemplateMatch(rawTemplateMatch, records) : undefined
+    if (templateMatch) {
+      result.templateMatches.push(templateMatch)
+      addTemplateConflict(result, templateMatch, sheet.name)
+      records.forEach((record) => {
+        if (templateMatch.autoImportEligible) record.confidence = 'high'
+        record.payload.templateId = templateMatch.templateId
+        record.payload.templateVersion = templateMatch.version
+        record.payload.templateValidationStatus = templateMatch.autoImportEligible ? 'passed' : 'failed'
+      })
+    }
     records.forEach((record, index) => {
       result.records.push(record)
       const sourceRowNo = Number(record.payload.sourceRowNo) || index + 1
@@ -345,6 +461,9 @@ export function parseTaxDataWorkbook(fileName: string, sheets: IntakeSheet[]): P
   if (result.records.some((record) => !record.periodStart || !record.periodEnd)) {
     result.conflicts.push({ conflictType: 'missing_period', fieldName: 'period', incomingValue: '', severity: 'high', status: 'open' })
   }
+  result.autoImportEligible = result.templateMatches.length > 0
+    && result.templateMatches.every((match) => match.autoImportEligible)
+    && !result.conflicts.some((conflict) => conflict.severity === 'high')
   return result
 }
 
@@ -379,6 +498,53 @@ function vatLineRecords(text: string, period: Period) {
   return records
 }
 
+function vatScheduleFourRecords(text: string, period: Period) {
+  const records: StandardTaxRecord[] = []
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  let pending: { rowNo: string; itemName: string } | null = null
+  for (const rawLine of lines) {
+    let line = rawLine
+    if (pending && !/^\d{1,2}\s+/.test(line)) {
+      line = `${pending.rowNo} ${pending.itemName}${line}`
+      pending = null
+    }
+    const start = line.match(/^(\d{1,2})\s+(.+)$/)
+    if (!start) continue
+    const rowNo = start[1]
+    if (!/^[1-8]$/.test(rowNo)) continue
+    const values = Array.from(line.matchAll(/-?[\d,]+\.\d{2}/g)).map((match) => amount(match[0]))
+    const itemName = start[2].replace(/(?:\s+-?[\d,]+\.\d{2})+\s*$/, '').trim()
+    if (!values.length) {
+      pending = { rowNo, itemName }
+      continue
+    }
+    const combinedName = itemName
+    const payload: Record<string, unknown> = {
+      formName: '增值税及附加税费申报表附列资料（四）', rowNo, itemName: combinedName,
+      beginningAmount: values[0], currentOccurrenceAmount: values[1],
+      fieldCode: `vat_schedule4_row_${rowNo}`,
+    }
+    if (Number(rowNo) <= 5) {
+      payload.currentDeductibleAmount = values[2]
+      payload.actualDeductionAmount = values[3]
+      payload.endingAmount = values[4]
+      payload.currentAmount = values[1]
+      payload.cumulativeAmount = values[4]
+      payload.currentTax = values[3]
+    } else {
+      payload.currentDecreaseAmount = values[2]
+      payload.currentDeductibleAmount = values[3]
+      payload.actualDeductionAmount = values[4]
+      payload.endingAmount = values[5]
+      payload.currentAmount = values[1]
+      payload.cumulativeAmount = values[5]
+      payload.currentTax = values[4]
+    }
+    records.push(makeRecord('vat_return', 'vat_return_line', payload, period, 'high'))
+  }
+  return records
+}
+
 export function parseTaxDataPdfText(fileName: string, pages: string[]): ParsedTaxDataIntake {
   const result = emptyResult()
   const text = pages.join('\n')
@@ -388,12 +554,24 @@ export function parseTaxDataPdfText(fileName: string, pages: string[]): ParsedTa
   }
   result.documentTypes = [/附列资料|附表/.test(`${fileName} ${text}`) ? 'vat_return_schedule' : 'vat_return']
   const period = detectTaxDataPeriod(`${fileName} ${text.slice(0, 1500)}`)
-  result.records = vatLineRecords(text, period)
+  result.records = result.documentTypes[0] === 'vat_return_schedule' ? vatScheduleFourRecords(text, period) : vatLineRecords(text, period)
   result.recordCounts.vat_return = result.records.length
   result.records.forEach((record, index) => {
     result.evidenceFields.push(...evidenceFor(record, '', index + 1, Object.entries(record.payload).slice(0, 3).map(([field, value]) => [field, value])))
   })
+  const rawTemplateMatch = matchPdfTemplate(fileName, text, result.documentTypes[0], Boolean(period.periodStart && period.periodEnd), result.records.length)
+  const templateMatch = rawTemplateMatch ? finalizeTemplateMatch(rawTemplateMatch, result.records) : undefined
+  if (templateMatch) {
+    result.templateMatches.push(templateMatch)
+    addTemplateConflict(result, templateMatch, fileName)
+    result.records.forEach((record) => {
+      record.payload.templateId = templateMatch.templateId
+      record.payload.templateVersion = templateMatch.version
+      record.payload.templateValidationStatus = templateMatch.autoImportEligible ? 'passed' : 'failed'
+    })
+  }
   if (!result.records.length) result.warnings.push('已识别增值税申报表，但文本布局未匹配到明细行，需要人工复核或 OCR。')
   if (!period.periodStart || !period.periodEnd) result.conflicts.push({ conflictType: 'missing_period', fieldName: 'period', incomingValue: '', severity: 'high', status: 'open' })
+  result.autoImportEligible = Boolean(templateMatch?.autoImportEligible) && !result.conflicts.some((conflict) => conflict.severity === 'high')
   return result
 }
