@@ -3935,6 +3935,7 @@ function App() {
   const [selectedPeriodEntryIds, setSelectedPeriodEntryIds] = useState<string[]>([])
   const [selectedTaxDataFolder, setSelectedTaxDataFolder] = useState('增值税资料')
   const [selectedTaxDataMonth, setSelectedTaxDataMonth] = useState('')
+  const [taxDataViewMode, setTaxDataViewMode] = useState<'overview' | 'month'>('overview')
   const [bossPeriodStart, setBossPeriodStart] = useState('')
   const [bossPeriodEnd, setBossPeriodEnd] = useState('')
   const [riskDetectionStep, setRiskDetectionStep] = useState<RiskDetectionStep>('client')
@@ -4200,9 +4201,14 @@ function App() {
       }]
     })
   }, [activeTaxDataSummary, effectiveTaxDataMonth])
+  const displayedTaxDataSlots = useMemo(() => (
+    taxDataViewMode === 'overview'
+      ? activeTaxDataSummary?.slots || []
+      : periodScopedTaxDataSlots
+  ), [activeTaxDataSummary, periodScopedTaxDataSlots, taxDataViewMode])
   const taxDataSlotsByGroup = useMemo(() => {
     const groups = new Map<string, TaxDataSlot[]>()
-    for (const slot of periodScopedTaxDataSlots) {
+    for (const slot of displayedTaxDataSlots) {
       const items = groups.get(slot.group) || []
       items.push(slot)
       groups.set(slot.group, items)
@@ -4210,7 +4216,7 @@ function App() {
     return taxDataFolderOrder
       .filter((group) => groups.has(group))
       .map((group) => [group, groups.get(group) || []] as [string, TaxDataSlot[]])
-  }, [periodScopedTaxDataSlots])
+  }, [displayedTaxDataSlots])
   const taxDataFolderSummaries = useMemo(() => {
     return taxDataSlotsByGroup.map(([group, slots]) => {
       const categories = new Map<string, boolean>()
@@ -4234,16 +4240,16 @@ function App() {
   const selectedTaxDataFolderSummary = taxDataFolderSummaries.find((folder) => folder.group === selectedTaxDataFolder)
     || taxDataFolderSummaries[0]
   const selectedTaxDataSlots = selectedTaxDataFolderSummary?.slots || []
-  const periodTaxDataStats = useMemo(() => {
-    const collected = periodScopedTaxDataSlots.filter((slot) => slot.status === 'collected')
+  const displayedTaxDataStats = useMemo(() => {
+    const collected = displayedTaxDataSlots.filter((slot) => slot.status === 'collected')
     return {
       collectedCategoryCount: new Set(collected.map((slot) => slot.slotId)).size,
-      totalCategoryCount: new Set(periodScopedTaxDataSlots.map((slot) => slot.slotId)).size,
+      totalCategoryCount: new Set(displayedTaxDataSlots.map((slot) => slot.slotId)).size,
       sourceFileCount: new Set(collected.flatMap((slot) => slot.sourceFiles.map((file) => file.id))).size,
       recordCount: collected.reduce((sum, slot) => sum + slot.recordCount, 0),
-      missingCount: new Set(periodScopedTaxDataSlots.filter((slot) => slot.status === 'missing').map((slot) => slot.slotId)).size,
+      missingCount: new Set(displayedTaxDataSlots.filter((slot) => slot.status === 'missing').map((slot) => slot.slotId)).size,
     }
-  }, [periodScopedTaxDataSlots])
+  }, [displayedTaxDataSlots])
   const taxDataMonthsWithData = useMemo(() => new Set(
     (activeTaxDataSummary?.slots || []).filter((slot) => slot.status === 'collected').flatMap((slot) => {
       const start = (slot.periodStart || slot.periodEnd).slice(0, 7)
@@ -5767,6 +5773,8 @@ function App() {
             selectedClientId={selectedClientId}
             managedRules={managedRules}
             reports={reports}
+            taxDataSummary={activeTaxDataSummary}
+            taxDataMonth={effectiveTaxDataMonth}
             onApplyClientDraft={(draftClient) => applyAssistantClientDraft(draftClient)}
             onGenerateReport={() => createReport(true)}
             onTaxDataSummaryUpdate={setTaxDataSummary}
@@ -5838,44 +5846,52 @@ function App() {
                 <section className="tax-data-board" aria-label="企业资料完整性看板">
                   <div className="tax-data-period-nav">
                     <div>
-                      <span>查看资料期间</span>
-                      <strong>{effectiveTaxDataMonth ? `${effectiveTaxDataMonth.slice(0, 4)}年${Number(effectiveTaxDataMonth.slice(5, 7))}月` : '请选择月份'}</strong>
+                      <span>{taxDataViewMode === 'overview' ? '企业资料' : '查看资料期间'}</span>
+                      <strong>{taxDataViewMode === 'overview' ? '历史覆盖总览' : effectiveTaxDataMonth ? `${effectiveTaxDataMonth.slice(0, 4)}年${Number(effectiveTaxDataMonth.slice(5, 7))}月` : '请选择月份'}</strong>
                     </div>
-                    <select
-                      aria-label="资料年份"
-                      value={effectiveTaxDataMonth.slice(0, 4) || taxDataPeriodYears[0] || ''}
-                      onChange={(event) => setSelectedTaxDataMonth(`${event.target.value}-${effectiveTaxDataMonth.slice(5, 7) || '01'}`)}
-                    >
-                      {taxDataPeriodYears.map((year) => <option key={year} value={year}>{year}年</option>)}
-                    </select>
-                    <div className="tax-data-period-months">
-                      {monthNames.map((label, index) => {
-                        const month = `${effectiveTaxDataMonth.slice(0, 4) || taxDataPeriodYears[0]}-${String(index + 1).padStart(2, '0')}`
-                        return (
-                          <button
-                            key={month}
-                            type="button"
-                            className={`${effectiveTaxDataMonth === month ? 'active' : ''}${taxDataMonthsWithData.has(month) ? ' has-data' : ''}`}
-                            onClick={() => setSelectedTaxDataMonth(month)}
-                          >
-                            {label}
-                          </button>
-                        )
-                      })}
+                    <div className="tax-data-view-switch" aria-label="资料查看方式">
+                      <button type="button" className={taxDataViewMode === 'overview' ? 'active' : ''} onClick={() => setTaxDataViewMode('overview')}>总览</button>
+                      <button type="button" className={taxDataViewMode === 'month' ? 'active' : ''} onClick={() => setTaxDataViewMode('month')}>按月查看</button>
                     </div>
+                    {taxDataViewMode === 'month' ? (
+                      <>
+                        <select
+                          aria-label="资料年份"
+                          value={effectiveTaxDataMonth.slice(0, 4) || taxDataPeriodYears[0] || ''}
+                          onChange={(event) => setSelectedTaxDataMonth(`${event.target.value}-${effectiveTaxDataMonth.slice(5, 7) || '01'}`)}
+                        >
+                          {taxDataPeriodYears.map((year) => <option key={year} value={year}>{year}年</option>)}
+                        </select>
+                        <div className="tax-data-period-months">
+                          {monthNames.map((label, index) => {
+                            const month = `${effectiveTaxDataMonth.slice(0, 4) || taxDataPeriodYears[0]}-${String(index + 1).padStart(2, '0')}`
+                            return (
+                              <button
+                                key={month}
+                                type="button"
+                                className={`${effectiveTaxDataMonth === month ? 'active' : ''}${taxDataMonthsWithData.has(month) ? ' has-data' : ''}`}
+                                onClick={() => setSelectedTaxDataMonth(month)}
+                              >
+                                {label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </>
+                    ) : <p>查看企业历年已收录的资料类别；是否齐全请切换到具体月份。</p>}
                   </div>
                   <div className="tax-data-board-summary">
                     <div>
                       <span>已收录资料类别</span>
-                      <strong>{periodTaxDataStats.collectedCategoryCount}/{periodTaxDataStats.totalCategoryCount || 18}</strong>
+                      <strong>{displayedTaxDataStats.collectedCategoryCount}/{displayedTaxDataStats.totalCategoryCount || 18}</strong>
                     </div>
                     <div>
                       <span>来源文件</span>
-                      <strong>{periodTaxDataStats.sourceFileCount} 个</strong>
+                      <strong>{displayedTaxDataStats.sourceFileCount} 个</strong>
                     </div>
                     <div>
                       <span>标准记录</span>
-                      <strong>{periodTaxDataStats.recordCount} 条</strong>
+                      <strong>{displayedTaxDataStats.recordCount} 条</strong>
                     </div>
                     <div>
                       <span>待确认（全部期间）</span>
@@ -5883,7 +5899,7 @@ function App() {
                     </div>
                     <div>
                       <span>缺失资料</span>
-                      <strong>{periodTaxDataStats.missingCount} 项</strong>
+                      <strong>{displayedTaxDataStats.missingCount} 项</strong>
                     </div>
                   </div>
                   {taxDataFolderSummaries.length ? (
@@ -5902,7 +5918,9 @@ function App() {
                               <span className="tax-data-folder-icon">{active ? <FolderOpen /> : <Folder />}</span>
                               <strong>{folder.group}</strong>
                               <small>{folder.collected}/{folder.total} 类资料已收录</small>
-                              <em>{folder.status === 'complete' ? '齐全' : folder.status === 'partial' ? '部分缺失' : folder.status === 'pending' ? '待确认' : '缺资料'}</em>
+                              <em>{taxDataViewMode === 'overview'
+                                ? folder.collected > 0 ? '已收录' : '未收录'
+                                : folder.status === 'complete' ? '齐全' : folder.status === 'partial' ? '部分缺失' : folder.status === 'pending' ? '待确认' : '缺资料'}</em>
                             </button>
                           )
                         })}
@@ -5911,7 +5929,9 @@ function App() {
                         <header>
                           <div>
                             <span>{selectedTaxDataFolderSummary?.group}</span>
-                            <strong>{selectedTaxDataFolderSummary?.status === 'complete' ? '资料齐全' : selectedTaxDataFolderSummary?.status === 'partial' ? '资料部分收录' : '资料待补齐'}</strong>
+                            <strong>{taxDataViewMode === 'overview'
+                              ? selectedTaxDataFolderSummary?.collected ? '已有历史资料' : '尚未收录资料'
+                              : selectedTaxDataFolderSummary?.status === 'complete' ? '资料齐全' : selectedTaxDataFolderSummary?.status === 'partial' ? '资料部分收录' : '资料待补齐'}</strong>
                           </div>
                           <small>{selectedTaxDataFolderSummary?.collected || 0}/{selectedTaxDataFolderSummary?.total || 0} 类资料已收录</small>
                         </header>
@@ -8393,6 +8413,8 @@ function AiAssistantPage({
   selectedClientId,
   managedRules,
   reports,
+  taxDataSummary,
+  taxDataMonth,
   onApplyClientDraft,
   onGenerateReport,
   onTaxDataSummaryUpdate,
@@ -8401,6 +8423,8 @@ function AiAssistantPage({
   selectedClientId: string
   managedRules: ManagedRule[]
   reports: Report[]
+  taxDataSummary: TaxDataSummary | null
+  taxDataMonth: string
   onApplyClientDraft: (draftClient: Client) => Promise<AssistantDraftApplyResult>
   onGenerateReport: () => Promise<void>
   onTaxDataSummaryUpdate: (summary: TaxDataSummary) => void
@@ -8547,6 +8571,10 @@ function AiAssistantPage({
     const contextChecklist = filingChecklistForClient(contextClient)
     const contextBasicFindings = basicComplianceFindings(contextClient)
     const contextCompleteness = getDataCompleteness(contextClient, contextRisks)
+    const contextTaxDataSummary = taxDataSummary?.clientId === contextClient.id ? taxDataSummary : null
+    const collectedTaxDataSlots = (contextTaxDataSummary?.slots || []).filter((slot) => taxDataSlotCoversMonth(slot, taxDataMonth))
+    const collectedTaxDataIds = new Set(collectedTaxDataSlots.map((slot) => slot.slotId))
+    const taxDataCatalog = contextTaxDataSummary?.slotCatalog || []
     return {
     activeThread: activeAssistantThread
       ? {
@@ -8567,6 +8595,14 @@ function AiAssistantPage({
       handling: item.handling,
       note: item.note,
     })),
+    taxDataArchive: contextTaxDataSummary ? {
+      period: taxDataMonth,
+      sourceOfTruth: 'standard_tax_data_archive',
+      collectedCategories: Array.from(new Set(collectedTaxDataSlots.map((slot) => slot.name))),
+      missingCategories: taxDataCatalog.filter((item) => !collectedTaxDataIds.has(item.slotId)).map((item) => item.name),
+      sourceFiles: Array.from(new Set(collectedTaxDataSlots.flatMap((slot) => slot.sourceFiles.map((file) => file.file_name)))),
+      recordCount: collectedTaxDataSlots.reduce((sum, slot) => sum + slot.recordCount, 0),
+    } : null,
     workflowState: {
       dataCompleteness: contextCompleteness,
       basicComplianceFindings: contextBasicFindings,
@@ -9433,6 +9469,19 @@ function AiAssistantPage({
     }).join('\n\n')
   }
   const runAssistantChecklist = () => {
+    if (taxDataSummary?.clientId === selectedClient.id && taxDataSummary.slotCatalog?.length) {
+      const collectedSlots = taxDataSummary.slots.filter((slot) => taxDataSlotCoversMonth(slot, taxDataMonth))
+      const collectedIds = new Set(collectedSlots.map((slot) => slot.slotId))
+      const collectedNames = Array.from(new Set(collectedSlots.map((slot) => slot.name)))
+      const missingNames = taxDataSummary.slotCatalog.filter((item) => !collectedIds.has(item.slotId)).map((item) => item.name)
+      appendAssistantSystemMessage([
+        `我按标准资料库核对了 ${taxDataMonth} 的企业资料：`,
+        `已收录（${collectedNames.length}类）：${collectedNames.join('、') || '暂无'}。`,
+        `尚未收录（${missingNames.length}类）：${missingNames.join('、') || '无'}。`,
+        '以上以已入库原始文件和标准记录为准，不会把其他月份的资料算入本期。',
+      ].join('\n\n'))
+      return
+    }
     appendAssistantSystemMessage(`我按报税资料口径整理了当前客户资料清单：\n\n${summarizeFilingChecklist()}`)
   }
   const runAssistantBasicCompliance = () => {

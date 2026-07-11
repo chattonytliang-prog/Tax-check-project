@@ -172,6 +172,7 @@ function normalizeAssistantContext(value) {
     currentDraft: value.currentDraft || null,
     latestMaterialSummary: value.latestMaterialSummary || null,
     filingChecklist: value.filingChecklist || null,
+    taxDataArchive: value.taxDataArchive || null,
     workflowState: value.workflowState || null,
   }
 }
@@ -221,6 +222,7 @@ Rules:
 6c. Preserve period semantics exactly. "本年累计利润" is ytdProfit and must never be written to monthlyProfit; cumulative revenue/cost must never be written to monthlyRevenue/monthlyCost. If the source does not state a monthly amount, leave the monthly field missing.
 6d. When currentDraft belongs to a different company from the previously selected client, use currentDraft as the only business-data context. Never copy figures, risks, or report facts across companies.
 6e. currentDraft.confirmationQuestions contains deterministic questions raised by the host parser. Ask the unresolved questions directly, accept concise customer answers such as "是 3-6 月" or "这是进项发票", and never invent an answer. Confirmed answers may update the cleaning draft; unresolved items must remain pending_confirmation rather than being treated as final data.
+6f. assistantContext.taxDataArchive is the source of truth for whether a standard tax material exists in the selected period. Never claim that a category in collectedCategories is missing. Do not use another month to fill the selected period. If taxDataArchive conflicts with the legacy filingChecklist or sparse client profile fields, follow taxDataArchive and explain the period scope.
 7. This page has no "保存" or "提交" button. Never tell the user to click a save/submit button on this AI assistant page.
 8. When suggesting that cleaned data should enter the system, tell the user they can reply "帮我导入吧" or "确认保存"; do not tell them to click a button.
 9. If the current client is not verified in the database, say you can still analyze the pasted content and temporary page context, and can create or update business data after the user clearly authorizes it in the conversation.
