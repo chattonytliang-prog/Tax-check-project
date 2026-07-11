@@ -6,6 +6,17 @@ function getMaterialsBucket(env) {
   return env.ASSISTANT_MATERIALS_BUCKET || env.MATERIALS_BUCKET || null
 }
 
+function contentTypeForFile(fileName, contentType = '') {
+  const normalized = String(contentType).toLowerCase()
+  if (normalized && normalized !== 'application/octet-stream') return contentType
+  const extension = String(fileName).toLowerCase().split('.').pop()
+  if (extension === 'pdf') return 'application/pdf'
+  if (extension === 'xlsx') return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  if (extension === 'xls') return 'application/vnd.ms-excel'
+  if (extension === 'csv') return 'text/csv; charset=utf-8'
+  return 'application/octet-stream'
+}
+
 export async function onRequestGet({ request, env }) {
   try {
     const db = requireDb(env)
@@ -27,7 +38,7 @@ export async function onRequestGet({ request, env }) {
     const safeName = String(row.file_name || 'source-file').replace(/[\r\n"]/g, '_')
     return new Response(object.body, {
       headers: {
-        'Content-Type': row.content_type || 'application/octet-stream',
+        'Content-Type': contentTypeForFile(row.file_name, row.content_type),
         'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(safeName)}`,
         'Cache-Control': 'private, no-store',
       },
@@ -59,15 +70,16 @@ export async function onRequestPost({ request, env }) {
     if (!bucket) return new Response('Material storage is unavailable', { status: 503 })
     const safeName = String(row.file_name).replace(/[\\/:*?"<>|]/g, '_').slice(0, 160)
     const objectKey = `${auth.user.id}/archive/${row.client_id || 'unassigned'}/${row.id}/${safeName}`
+    const contentType = contentTypeForFile(row.file_name, file.type)
     await bucket.put(objectKey, await file.arrayBuffer(), {
-      httpMetadata: { contentType: file.type || 'application/octet-stream' },
+      httpMetadata: { contentType },
       customMetadata: { ownerUserId: auth.user.id, clientId: row.client_id || '', sourceFileId: row.id },
     })
     await db.prepare(
       `UPDATE tax_data_source_files
        SET storage_key = ?, content_type = ?, file_size = ?
        WHERE id = ? AND owner_user_id = ?`,
-    ).bind(objectKey, file.type || 'application/octet-stream', file.size, row.id, auth.user.id).run()
+    ).bind(objectKey, contentType, file.size, row.id, auth.user.id).run()
     return json({ ok: true, sourceFileId: row.id, stored: true })
   } catch (error) {
     return serverError(error)

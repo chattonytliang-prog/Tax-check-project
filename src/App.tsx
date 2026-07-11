@@ -541,6 +541,10 @@ function displayTaxDataValue(value: unknown) {
   return String(value)
 }
 
+function sourceFileActionLabel(fileName: string) {
+  return fileName.toLowerCase().endsWith('.pdf') ? '预览源文件' : '下载源文件'
+}
+
 function taxDataSlotCoversMonth(slot: TaxDataSlot, month: string) {
   if (slot.status !== 'collected' || !month) return false
   const startMonth = (slot.periodStart || slot.periodEnd).slice(0, 7)
@@ -7217,7 +7221,7 @@ function TaxDataDetailModal({ slot, detail, loading, error, onClose }: {
                     <FileText />
                     <div><strong>{source.file_name}</strong><small>{source.period_start} 至 {source.period_end} · {source.parse_status}</small></div>
                     {source.stored
-                      ? <a className="secondary-button compact-button" href={`/api/tax-data/source?sourceFileId=${encodeURIComponent(source.id)}`} target="_blank" rel="noreferrer">打开源文件</a>
+                      ? <a className="secondary-button compact-button" href={`/api/tax-data/source?sourceFileId=${encodeURIComponent(source.id)}`} target="_blank" rel="noreferrer">{sourceFileActionLabel(source.file_name)}</a>
                       : <span className="tax-data-source-unavailable">仅保留归档索引</span>}
                   </article>
                 ))}
@@ -8028,7 +8032,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
                           <FileText />
                           <div><strong>{source.file_name}</strong><small>{source.period_start} 至 {source.period_end} · {source.parse_status}</small></div>
                           {source.stored
-                            ? <a className="secondary-button compact-button" href={`/api/tax-data/source?sourceFileId=${encodeURIComponent(source.id)}`} target="_blank" rel="noreferrer">打开源文件</a>
+                            ? <a className="secondary-button compact-button" href={`/api/tax-data/source?sourceFileId=${encodeURIComponent(source.id)}`} target="_blank" rel="noreferrer">{sourceFileActionLabel(source.file_name)}</a>
                             : <span className="tax-data-source-unavailable">仅保留归档索引</span>}
                         </article>
                       ))}
