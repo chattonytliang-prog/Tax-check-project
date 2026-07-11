@@ -351,9 +351,10 @@ export function parseTaxDataWorkbook(fileName: string, sheets: IntakeSheet[]): P
 function vatLineRecords(text: string, period: Period) {
   const records: StandardTaxRecord[] = []
   const formName = text.includes('附列资料（四）') ? '增值税及附加税费申报表附列资料（四）' : '增值税及附加税费申报表'
-  const patterns: Array<{ regex: RegExp; rowIndex: number; nameIndex: number; amountIndex: number }> = [
-    { regex: /(?:^|\n)\s*(\d{1,2})\s+([^\n]+?)\s+(-?[\d,]+\.\d{2})\s+(-?[\d,]+\.\d{2})/g, rowIndex: 1, nameIndex: 2, amountIndex: 3 },
-    { regex: /(?:^|\n)\s*([^\n\d][^\n]*?)\s+(\d{1,2}(?:=[^\s]+)?)\s+(-?[\d,]+\.\d{2})\s+(-?[\d,]+\.\d{2})/g, rowIndex: 2, nameIndex: 1, amountIndex: 3 },
+  const valuePattern = '-?[\\d,]+\\.\\d{2}'
+  const patterns: Array<{ regex: RegExp; rowIndex: number; nameIndex: number; valueStartIndex: number }> = [
+    { regex: new RegExp(`(?:^|\\n)\\s*(\\d{1,2})\\s+([^\\n]+?)\\s+(${valuePattern})(?:\\s+(${valuePattern}))?(?:\\s+(${valuePattern}))?(?:\\s+(${valuePattern}))?`, 'g'), rowIndex: 1, nameIndex: 2, valueStartIndex: 3 },
+    { regex: new RegExp(`(?:^|\\n)\\s*([^\\n\\d][^\\n]*?)\\s+(\\d{1,2}(?:=[^\\s]+)?)\\s+(${valuePattern})(?:\\s+(${valuePattern}))?(?:\\s+(${valuePattern}))?(?:\\s+(${valuePattern}))?`, 'g'), rowIndex: 2, nameIndex: 1, valueStartIndex: 3 },
   ]
   const seen = new Set<string>()
   for (const pattern of patterns) {
@@ -361,9 +362,17 @@ function vatLineRecords(text: string, period: Period) {
       const itemName = clean(match[pattern.nameIndex])
       const rowNo = clean(match[pattern.rowIndex])
       if (!itemName || /序号|项目|栏次/.test(itemName) || seen.has(`${rowNo}:${itemName}`)) continue
+      const values = match.slice(pattern.valueStartIndex, pattern.valueStartIndex + 4).map((value) => amount(value))
       seen.add(`${rowNo}:${itemName}`)
       records.push(makeRecord('vat_return', 'vat_return_line', {
-        formName, rowNo, itemName, currentAmount: amount(match[pattern.amountIndex]), cumulativeAmount: amount(match[pattern.amountIndex + 1]),
+        formName,
+        rowNo,
+        itemName,
+        currentAmount: values[0],
+        cumulativeAmount: values[1],
+        currentTax: values[2],
+        cumulativeTax: values[3],
+        fieldCode: `${formName.includes('附列资料（四）') ? 'vat_schedule4' : 'vat_main'}_row_${rowNo}`,
       }, period, 'medium'))
     }
   }

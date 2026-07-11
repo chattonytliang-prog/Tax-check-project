@@ -569,7 +569,8 @@ async function materializeStandardRecord(db, auth, batchId, record, defaultClien
 
   if (type === 'vat_return' && clientId && periodStart && periodEnd && payload.itemName) {
     const returnType = normalizeString(payload.formName || record.recordSubtype || 'vat_return', 160)
-    const parentId = `${batchId}:vat:${periodStart}:${periodEnd}`.slice(0, 120)
+    const formKey = /附列资料（四）|附表四|税额抵减/.test(returnType) ? 'schedule4' : 'main'
+    const parentId = `${batchId}:vat:${formKey}:${periodStart}:${periodEnd}`.slice(0, 120)
     await db.prepare(
       `INSERT OR IGNORE INTO tax_data_vat_returns (
         id, owner_user_id, client_id, batch_id, source_file_id, return_type, period_start, period_end, raw_json
@@ -585,6 +586,26 @@ async function materializeStandardRecord(db, auth, batchId, record, defaultClien
       payload.currentAmount ?? null, payload.cumulativeAmount ?? null, payload.currentTax ?? null,
       payload.cumulativeTax ?? null, rawJson, JSON.stringify({ standardRecordId: id }),
     ).run()
+    const rowNo = normalizeString(payload.rowNo, 40)
+    const lineValue = payload.currentTax ?? payload.currentAmount ?? null
+    if (lineValue !== null && lineValue !== undefined) {
+      const updates = {
+        1: 'sales_amount',
+        11: 'output_tax',
+        12: 'input_tax',
+        19: 'tax_payable',
+        20: 'retained_tax_credit',
+        28: 'tax_paid',
+        31: 'tax_paid',
+        37: 'tax_paid',
+      }
+      const targetColumn = updates[rowNo]
+      if (targetColumn) {
+        await db.prepare(`UPDATE tax_data_vat_returns SET ${targetColumn} = ? WHERE id = ? AND owner_user_id = ?`)
+          .bind(lineValue, parentId, auth.user.id)
+          .run()
+      }
+    }
     return true
   }
 

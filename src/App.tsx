@@ -441,28 +441,37 @@ type AssistantDraftApplyResult = {
 
 type TaxDataSlot = {
   id: string
+  slotId: string
   group: string
   name: string
   status: 'collected' | 'missing'
+  periodType: 'month' | 'quarter' | 'year' | 'range'
+  parserType: string
+  standardTemplate: string
+  description: string
   periodStart: string
   periodEnd: string
   periodLabel: string
   recordCount: number
   sourceFileCount: number
   keyValues: Array<[string, string]>
+  validationMessages: string[]
   sourceFiles: Array<{
     id: string
     file_name: string
     document_type: string
     period_start: string
     period_end: string
+    parse_status?: string
   }>
 }
 
 type TaxDataSummary = {
   clientId: string
   slots: TaxDataSlot[]
+  slotCatalog?: Array<Pick<TaxDataSlot, 'slotId' | 'group' | 'name' | 'periodType' | 'parserType' | 'standardTemplate' | 'description'>>
   missingSlots: string[]
+  pendingConfirmationCount?: number
   stats: {
     collectedSlotCount: number
     totalSlotCount: number
@@ -5692,6 +5701,10 @@ function App() {
                       <strong>{activeTaxDataSummary?.stats.recordCount || 0} 条</strong>
                     </div>
                     <div>
+                      <span>待确认</span>
+                      <strong>{activeTaxDataSummary?.pendingConfirmationCount || 0} 项</strong>
+                    </div>
+                    <div>
                       <span>缺失资料</span>
                       <strong>{activeTaxDataSummary?.missingSlots.length || 0} 项</strong>
                     </div>
@@ -5702,16 +5715,21 @@ function App() {
                         <article key={group} className="tax-data-slot-group">
                           <header>
                             <strong>{group}</strong>
-                            <small>{slots.length} 个已收录槽位</small>
+                            <small>{slots.filter((slot) => slot.status === 'collected').length}/{slots.length} 个槽位已收录</small>
                           </header>
                           <div className="tax-data-slot-grid">
-                            {slots.slice(0, 8).map((slot) => (
-                              <div key={slot.id} className="tax-data-slot-card collected">
+                            {slots.slice(0, 12).map((slot) => (
+                              <div key={slot.id} className={slot.status === 'collected' ? 'tax-data-slot-card collected' : 'tax-data-slot-card missing'}>
                                 <div>
                                   <span>{slot.name}</span>
-                                  <strong>{slot.periodLabel}</strong>
+                                  <strong>{slot.status === 'collected' ? slot.periodLabel : '待收录'}</strong>
                                 </div>
-                                <small>{slot.recordCount} 条记录 · {slot.sourceFileCount} 个来源文件</small>
+                                <small>
+                                  {slot.status === 'collected'
+                                    ? `${slot.recordCount} 条记录 · ${slot.sourceFileCount} 个来源文件`
+                                    : `${slot.periodType === 'quarter' ? '按季度' : slot.periodType === 'year' ? '按年度' : slot.periodType === 'range' ? '按期间' : '按月'}收录 · ${slot.parserType.includes('fixed') ? '标准模板' : '字段映射'}`}
+                                </small>
+                                {slot.description ? <p>{slot.description}</p> : null}
                                 {slot.keyValues.length ? (
                                   <dl>
                                     {slot.keyValues.slice(0, 4).map(([label, value]) => (
@@ -5721,6 +5739,13 @@ function App() {
                                       </div>
                                     ))}
                                   </dl>
+                                ) : null}
+                                {slot.validationMessages.length ? (
+                                  <ul>
+                                    {slot.validationMessages.slice(0, 2).map((message) => (
+                                      <li key={`${slot.id}-${message}`}>{message}</li>
+                                    ))}
+                                  </ul>
                                 ) : null}
                                 {slot.sourceFiles[0]?.file_name ? <em>{slot.sourceFiles[0].file_name}</em> : null}
                               </div>
