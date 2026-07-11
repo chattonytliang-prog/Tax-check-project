@@ -8096,6 +8096,7 @@ function AiAssistantPage({
   const [assistantError, setAssistantError] = useState('')
   const [assistantNotice, setAssistantNotice] = useState('')
   const [assistantDragActive, setAssistantDragActive] = useState(false)
+  const [assistantPendingFiles, setAssistantPendingFiles] = useState<File[]>([])
   const [assistantThreadsHydrated, setAssistantThreadsHydrated] = useState(false)
   const assistantFileInputRef = useRef<HTMLInputElement | null>(null)
   const structuredIntakeByDraftId = useRef(new Map<string, ParsedTaxDataIntake>())
@@ -8219,11 +8220,21 @@ function AiAssistantPage({
         : thread
     ))
   }
+  const addAssistantPendingFiles = (fileList: FileList | File[]) => {
+    const files = Array.from(fileList)
+    if (!files.length) return
+    setAssistantError('')
+    setAssistantPendingFiles((current) => [...current, ...files].slice(0, 12))
+  }
+  const removeAssistantPendingFile = (index: number) => {
+    setAssistantPendingFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))
+  }
   const startAssistantThread = () => {
     const thread = createAssistantThread()
     setAssistantThreads((current) => [thread, ...current])
     setActiveAssistantThreadId(thread.id)
     setAssistantInput('')
+    setAssistantPendingFiles([])
     setAssistantError('')
     setAssistantNotice('')
   }
@@ -8556,11 +8567,13 @@ function AiAssistantPage({
       detectedTables: string[]
       detectedSourceType?: string
     },
+    userNote = '',
   ) => {
     const signal = {
       fileName,
       sheetNames: parsedImport?.detectedTables || [],
       textSample: [
+        userNote ? `用户说明：${userNote}` : '',
         parsedImport?.detectedSourceType || '',
         ...(parsedImport?.detectedTables || []),
         ...(parsedImport?.mappings || []).map((item) => `${item.source} ${item.label} ${item.field}`),
@@ -8697,14 +8710,14 @@ function AiAssistantPage({
     return messages
   }
   const canParseAssistantFile = (fileName: string) => /\.(xlsx|xls|csv|tsv|txt|json|pdf)$/i.test(fileName)
-  const importAssistantFile = async (file: File | null) => {
+  const importAssistantFile = async (file: File | null, userNote = '', contextMessages = assistantMessages) => {
     if (!file) return
     setAssistantError('')
     setAssistantNotice('')
     try {
       const rawMaterial = await uploadAssistantMaterial(file)
       if (!canParseAssistantFile(file.name)) {
-        const metadata = buildAssistantIntakeMetadata(file.name)
+        const metadata = buildAssistantIntakeMetadata(file.name, undefined, userNote)
         const enrichedRawMaterial = {
           ...rawMaterial,
           ...metadata,
@@ -8763,7 +8776,7 @@ function AiAssistantPage({
               taxDataIntake: parseTaxDataPdfText(file.name, await extractPdfTextPages(fileBuffer)),
             }
           : parseClientImportText(decodeClientImportText(fileBuffer))
-      const metadata = buildAssistantIntakeMetadata(file.name, parsedImport)
+      const metadata = buildAssistantIntakeMetadata(file.name, parsedImport, userNote)
       const draft = addAssistantDraftFromParsedImport(parsedImport, file.name, {
         ...rawMaterial,
         ...metadata,
@@ -8787,7 +8800,7 @@ function AiAssistantPage({
       }
       updateAssistantThreadTitle(file.name, draft.client.name)
       const autoCleanMessages: AiAssistantMessage[] = [
-        ...assistantMessages,
+        ...contextMessages,
         {
           id: crypto.randomUUID(),
           role: 'assistant',
@@ -8802,23 +8815,26 @@ function AiAssistantPage({
           content: assistantUploadCustomerMessage(draft, file.name, parsedImport.taxDataIntake?.records.length || 0),
         },
       ])
-      await askAssistantToCleanUploadedDraft(draft, materialSummary, autoCleanMessages)
+      await askAssistantToCleanUploadedDraft(draft, materialSummary, userNote
+        ? [
+            ...autoCleanMessages,
+            {
+              id: crypto.randomUUID(),
+              role: 'user',
+              content: `我对「${file.name}」的说明：${userNote}`,
+            },
+          ]
+        : autoCleanMessages)
     } catch (error) {
       console.warn('Failed to import assistant file.', error)
       setAssistantError('文件解析失败，请检查 Excel、CSV、TSV、JSON、文本或 PDF 是否完整且未加密。')
-    }
-  }
-  const importAssistantFiles = async (fileList: FileList | File[]) => {
-    const files = Array.from(fileList)
-    for (const file of files) {
-      await importAssistantFile(file)
     }
   }
   const handleAssistantDrop = (event: React.DragEvent<HTMLElement>) => {
     event.preventDefault()
     setAssistantDragActive(false)
     if (assistantLoading) return
-    void importAssistantFiles(event.dataTransfer.files)
+    addAssistantPendingFiles(event.dataTransfer.files)
   }
   const handleAssistantDragOver = (event: React.DragEvent<HTMLElement>) => {
     event.preventDefault()
@@ -9051,7 +9067,32 @@ function AiAssistantPage({
   }
   const askAssistant = async (message = assistantInput) => {
     const cleanMessage = message.trim()
-    if (!cleanMessage || assistantLoading) return
+    if ((!cleanMessage && !assistantPendingFiles.length) || assistantLoading) return
+    if (assistantPendingFiles.length) {
+      const filesToImport = assistantPendingFiles
+      const attachmentSummary = filesToImport.map((file) => `- ${file.name}`).join('\n')
+      const userContent = [
+        attachmentSummary ? `上传文件：\n${attachmentSummary}` : '',
+        cleanMessage ? `说明：${cleanMessage}` : '',
+      ].filter(Boolean).join('\n\n')
+      const nextMessages: AiAssistantMessage[] = [
+        ...assistantMessages,
+        { id: crypto.randomUUID(), role: 'user', content: userContent },
+      ]
+      setAssistantInput('')
+      setAssistantPendingFiles([])
+      updateAssistantThreadTitle(cleanMessage || filesToImport[0]?.name || '上传资料')
+      setActiveAssistantMessages(nextMessages)
+      setAssistantLoading(true)
+      try {
+        for (const file of filesToImport) {
+          await importAssistantFile(file, cleanMessage, nextMessages)
+        }
+      } finally {
+        setAssistantLoading(false)
+      }
+      return
+    }
     const parsedTextDraft: AiAssistantDraft | null = (() => {
       try {
         return addAssistantDraftFromParsedImport(parseClientImportText(cleanMessage))
@@ -9192,7 +9233,7 @@ function AiAssistantPage({
             accept=".json,.csv,.tsv,.txt,.xlsx,.xls,.pdf,.png,.jpg,.jpeg,.webp,.ppt,.pptx"
             multiple
             onChange={(event) => {
-              void importAssistantFiles(event.target.files || [])
+              addAssistantPendingFiles(event.target.files || [])
               event.currentTarget.value = ''
             }}
           />
@@ -9212,12 +9253,8 @@ function AiAssistantPage({
             <span>{dataCompleteness.label} · {dataCompleteness.score}% · {risks.length} 项风险线索</span>
           </div>
           <div
-            className={`ai-assistant-chat ${assistantDragActive ? 'drag-active' : ''}`}
+            className="ai-assistant-chat"
             aria-live="polite"
-            onDrop={handleAssistantDrop}
-            onDragOver={handleAssistantDragOver}
-            onDragEnter={handleAssistantDragOver}
-            onDragLeave={handleAssistantDragLeave}
           >
               {assistantMessages.length ? (
                 assistantMessages.map((item) => (
@@ -9266,18 +9303,37 @@ function AiAssistantPage({
                 </article>
               ) : null}
             </div>
-            <textarea
-              value={assistantInput}
-              onChange={(event) => setAssistantInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
-                event.preventDefault()
-                void askAssistant()
-              }}
-              placeholder="可以直接粘贴利润表、资产负债表、客户微信文字，或问：这个客户下一步应该补什么资料？"
-            />
+            <div
+              className={`ai-assistant-composer ${assistantDragActive ? 'drag-active' : ''}`}
+              onDrop={handleAssistantDrop}
+              onDragOver={handleAssistantDragOver}
+              onDragEnter={handleAssistantDragOver}
+              onDragLeave={handleAssistantDragLeave}
+            >
+              {assistantPendingFiles.length ? (
+                <div className="ai-assistant-attachments" aria-label="待发送附件">
+                  {assistantPendingFiles.map((file, index) => (
+                    <span key={`${file.name}-${file.size}-${index}`}>
+                      <FileText />
+                      {file.name}
+                      <button type="button" aria-label={`移除 ${file.name}`} onClick={() => removeAssistantPendingFile(index)}>×</button>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              <textarea
+                value={assistantInput}
+                onChange={(event) => setAssistantInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+                  event.preventDefault()
+                  void askAssistant()
+                }}
+                placeholder="把文件拖到这里，也可以补充说明：这是2025年3月工资表/明细账/申报表。"
+              />
+            </div>
             <div className="ai-assistant-actions">
-              <button type="button" className="primary-button" onClick={() => void askAssistant()} disabled={assistantLoading || !assistantInput.trim()}>
+              <button type="button" className="primary-button" onClick={() => void askAssistant()} disabled={assistantLoading || (!assistantInput.trim() && !assistantPendingFiles.length)}>
                 <Sparkles /> {assistantLoading ? '正在处理...' : '发送'}
               </button>
               <button type="button" className="secondary-button compact-button" onClick={() => assistantFileInputRef.current?.click()} disabled={assistantLoading}>

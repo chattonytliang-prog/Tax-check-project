@@ -3393,6 +3393,61 @@ textarea:focus {
   line-height: 1.7;
 }
 
+.ai-assistant-composer {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0;
+}
+
+.ai-assistant-composer.drag-active {
+  border-color: rgba(18, 174, 234, 0.52);
+  background: rgba(18, 174, 234, 0.07);
+  box-shadow: inset 0 0 0 2px rgba(18, 174, 234, 0.12);
+  padding: 8px;
+}
+
+.ai-assistant-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ai-assistant-attachments span {
+  display: inline-flex;
+  align-items: center;
+  max-width: min(520px, 100%);
+  gap: 6px;
+  border: 1px solid rgba(12, 140, 130, 0.18);
+  border-radius: 6px;
+  padding: 7px 8px;
+  background: rgba(86, 240, 238, 0.1);
+  color: #20434d;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.ai-assistant-attachments span svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+
+.ai-assistant-attachments span button {
+  flex: 0 0 auto;
+  border: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  padding: 0;
+  background: rgba(5, 26, 34, 0.12);
+  color: var(--ink);
+  font-weight: 900;
+  line-height: 1;
+}
+
 .assistant-page-panel {
   min-width: 0;
 }
