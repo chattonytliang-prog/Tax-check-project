@@ -223,6 +223,7 @@ function recordValue(data, ...keys) {
 }
 
 function metricAmount(value) {
+  if (value === null || value === undefined || value === '') return null
   const number = Number(String(value ?? '').replace(/,/g, ''))
   return Number.isFinite(number) ? number : null
 }
@@ -247,12 +248,12 @@ async function deterministicBusinessAnswer(db, auth, client, message) {
   const records = (result.results || []).map((row) => ({ ...row, data: cleanToolArguments(row.record_json) }))
   const vat = records.find((row) => row.record_type === 'vat_return' && String(recordValue(row.data, 'rowNo', 'row_no')).match(/^1(?:\D|$)/))
   const vatAmount = metricAmount(recordValue(vat?.data, 'currentAmount', 'current_amount'))
-  if (vatAmount !== null) {
+  if (vat && vatAmount !== null) {
     return `${client.name}${period.label}增值税申报表口径销售额为 ${vatAmount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元。来源：${vat.file_name || '增值税申报表主表'}。`
   }
   const income = records.find((row) => row.record_type === 'financial_statement' && row.record_subtype === 'income_statement' && /营业收入/.test(String(recordValue(row.data, 'lineName', 'line_name'))))
   const incomeAmount = metricAmount(recordValue(income?.data, 'currentAmount', 'current_amount'))
-  if (incomeAmount !== null) {
+  if (income && incomeAmount !== null) {
     return `${client.name}${period.label}利润表本期营业收入为 ${incomeAmount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元。来源：${income.file_name || '利润表'}。`
   }
   return `目前无法从标准档案确认${client.name}${period.label}的销售额。该期间没有已收录的增值税申报表主表销售额，也没有利润表“本期营业收入”；我不会用本年累计数或其他月份数据代替。`
