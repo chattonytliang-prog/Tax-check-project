@@ -429,11 +429,14 @@ async function analyzeImages(env, images, prompt) {
   const providers = []
   const preferredProvider = String(env.VISION_PROVIDER || 'auto').toLowerCase()
   if (preferredProvider !== 'deepseek' && qwenKey) {
-    providers.push({
-      name: 'Qwen-VL',
+    const qwenModels = env.VISION_MODEL
+      ? [env.VISION_MODEL]
+      : ['qwen-vl-max-latest', 'qwen-vl-max', 'qwen-vl-plus-latest', 'qwen-vl-plus']
+    for (const model of qwenModels) providers.push({
+      name: `Qwen-VL/${model}`,
       apiKey: qwenKey,
       apiUrl: env.VISION_API_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
-      model: env.VISION_MODEL || 'qwen-vl-max-latest',
+      model,
     })
   }
   if ((preferredProvider === 'deepseek' || !qwenKey) && env.DEEPSEEK_API_KEY) {
