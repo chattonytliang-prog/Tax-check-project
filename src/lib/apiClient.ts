@@ -4,7 +4,7 @@ async function apiError(response: Response) {
   const fallback = `API request failed: ${response.status}`
   try {
     const data = await response.json() as ApiErrorBody
-    return data.error || data.detail || fallback
+    return data.error === 'Server error' && data.detail ? data.detail : data.error || data.detail || fallback
   } catch {
     return fallback
   }

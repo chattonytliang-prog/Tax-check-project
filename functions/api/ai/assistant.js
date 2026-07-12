@@ -319,11 +319,39 @@ function normalizeImageInputs(images) {
   )).slice(0, 4)
 }
 
+async function analyzeImages(env, images, prompt) {
+  const apiKey = env.QWEN_API_KEY || env.DASHSCOPE_API_KEY || env.VISION_API_KEY
+  const apiUrl = env.VISION_API_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
+  const model = env.VISION_MODEL || 'qwen-vl-max-latest'
+  if (!apiKey) throw new Error('截图粘贴已启用，但视觉模型尚未配置。请配置 QWEN_API_KEY（或 DASHSCOPE_API_KEY）后使用截图对话。')
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      messages: [{
+        role: 'user',
+        content: [
+          ...images.map((image) => ({ type: 'image_url', image_url: { url: image } })),
+          { type: 'text', text: `请准确识别截图中的界面、文字、数字和异常，不要推测看不清的内容。用户问题：${prompt || '请说明截图内容。'}` },
+        ],
+      }],
+      temperature: 0.1,
+      max_tokens: 1800,
+    }),
+  })
+  if (!response.ok) throw new Error(`视觉模型请求失败：${(await response.text()).slice(0, 300)}`)
+  const data = await response.json()
+  const content = String(data?.choices?.[0]?.message?.content || '').trim()
+  if (!content) throw new Error('视觉模型没有返回可用的截图识别结果。')
+  return { content, model }
+}
+
 async function runConversationalAssistant({ env, db, auth, model, client, message, history, assistantContext, reasoning, images = [] }) {
-  const userContent = images.length ? [
-    { type: 'text', text: message || '请查看这些截图并结合当前企业上下文回答。' },
-    ...images.map((image) => ({ type: 'image_url', image_url: { url: image } })),
-  ] : message
+  const vision = images.length ? await analyzeImages(env, images, message) : null
+  const userContent = vision
+    ? `${message || '请查看这些截图并结合当前企业上下文回答。'}\n\n[视觉模型 ${vision.model} 的截图识别结果]\n${vision.content}`
+    : message
   const messages = [
     { role: 'system', content: conversationalSystemPrompt(client, assistantContext) },
     ...history.slice(-30).map((item) => ({ role: item.role, content: item.content })),
