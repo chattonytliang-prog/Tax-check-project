@@ -9145,6 +9145,8 @@ function AiAssistantPage({
   const [assistantPendingFiles, setAssistantPendingFiles] = useState<File[]>([])
   const [assistantThreadsHydrated, setAssistantThreadsHydrated] = useState(false)
   const assistantFileInputRef = useRef<HTMLInputElement | null>(null)
+  const assistantChatRef = useRef<HTMLDivElement | null>(null)
+  const assistantShouldStickToBottomRef = useRef(true)
   const structuredIntakeByDraftId = useRef(new Map<string, ParsedTaxDataIntake>())
   const activeAssistantThread = assistantThreads.find((thread) => thread.id === activeAssistantThreadId) || assistantThreads[0]
   const assistantThreadClient = clients.find((client) => client.id === activeAssistantThread?.clientId)
@@ -9172,6 +9174,22 @@ function AiAssistantPage({
   const currentUploadCount = currentAssistantDraft?.rawMaterials.length || 0
   const currentQuestionCount = currentAssistantDraft?.confirmationQuestions.length || 0
   const currentRecordCount = Object.values(currentAssistantDraft?.taxDataRecordCounts || {}).reduce((sum, value) => sum + value, 0)
+  useEffect(() => {
+    assistantShouldStickToBottomRef.current = true
+    const frame = window.requestAnimationFrame(() => {
+      const chat = assistantChatRef.current
+      if (chat) chat.scrollTop = chat.scrollHeight
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [activeAssistantThreadId, assistantThreadsHydrated])
+  useEffect(() => {
+    if (!assistantShouldStickToBottomRef.current) return
+    const frame = window.requestAnimationFrame(() => {
+      const chat = assistantChatRef.current
+      if (chat) chat.scrollTop = chat.scrollHeight
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [assistantMessages.length, showAssistantProcessingMessage])
   useEffect(() => {
     window.localStorage.setItem(assistantThreadsStorageKey, JSON.stringify(assistantThreads.slice(0, 20)))
   }, [assistantThreads])
@@ -10577,8 +10595,13 @@ function AiAssistantPage({
             <span>{dataCompleteness.label} · {dataCompleteness.score}% · {risks.length} 项风险线索</span>
           </div>
           <div
+            ref={assistantChatRef}
             className="ai-assistant-chat"
             aria-live="polite"
+            onScroll={(event) => {
+              const chat = event.currentTarget
+              assistantShouldStickToBottomRef.current = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80
+            }}
           >
               {assistantMessages.length ? (
                 assistantMessages.map((item) => (
