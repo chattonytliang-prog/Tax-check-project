@@ -6451,19 +6451,18 @@ function App() {
                                     {slot.sourceFiles[0].auto_import_eligible ? '模板校验通过' : '模板待复核'} · {slot.sourceFiles[0].template_matches[0].templateName} v{slot.sourceFiles[0].template_matches[0].version}
                                   </span>
                                 ) : null}
+                                {slot.validationMessages.length ? <p>{slot.validationMessages[0]}</p> : null}
                               </div>
-                              {slot.keyValues.length ? (
-                                <dl>
-                                  {slot.keyValues.slice(0, 3).map(([label, value]) => (
-                                    <div key={`${slot.id}-${label}`}>
-                                      <dt>{label}</dt>
-                                      <dd>{value}</dd>
-                                    </div>
-                                  ))}
-                                </dl>
-                              ) : null}
-                              {slot.validationMessages.length ? <p>{slot.validationMessages[0]}</p> : null}
-                              {canOpen ? <button type="button" className="secondary-button compact-button tax-data-review-button" onClick={(event) => { event.stopPropagation(); void openTaxDataDetail(slot) }}>{slot.status === 'collected' ? '查看与核对' : '查看标准表'}</button> : null}
+                              <div className="tax-data-slot-actions">
+                                {slot.keyValues.length ? (
+                                  <dl>
+                                    {slot.keyValues.slice(0, 3).map(([label, value]) => (
+                                      <div key={`${slot.id}-${label}`}><dt>{label}</dt><dd>{value}</dd></div>
+                                    ))}
+                                  </dl>
+                                ) : null}
+                                {canOpen ? <button type="button" className="secondary-button compact-button tax-data-review-button" onClick={(event) => { event.stopPropagation(); void openTaxDataDetail(slot) }}>{slot.status === 'collected' ? '查看与核对' : '查看标准表'}</button> : null}
+                              </div>
                             </div>
                             )
                           })}

@@ -1464,7 +1464,7 @@ td small,
 
 .tax-data-slot-row {
   display: grid;
-  grid-template-columns: 28px minmax(220px, 1fr) minmax(180px, 0.8fr);
+  grid-template-columns: 28px minmax(320px, 1.35fr) minmax(360px, 1fr);
   gap: 12px;
   align-items: center;
   border: 1px solid rgba(12, 140, 130, 0.12);
@@ -1551,9 +1551,21 @@ td small,
 }
 
 .tax-data-slot-row p {
-  grid-column: 2 / -1;
   margin: 0;
   color: #9f5b16;
+}
+
+.tax-data-slot-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+
+.tax-data-slot-actions dl {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .tax-data-slot-group {
@@ -2295,6 +2307,7 @@ th {
 }
 
 .tax-data-review-button {
+  flex: 0 0 auto;
   align-self: center;
   white-space: nowrap;
 }
