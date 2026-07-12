@@ -5893,15 +5893,6 @@ function App() {
             <button className={page === 'assistant' ? 'active' : ''} onClick={() => setPage('assistant')}>
               <Sparkles /> AI 财税助手
             </button>
-            <button
-              className={page === 'form' ? 'active' : ''}
-              onClick={() => {
-                setEditingClient(blankDraftClient())
-                setPage('form')
-              }}
-            >
-              <Plus /> 数据录入
-            </button>
             <button className={page === 'clients' ? 'active' : ''} onClick={() => setPage('clients')}>
               <Building2 /> 企业档案
             </button>
