@@ -575,10 +575,10 @@ function TaxDataRecordView({ slot, detail }: { slot: TaxDataSlot; detail: TaxDat
     const byRow = new Map(rows.map((row) => [String(row.rowNo), row]))
     const metrics: Array<[string, unknown]> = [
       ['销售额', byRow.get('1')?.currentAmount],
-      ['销项税额', byRow.get('11')?.currentTax ?? byRow.get('11')?.currentAmount],
-      ['进项税额', byRow.get('12')?.currentTax ?? byRow.get('12')?.currentAmount],
-      ['应纳税额', byRow.get('19')?.currentTax ?? byRow.get('19')?.currentAmount],
-      ['期末留抵税额', byRow.get('20')?.currentTax ?? byRow.get('20')?.currentAmount],
+      ['销项税额', byRow.get('11')?.currentAmount],
+      ['进项税额', byRow.get('12')?.currentAmount],
+      ['应纳税额合计', byRow.get('24')?.currentAmount],
+      ['本期已缴税额', byRow.get('27=28+29+30+31')?.currentAmount ?? byRow.get('27')?.currentAmount],
     ]
     return <>
       <div className="tax-data-metric-grid">
@@ -586,7 +586,7 @@ function TaxDataRecordView({ slot, detail }: { slot: TaxDataSlot; detail: TaxDat
       </div>
       <div className="tax-data-table-wrap">
         <table className="tax-data-detail-table business-table">
-          <thead><tr><th>行次</th><th>项目</th><th>本期金额</th><th>累计金额</th><th>本期税额</th><th>累计税额</th></tr></thead>
+          <thead><tr><th>行次</th><th>项目</th><th>一般项目·本月数</th><th>一般项目·本年累计</th><th>即征即退·本月数</th><th>即征即退·本年累计</th></tr></thead>
           <tbody>{rows.map((row) => <tr key={row.id}><td>{displayTaxDataValue(row.rowNo)}</td><td>{displayTaxDataValue(row.name)}</td><td>{taxDataAmount(row.currentAmount)}</td><td>{taxDataAmount(row.cumulativeAmount)}</td><td>{taxDataAmount(row.currentTax)}</td><td>{taxDataAmount(row.cumulativeTax)}</td></tr>)}</tbody>
         </table>
       </div>
