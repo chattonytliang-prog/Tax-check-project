@@ -626,6 +626,13 @@ function statementAmount(record: TaxDataDetail['records'][number] | undefined, t
   return taxDataAmount(recordValue(record.data, ...keys))
 }
 
+function statementLineClass(line: StandardStatementLine) {
+  const name = line.name || ''
+  if (/^[一二三四五]、|合计|净额|利润总额|净利润|营业利润|期末现金余额|现金净增加额/.test(name)) return 'statement-total-row'
+  if (/其中|消费税|营业税|城市维护建设税|资源税|土地增值税|城镇土地使用税|教育费附加|广告费|业务招待费|研究费用|利息费用|政府补助|坏账损失|无法收回|自然灾害|税收滞纳金/.test(name)) return 'statement-detail-row'
+  return ''
+}
+
 function TaxDataRecordView({ slot, detail }: { slot: TaxDataSlot; detail: TaxDataDetail }) {
   const records = detail.records
   const isFinancialStatement = slot.slotId.startsWith('financial-')
@@ -703,7 +710,7 @@ function TaxDataRecordView({ slot, detail }: { slot: TaxDataSlot; detail: TaxDat
         <tbody>{statementLines.map((line, index) => {
           if (line.section) return <tr key={`${line.section}-${index}`}><td className="statement-section" colSpan={4}>{line.section}：</td></tr>
           const record = findStatementRecord(records, line)
-          return <tr key={line.rowNo}><td className="statement-name">{line.name}</td><td className="statement-row-no">{line.rowNo}</td><td className="amount-cell">{statementAmount(record, 'cumulative')}</td><td className="amount-cell">{statementAmount(record, 'current')}</td></tr>
+          return <tr key={line.rowNo} className={statementLineClass(line)}><td className="statement-name">{line.name}</td><td className="statement-row-no">{line.rowNo}</td><td className="amount-cell">{statementAmount(record, 'cumulative')}</td><td className="amount-cell">{statementAmount(record, 'current')}</td></tr>
         })}</tbody>
       </table>
     </div>

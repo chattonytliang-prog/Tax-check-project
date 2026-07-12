@@ -2466,12 +2466,15 @@ th {
 }
 
 .financial-statement-table-wrap {
-  max-height: 520px;
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: visible;
   border: 0;
   border-radius: 0;
 }
 
 .financial-statement-table {
+  min-width: 820px;
   table-layout: fixed;
 }
 
@@ -2483,13 +2486,21 @@ th {
 
 .financial-statement-table th:first-child,
 .financial-statement-table td:first-child {
-  width: 72px;
-  text-align: center;
+  width: 52%;
+  text-align: left;
 }
 
 .financial-statement-table th:nth-child(2),
 .financial-statement-table td:nth-child(2) {
-  width: 42%;
+  width: 70px;
+  text-align: center;
+}
+
+.financial-statement-table th:nth-child(3),
+.financial-statement-table td:nth-child(3),
+.financial-statement-table th:nth-child(4),
+.financial-statement-table td:nth-child(4) {
+  width: 24%;
 }
 
 .financial-statement-table .amount-cell {
@@ -2506,6 +2517,17 @@ th {
 
 .financial-statement-table .statement-name {
   padding-left: 18px;
+}
+
+.financial-statement-table .statement-detail-row .statement-name {
+  padding-left: 44px;
+  color: #425b61;
+}
+
+.financial-statement-table .statement-total-row td {
+  border-top: 1px solid #8fa7ac;
+  background: #f5f9f9;
+  font-weight: 800;
 }
 
 .financial-statement-table .statement-row-no {
