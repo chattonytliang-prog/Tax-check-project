@@ -431,7 +431,7 @@ async function analyzeImages(env, images, prompt) {
   if (preferredProvider !== 'deepseek' && qwenKey) {
     const qwenModels = env.VISION_MODEL
       ? [env.VISION_MODEL]
-      : ['qwen-vl-max-latest', 'qwen-vl-max', 'qwen-vl-plus-latest', 'qwen-vl-plus']
+      : ['qwen3-vl-plus', 'qwen3-vl-flash', 'qwen-vl-max-latest', 'qwen-vl-max', 'qwen-vl-plus-latest', 'qwen-vl-plus']
     for (const model of qwenModels) providers.push({
       name: `Qwen-VL/${model}`,
       apiKey: qwenKey,
