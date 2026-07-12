@@ -9168,6 +9168,7 @@ function AiAssistantPage({
   const [assistantDragActive, setAssistantDragActive] = useState(false)
   const [assistantPendingFiles, setAssistantPendingFiles] = useState<File[]>([])
   const [assistantThreadsHydrated, setAssistantThreadsHydrated] = useState(false)
+  const [assistantMemoryLoading, setAssistantMemoryLoading] = useState(false)
   const assistantFileInputRef = useRef<HTMLInputElement | null>(null)
   const assistantChatRef = useRef<HTMLDivElement | null>(null)
   const assistantChatBottomRef = useRef<HTMLDivElement | null>(null)
@@ -9391,6 +9392,54 @@ function AiAssistantPage({
     const title = window.prompt('请输入会话名称', thread.title)?.trim()
     if (!title || title === thread.title) return
     setAssistantThreads((current) => current.map((item) => item.id === thread.id ? { ...item, title: title.slice(0, 80), updatedAt: formatDate() } : item))
+  }
+  const compressActiveAssistantThread = async () => {
+    if (!activeAssistantThread || assistantMemoryLoading) return
+    const client = assistantThreadClient || selectedClient
+    if (!client?.id || !client?.name) {
+      setAssistantError('当前对话还没有绑定企业，不能写入企业记忆。')
+      return
+    }
+    if (assistantMessages.length < 2) {
+      setAssistantError('当前对话内容太少，暂时不需要压缩。')
+      return
+    }
+    setAssistantMemoryLoading(true)
+    setAssistantError('')
+    setAssistantNotice('正在把当前对话压缩进企业长期记忆...')
+    try {
+      const response = await apiSend<{ summary: string; savedCount: number; memories: Array<{ key: string; value: string; confidence: string }> }>(
+        '/api/assistant/memory',
+        'POST',
+        {
+          client: { id: client.id, name: client.name },
+          threadTitle: activeAssistantThread.title,
+          messages: assistantMessages.map((item) => ({ role: item.role, content: item.content })),
+        },
+      )
+      const summary = sanitizeAssistantAnswer(response.summary || '当前对话已压缩进企业长期记忆。')
+      const summaryMessage: AiAssistantMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: [
+          '当前对话已压缩进企业长期记忆。',
+          `已保存 ${response.savedCount} 条企业记忆。`,
+          '',
+          summary,
+        ].join('\n'),
+      }
+      updateActiveAssistantThread((thread) => ({
+        ...thread,
+        messages: [summaryMessage],
+        updatedAt: formatDate(),
+      }))
+      setAssistantNotice(`已压缩当前对话，并保存 ${response.savedCount} 条企业长期记忆。后续新对话会自动读取。`)
+    } catch (error) {
+      setAssistantError(error instanceof Error ? error.message : String(error))
+      setAssistantNotice('')
+    } finally {
+      setAssistantMemoryLoading(false)
+    }
   }
   const taxFactAmountFields = ['currentAmount', 'cumulativeAmount', 'endingAmount', 'currentTax', 'taxAmount', 'taxWithheld', 'grossPay', 'currentIncome', 'endingDebit', 'endingCredit']
   const taxFactKey = (record: ParsedTaxDataIntake['records'][number]) => {
@@ -10625,6 +10674,9 @@ function AiAssistantPage({
             </button>
             <button type="button" onClick={() => void runAssistantReportGeneration()}>
               <FileText /> 生成报告
+            </button>
+            <button type="button" onClick={() => void compressActiveAssistantThread()} disabled={assistantMemoryLoading || assistantLoading || assistantMessages.length < 2}>
+              <Sparkles /> {assistantMemoryLoading ? '压缩中' : '压缩记忆'}
             </button>
             <span>{dataCompleteness.label} · {dataCompleteness.score}% · {risks.length} 项风险线索</span>
           </div>

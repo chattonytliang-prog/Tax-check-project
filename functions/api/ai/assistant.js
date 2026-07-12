@@ -417,6 +417,20 @@ function conversationalSystemPrompt(client, assistantContext) {
 线程/企业上下文：${JSON.stringify(assistantContext || {})}`
 }
 
+async function loadCustomerMemories(db, auth, clientId) {
+  try {
+    const result = await db.prepare(
+      `SELECT memory_key, memory_value, source, confidence, updated_at
+       FROM assistant_customer_memories
+       WHERE owner_user_id = ? AND client_id = ?
+       ORDER BY updated_at DESC LIMIT 40`,
+    ).bind(auth.user.id, clientId).all()
+    return result.results || []
+  } catch {
+    return []
+  }
+}
+
 function normalizeImageInputs(images) {
   return (Array.isArray(images) ? images : []).filter((item) => (
     typeof item === 'string' && /^data:image\/(?:png|jpeg|webp);base64,/i.test(item) && item.length <= 8_000_000
@@ -484,11 +498,12 @@ async function callVisionProvider(provider, images, promptText) {
 
 async function runConversationalAssistant({ env, db, auth, model, client, message, history, assistantContext, reasoning, images = [] }) {
   const vision = images.length ? await analyzeImages(env, images, message) : null
+  const customerMemories = await loadCustomerMemories(db, auth, client.id)
   const userContent = vision
     ? `${message || '请查看这些截图并结合当前企业上下文回答。'}\n\n[视觉模型 ${vision.model} 的截图识别结果]\n${vision.content}`
     : message
   const messages = [
-    { role: 'system', content: `${conversationalSystemPrompt(client, assistantContext)}\nWhen the user asks what accounts exist in an account balance table, how many account categories there are, or requests those accounts in a table, call get_account_balance_accounts for the period inherited from the conversation. Present returned facts directly. Do not replace this request with a tax-archive completeness summary. If the user explicitly asks to show all accounts, output every returned account in a Markdown table instead of asking which category they want.` },
+    { role: 'system', content: `${conversationalSystemPrompt(client, assistantContext)}\n客户长期记忆：${JSON.stringify(customerMemories)}\nWhen the user asks what accounts exist in an account balance table, how many account categories there are, or requests those accounts in a table, call get_account_balance_accounts for the period inherited from the conversation. Present returned facts directly. Do not replace this request with a tax-archive completeness summary. If the user explicitly asks to show all accounts, output every returned account in a Markdown table instead of asking which category they want.` },
     ...history.slice(-30).map((item) => ({ role: item.role, content: item.content })),
     { role: 'user', content: userContent },
   ]
