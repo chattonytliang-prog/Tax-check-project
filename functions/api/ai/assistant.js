@@ -428,20 +428,20 @@ async function analyzeImages(env, images, prompt) {
   const qwenKey = env.QWEN_API_KEY || env.DASHSCOPE_API_KEY || env.VISION_API_KEY
   const providers = []
   const preferredProvider = String(env.VISION_PROVIDER || 'auto').toLowerCase()
-  if (preferredProvider !== 'qwen' && env.DEEPSEEK_API_KEY) {
-    providers.push({
-      name: 'DeepSeek',
-      apiKey: env.DEEPSEEK_API_KEY,
-      apiUrl: env.DEEPSEEK_VISION_API_URL || DEEPSEEK_API_URL,
-      model: env.DEEPSEEK_VISION_MODEL || env.DEEPSEEK_MODEL || DEFAULT_MODEL,
-    })
-  }
   if (preferredProvider !== 'deepseek' && qwenKey) {
     providers.push({
       name: 'Qwen-VL',
       apiKey: qwenKey,
       apiUrl: env.VISION_API_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
       model: env.VISION_MODEL || 'qwen-vl-max-latest',
+    })
+  }
+  if ((preferredProvider === 'deepseek' || !qwenKey) && env.DEEPSEEK_API_KEY) {
+    providers.push({
+      name: 'DeepSeek',
+      apiKey: env.DEEPSEEK_API_KEY,
+      apiUrl: env.DEEPSEEK_VISION_API_URL || DEEPSEEK_API_URL,
+      model: env.DEEPSEEK_VISION_MODEL || env.DEEPSEEK_MODEL || DEFAULT_MODEL,
     })
   }
   if (!providers.length) throw new Error('截图粘贴已启用，但视觉模型尚未配置。当前未发现可用于图片输入的 DEEPSEEK_API_KEY、QWEN_API_KEY、DASHSCOPE_API_KEY 或 VISION_API_KEY。')
