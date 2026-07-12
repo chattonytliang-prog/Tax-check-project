@@ -255,9 +255,50 @@ async function deterministicBusinessAnswer(db, auth, client, message) {
   if (/(我们公司|我公司|本公司).{0,8}(叫什么|名称|名字)/.test(text)) {
     return `当前会话绑定企业为「${client.name}」。`
   }
-  if (!/销售额/.test(text)) return ''
   const period = deterministicQuestionPeriod(text)
   if (!period) return ''
+  const metricMatch = text.match(/20\d{2}年(?:1[0-2]|0?[1-9])月(?:的)?(.+?)(?:是多少|有多少|多少|是什么|呢|[？?]|$)/)
+  const requestedMetric = String(metricMatch?.[1] || '').replace(/^(?:公司|我公司|我们公司|本公司)/, '').trim()
+  if (requestedMetric && requestedMetric !== '销售额') {
+    const financialLine = await db.prepare(
+      `SELECT s.statement_type, l.line_code, l.line_name, l.current_amount, l.cumulative_amount,
+              l.beginning_amount, l.ending_amount, f.file_name
+       FROM tax_data_financial_statements s
+       JOIN tax_data_financial_statement_lines l ON l.statement_id = s.id
+       LEFT JOIN tax_data_source_files f ON f.id = s.source_file_id AND f.owner_user_id = s.owner_user_id
+       WHERE s.owner_user_id = ? AND s.client_id = ?
+         AND COALESCE(s.period_end, s.period_start, '') >= ?
+         AND COALESCE(s.period_start, s.period_end, '') <= ?
+         AND (TRIM(l.line_name) = ? OR l.line_name LIKE ?)
+       ORDER BY CASE WHEN TRIM(l.line_name) = ? THEN 0 ELSE 1 END, l.id LIMIT 1`,
+    ).bind(auth.user.id, client.id, period.start, period.end, requestedMetric, `%${requestedMetric}%`, requestedMetric).first()
+    if (financialLine) {
+      const source = financialLine.file_name || (financialLine.statement_type === 'balance_sheet' ? '资产负债表' : financialLine.statement_type === 'income_statement' ? '利润表' : '现金流量表')
+      if (financialLine.statement_type === 'balance_sheet') {
+        const ending = metricAmount(financialLine.ending_amount)
+        const beginning = metricAmount(financialLine.beginning_amount)
+        return `${client.name}${period.label}${financialLine.line_name}：期末余额${ending === null ? '为空' : `为 ${ending.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元`}${beginning === null ? '' : `，年初余额为 ${beginning.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元`}。来源：${source}${financialLine.line_code ? `第${financialLine.line_code}行` : ''}。`
+      }
+      const current = metricAmount(financialLine.current_amount)
+      const cumulative = metricAmount(financialLine.cumulative_amount)
+      return `${client.name}${period.label}${financialLine.line_name}：本期金额${current === null ? '为空' : `为 ${current.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元`}${cumulative === null ? '' : `，本年累计金额为 ${cumulative.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元`}。来源：${source}${financialLine.line_code ? `第${financialLine.line_code}行` : ''}。`
+    }
+    const account = await db.prepare(
+      `SELECT account_code, account_name, ending_debit, ending_credit, f.file_name
+       FROM tax_data_account_balances a
+       LEFT JOIN tax_data_source_files f ON f.id = a.source_file_id AND f.owner_user_id = a.owner_user_id
+       WHERE a.owner_user_id = ? AND a.client_id = ? AND a.period_end >= ? AND a.period_start <= ?
+         AND (TRIM(a.account_name) = ? OR a.account_name LIKE ?)
+       ORDER BY CASE WHEN TRIM(a.account_name) = ? THEN 0 ELSE 1 END, a.account_code LIMIT 1`,
+    ).bind(auth.user.id, client.id, period.start, period.end, requestedMetric, `%${requestedMetric}%`, requestedMetric).first()
+    if (account) {
+      const debit = metricAmount(account.ending_debit)
+      const credit = metricAmount(account.ending_credit)
+      return `${client.name}${period.label}科目“${account.account_name}”期末余额：借方${debit === null ? '为空' : `${debit.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元`}，贷方${credit === null ? '为空' : `${credit.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元`}。来源：${account.file_name || '科目余额表'}${account.account_code ? `，科目编码 ${account.account_code}` : ''}。`
+    }
+    return `目前在${client.name}${period.label}的标准档案中没有找到项目“${requestedMetric}”。请确认项目名称，或检查该期间对应报表是否已收录。`
+  }
+  if (!/销售额/.test(text)) return ''
   const result = await db.prepare(
     `SELECT r.record_type, r.record_subtype, r.record_json, f.file_name
      FROM tax_data_standard_records r
