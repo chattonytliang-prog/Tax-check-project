@@ -3047,11 +3047,16 @@ function extractCompanyNameFromText(text: string) {
     .map((token) => token.trim())
     .filter(Boolean)
   const tokenCompany = tokens.find((token) => new RegExp(`^[\\u4e00-\\u9fa5A-Za-z0-9·]{2,60}${suffixPattern}$`).test(token))
-  if (tokenCompany) return tokenCompany
+  if (tokenCompany && !isPlaceholderCompanyName(tokenCompany)) return tokenCompany
   const matches = normalized.match(new RegExp(`[\\u4e00-\\u9fa5A-Za-z0-9·]{2,60}${suffixPattern}`, 'g')) || []
   return matches
     .map((match) => match.replace(/^(?:明细账|全部科目|科目余额表|余额表|资产负债表|利润表|现金流量表|工资表|发票清单|增值税申报表|客户资料|资料)+/, ''))
-    .find((match) => match.length >= 4) || ''
+    .find((match) => match.length >= 4 && !isPlaceholderCompanyName(match)) || ''
+}
+
+function isPlaceholderCompanyName(value: unknown) {
+  const name = String(value ?? '').replace(/[？?。！!，,\s]/g, '')
+  return /^(?:你知道)?(?:我|我们|本|该|这家|客户)公司(?:叫什么名字|叫什么|名称是什么|是什么)?$/.test(name)
 }
 
 function inferClientPatchFromFileName(fileName: string): Partial<Client> {
@@ -3315,8 +3320,11 @@ function inferAssistantCleaningPatch(message: string, contextClient?: Client): {
   const companyMatch = message.match(/(?:这是|这个是|客户是|公司是|企业是|名称是|企业名称是)\s*([^，。；;\n]+?(?:有限责任公司|股份有限公司|有限公司|公司|集团|工作室|中心|店|个体工商户))/)
     || message.match(/([^，。；;\s]+?(?:有限责任公司|股份有限公司|有限公司|公司|集团|工作室|中心|店|个体工商户))/)
   if (companyMatch?.[1]) {
-    patch.name = cleanAssistantValue(companyMatch[1])
-    changes.push(`企业名称：${patch.name}`)
+    const companyName = cleanAssistantValue(companyMatch[1])
+    if (!isPlaceholderCompanyName(companyName)) {
+      patch.name = companyName
+      changes.push(`企业名称：${patch.name}`)
+    }
   }
 
   const creditCodeMatch = message.match(/(?:统一社会信用代码|信用代码|税号)[是为:：\s]*([0-9A-Z]{15,20})/i)
@@ -9269,7 +9277,13 @@ function AiAssistantPage({
     ))
   }
   const bindActiveAssistantThreadToClient = (client: Pick<Client, 'id' | 'name'>) => {
-    updateActiveAssistantThread((thread) => ({ ...thread, clientId: client.id, title: client.name, updatedAt: formatDate() }))
+    updateActiveAssistantThread((thread) => ({
+      ...thread,
+      clientId: client.id,
+      title: client.name,
+      drafts: thread.drafts.map((draft) => ({ ...draft, client: { ...draft.client, id: client.id, name: client.name } })),
+      updatedAt: formatDate(),
+    }))
   }
   const addAssistantPendingFiles = (fileList: FileList | File[]) => {
     const files = Array.from(fileList)
