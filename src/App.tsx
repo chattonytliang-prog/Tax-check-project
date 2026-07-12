@@ -862,6 +862,24 @@ function taxDataPeriodTypeLabel(periodType: TaxDataSlot['periodType']) {
   return '按月'
 }
 
+function taxDataHasElectronicTemplate(slot: TaxDataSlot) {
+  return slot.parserType.includes('fixed')
+}
+
+function EmptyElectronicTemplate({ slot }: { slot: TaxDataSlot }) {
+  const vatSchedules = slot.slotId === 'vat-other-schedules'
+    ? ['增值税及附加税费申报表附列资料（一）', '增值税及附加税费申报表附列资料（二）', '增值税及附加税费申报表附列资料（三）', '增值税减免税申报明细表']
+    : []
+  return <section className="empty-electronic-template">
+    <header><h3>{slot.name}</h3><p>{slot.periodLabel || '当前期间'} · 标准电子表</p><span>状态：尚未收录</span></header>
+    {vatSchedules.length ? (
+      <table className="tax-data-detail-table"><thead><tr><th>标准表单</th><th>收录状态</th></tr></thead><tbody>{vatSchedules.map((name) => <tr key={name}><td>{name}</td><td>待上传</td></tr>)}</tbody></table>
+    ) : (
+      <table className="tax-data-detail-table"><thead><tr><th>行次</th><th>项目</th><th>本期金额</th><th>累计金额</th></tr></thead><tbody><tr><td colSpan={4}>尚未上传本期原始资料，当前仅展示标准电子表入口。</td></tr></tbody></table>
+    )}
+  </section>
+}
+
 function taxDataParserTypeLabel(parserType: string) {
   if (parserType === 'source_evidence') return '原始证据'
   if (parserType.includes('fixed')) return '标准模板'
@@ -4452,7 +4470,15 @@ function App() {
   const selectedClient = clients.find((client) => client.id === selectedClientId) || clients[0]
 
   async function openTaxDataDetail(slot: TaxDataSlot) {
-    if (!selectedClient?.id || !slot.sourceFiles.length) return
+    if (!selectedClient?.id) return
+    if (!slot.sourceFiles.length && taxDataHasElectronicTemplate(slot)) {
+      setTaxDataDetailSlot(slot)
+      setTaxDataDetail({ sources: [], records: [], evidence: [], totalRecords: 0, truncated: false })
+      setTaxDataDetailError('')
+      setTaxDataDetailLoading(false)
+      return
+    }
+    if (!slot.sourceFiles.length) return
     const sourceFileIds = slot.sourceFiles.map((file) => file.id).join(',')
     const cacheKey = `${selectedClient.id}:${slot.slotId}:${sourceFileIds}`
     setTaxDataDetailSlot(slot)
@@ -6376,15 +6402,17 @@ function App() {
                             : `${selectedTaxDataFolderSummary?.collected || 0}/${selectedTaxDataFolderSummary?.total || 0} 类资料已收录`}</small>
                         </header>
                         <div className="tax-data-slot-list">
-                          {selectedTaxDataSlots.map((slot) => (
+                          {selectedTaxDataSlots.map((slot) => {
+                            const canOpen = slot.status === 'collected' || taxDataHasElectronicTemplate(slot)
+                            return (
                             <div
                               key={slot.id}
-                              className={slot.status === 'collected' ? 'tax-data-slot-row collected clickable' : 'tax-data-slot-row missing'}
-                              role={slot.status === 'collected' ? 'button' : undefined}
-                              tabIndex={slot.status === 'collected' ? 0 : undefined}
-                              onClick={() => slot.status === 'collected' && void openTaxDataDetail(slot)}
+                              className={`${slot.status === 'collected' ? 'tax-data-slot-row collected' : 'tax-data-slot-row missing'}${canOpen ? ' clickable' : ''}`}
+                              role={canOpen ? 'button' : undefined}
+                              tabIndex={canOpen ? 0 : undefined}
+                              onClick={() => canOpen && void openTaxDataDetail(slot)}
                               onKeyDown={(event) => {
-                                if (slot.status === 'collected' && (event.key === 'Enter' || event.key === ' ')) {
+                                if (canOpen && (event.key === 'Enter' || event.key === ' ')) {
                                   event.preventDefault()
                                   void openTaxDataDetail(slot)
                                 }
@@ -6416,9 +6444,10 @@ function App() {
                                 </dl>
                               ) : null}
                               {slot.validationMessages.length ? <p>{slot.validationMessages[0]}</p> : null}
-                              {slot.status === 'collected' ? <button type="button" className="secondary-button compact-button tax-data-review-button" onClick={(event) => { event.stopPropagation(); void openTaxDataDetail(slot) }}>查看与核对</button> : null}
+                              {canOpen ? <button type="button" className="secondary-button compact-button tax-data-review-button" onClick={(event) => { event.stopPropagation(); void openTaxDataDetail(slot) }}>{slot.status === 'collected' ? '查看与核对' : '查看标准表'}</button> : null}
                             </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       </article>
                     </>
@@ -7583,7 +7612,7 @@ function TaxDataDetailModal({ slot, detail, loading, error, onClose }: {
         {error ? <p className="period-warning">{error}</p> : null}
         {detail ? (
           <>
-            <section className="tax-data-detail-section">
+            {detail.sources.length ? <section className="tax-data-detail-section">
               <div className="panel-title"><h3>源文件</h3><span>{detail.sources.length} 个</span></div>
               <div className="tax-data-source-list">
                 {detail.sources.map((source) => (
@@ -7596,13 +7625,13 @@ function TaxDataDetailModal({ slot, detail, loading, error, onClose }: {
                   </article>
                 ))}
               </div>
-            </section>
+            </section> : null}
             <section className="tax-data-detail-section">
-              <div className="panel-title"><h3>数据概览与明细</h3><span>{detail.totalRecords} 条</span></div>
-              <TaxDataRecordView slot={slot} detail={detail} />
+              <div className="panel-title"><h3>{detail.sources.length ? '数据概览与明细' : '标准电子表'}</h3><span>{detail.sources.length ? `${detail.totalRecords} 条` : '待收录'}</span></div>
+              {!detail.sources.length && taxDataHasElectronicTemplate(slot) ? <EmptyElectronicTemplate slot={slot} /> : <TaxDataRecordView slot={slot} detail={detail} />}
             </section>
             <RawWorkbookComparison slot={slot} detail={detail} />
-            <section className="tax-data-detail-section">
+            {detail.sources.length ? <section className="tax-data-detail-section">
               <div className="panel-title"><h3>原值与字段对应</h3><span>{detail.evidence.length} 项证据</span></div>
               {detail.evidence.length ? (
                 <div className="tax-data-table-wrap"><table className="tax-data-detail-table evidence-table">
@@ -7613,7 +7642,7 @@ function TaxDataDetailModal({ slot, detail, loading, error, onClose }: {
                   </tr>)}</tbody>
                 </table></div>
               ) : <p className="tax-data-detail-status">本批资料没有单独保存字段级证据，请以源文件和标准数据逐项核对。</p>}
-            </section>
+            </section> : null}
           </>
         ) : null}
       </section>

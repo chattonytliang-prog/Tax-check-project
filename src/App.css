@@ -2439,6 +2439,40 @@ th {
   background: #fff;
 }
 
+.empty-electronic-template {
+  border: 1px solid #b7c9cd;
+  background: #fff;
+}
+
+.empty-electronic-template > header {
+  position: relative;
+  padding: 18px 20px;
+  border-bottom: 1px solid #b7c9cd;
+  text-align: center;
+}
+
+.empty-electronic-template > header h3,
+.empty-electronic-template > header p {
+  margin: 0;
+}
+
+.empty-electronic-template > header p {
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+.empty-electronic-template > header span {
+  position: absolute;
+  right: 16px;
+  bottom: 18px;
+  color: #a9500a;
+  font-weight: 800;
+}
+
+.empty-electronic-template table {
+  margin: 0;
+}
+
 .standard-financial-statement > header {
   position: relative;
   padding: 18px 22px 14px;
