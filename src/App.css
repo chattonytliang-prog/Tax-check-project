@@ -2575,6 +2575,53 @@ th {
   table-layout: fixed;
 }
 
+.vat-return-statement > header > strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.vat-return-table {
+  min-width: 1040px;
+  table-layout: fixed;
+}
+
+.vat-return-table th,
+.vat-return-table td {
+  border-right: 1px solid #9fb5bb;
+  border-bottom: 1px solid #9fb5bb;
+}
+
+.vat-return-table th:first-child,
+.vat-return-table .vat-group-cell {
+  width: 72px;
+  text-align: center;
+}
+
+.vat-return-table th:nth-child(2) {
+  width: 34%;
+}
+
+.vat-return-table th:nth-child(3) {
+  width: 92px;
+}
+
+.vat-return-table td:nth-last-child(-n + 4) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.vat-return-table .vat-group-cell {
+  background: #f3f7f7;
+  font-weight: 800;
+  writing-mode: vertical-rl;
+  letter-spacing: 0;
+}
+
+.source-review-section {
+  border-color: #9fb5bb;
+}
+
 .balance-sheet-table th:nth-child(1),
 .balance-sheet-table td:nth-child(1),
 .balance-sheet-table th:nth-child(5),

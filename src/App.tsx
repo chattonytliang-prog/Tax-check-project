@@ -638,7 +638,7 @@ function TaxDataRecordView({ slot, detail }: { slot: TaxDataSlot; detail: TaxDat
   const isFinancialStatement = slot.slotId.startsWith('financial-')
   if (!records.length && !isFinancialStatement) return <p className="tax-data-detail-status">该归档已有汇总记录，但没有可展示的标准明细。</p>
 
-  if (slot.slotId === 'vat-return-main' || slot.slotId === 'vat-schedule-4') {
+  if (slot.slotId === 'vat-return-main') {
     const rows = records.map((record) => ({
       id: record.id,
       rowNo: recordValue(record.data, 'row_no', 'rowNo'),
@@ -648,25 +648,42 @@ function TaxDataRecordView({ slot, detail }: { slot: TaxDataSlot; detail: TaxDat
       currentTax: recordValue(record.data, 'current_tax', 'currentTax'),
       cumulativeTax: recordValue(record.data, 'cumulative_tax', 'cumulativeTax'),
     }))
-    const byRow = new Map(rows.map((row) => [String(row.rowNo), row]))
-    const metrics: Array<[string, unknown]> = [
-      ['销售额', byRow.get('1')?.currentAmount],
-      ['销项税额', byRow.get('11')?.currentAmount],
-      ['进项税额', byRow.get('12')?.currentAmount],
-      ['应纳税额合计', byRow.get('24')?.currentAmount],
-      ['本期已缴税额', byRow.get('27=28+29+30+31')?.currentAmount ?? byRow.get('27')?.currentAmount],
-    ]
-    return <>
-      <div className="tax-data-metric-grid">
-        {metrics.map(([label, value]) => <article key={String(label)}><span>{label}</span><strong>¥ {taxDataAmount(value)}</strong></article>)}
-      </div>
-      <div className="tax-data-table-wrap">
-        <table className="tax-data-detail-table business-table">
-          <thead><tr><th>行次</th><th>项目</th><th>一般项目·本月数</th><th>一般项目·本年累计</th><th>即征即退·本月数</th><th>即征即退·本年累计</th></tr></thead>
-          <tbody>{rows.map((row) => <tr key={row.id}><td>{displayTaxDataValue(row.rowNo)}</td><td>{displayTaxDataValue(row.name)}</td><td>{taxDataAmount(row.currentAmount)}</td><td>{taxDataAmount(row.cumulativeAmount)}</td><td>{taxDataAmount(row.currentTax)}</td><td>{taxDataAmount(row.cumulativeTax)}</td></tr>)}</tbody>
+    const vatGroup = (rowNo: unknown) => {
+      const number = Number(String(rowNo).match(/^\d+/)?.[0] || 0)
+      if (number <= 10) return '销售额'
+      if (number <= 24) return '税款计算'
+      if (number <= 38) return '税款缴纳'
+      return '附加税费'
+    }
+    const groups = rows.reduce<Array<{ name: string; rows: typeof rows }>>((result, row) => {
+      const name = vatGroup(row.rowNo)
+      const current = result[result.length - 1]
+      if (current?.name === name) current.rows.push(row)
+      else result.push({ name, rows: [row] })
+      return result
+    }, [])
+    return <section className="standard-financial-statement vat-return-statement">
+      <header><h3>{slot.name}</h3><strong>（一般纳税人适用）</strong><p>税款所属期：{slot.periodLabel}</p><span>金额单位：元（列至角分）</span></header>
+      <div className="tax-data-table-wrap financial-statement-table-wrap">
+        <table className="tax-data-detail-table vat-return-table">
+          <thead><tr><th rowSpan={2}>分类</th><th rowSpan={2}>项目</th><th rowSpan={2}>栏次</th><th colSpan={2}>一般项目</th><th colSpan={2}>即征即退项目</th></tr><tr><th>本月数</th><th>本年累计</th><th>本月数</th><th>本年累计</th></tr></thead>
+          <tbody>{groups.flatMap((group) => group.rows.map((row, index) => <tr key={row.id}>{index === 0 ? <td className="vat-group-cell" rowSpan={group.rows.length}>{group.name}</td> : null}<td>{displayTaxDataValue(row.name)}</td><td>{displayTaxDataValue(row.rowNo)}</td><td className="amount-cell">{taxDataAmount(row.currentAmount)}</td><td className="amount-cell">{taxDataAmount(row.cumulativeAmount)}</td><td className="amount-cell">{taxDataAmount(row.currentTax)}</td><td className="amount-cell">{taxDataAmount(row.cumulativeTax)}</td></tr>))}</tbody>
         </table>
       </div>
-    </>
+      <footer>标准表式：增值税及附加税费申报表 · 数据来源：客户上传原始资料</footer>
+    </section>
+  }
+
+
+  if (slot.slotId === 'vat-schedule-4') {
+    return <section className="standard-financial-statement vat-return-statement">
+      <header><h3>增值税及附加税费申报表附列资料（四）</h3><strong>（税额抵减情况表）</strong><p>税款所属期：{slot.periodLabel}</p><span>金额单位：元（列至角分）</span></header>
+      <div className="tax-data-table-wrap financial-statement-table-wrap"><table className="tax-data-detail-table vat-schedule-table">
+        <thead><tr><th>序号</th><th>抵减项目</th><th>期初余额</th><th>本期发生额</th><th>本期应抵减税额</th><th>本期实际抵减税额</th><th>期末余额</th></tr></thead>
+        <tbody>{records.map((record) => <tr key={record.id}><td>{displayTaxDataValue(recordValue(record.data, 'row_no', 'rowNo'))}</td><td>{displayTaxDataValue(recordValue(record.data, 'item_name', 'itemName'))}</td><td className="amount-cell">{taxDataAmount(recordValue(record.data, 'beginning_amount', 'beginningAmount'))}</td><td className="amount-cell">{taxDataAmount(recordValue(record.data, 'current_amount', 'currentAmount'))}</td><td className="amount-cell">{taxDataAmount(recordValue(record.data, 'current_tax', 'currentTax'))}</td><td className="amount-cell">{taxDataAmount(recordValue(record.data, 'actual_credit', 'actualCredit', 'cumulative_tax', 'cumulativeTax'))}</td><td className="amount-cell">{taxDataAmount(recordValue(record.data, 'ending_amount', 'endingAmount'))}</td></tr>)}</tbody>
+      </table></div>
+      <footer>标准表式：税额抵减情况表 · 数据来源：客户上传原始资料</footer>
+    </section>
   }
 
   if (slot.slotId === 'financial-balance-sheet') {
@@ -835,6 +852,17 @@ function RawWorkbookComparison({ slot, detail }: { slot: TaxDataSlot; detail: Ta
         <table className="tax-data-detail-table raw-workbook-table"><tbody>{selectedSheet.rows.map((row, rowIndex) => <tr key={rowIndex}><th>{rowIndex + 1}</th>{row.map((cell, cellIndex) => <td key={cellIndex}>{displayTaxDataValue(cell)}</td>)}</tr>)}</tbody></table>
       </div>
     </> : null}
+  </section>
+}
+
+function PdfSourceReview({ detail }: { detail: TaxDataDetail }) {
+  const source = detail.sources.find((item) => item.stored && /\.pdf$/i.test(item.file_name))
+  if (!source) return null
+  return <section className="tax-data-detail-section source-review-section">
+    <div className="panel-title">
+      <div><h3>原始资料复核</h3><p className="section-helper">并排打开客户原始 PDF，与当前标准电子表逐项核对。</p></div>
+      <a className="secondary-button compact-button" href={`/api/tax-data/source?sourceFileId=${encodeURIComponent(source.id)}`} target="_blank" rel="noreferrer">在线核对原表</a>
+    </div>
   </section>
 }
 
@@ -7622,6 +7650,7 @@ function TaxDataDetailModal({ slot, detail, loading, error, onClose }: {
               {!detail.sources.length && taxDataHasElectronicTemplate(slot) ? <EmptyElectronicTemplate slot={slot} /> : <TaxDataRecordView slot={slot} detail={detail} />}
             </section>
             <RawWorkbookComparison slot={slot} detail={detail} />
+            <PdfSourceReview detail={detail} />
             {detail.sources.length ? <section className="tax-data-detail-section">
               <div className="panel-title"><h3>原值与字段对应</h3><span>{detail.evidence.length} 项证据</span></div>
               {detail.evidence.length ? (
