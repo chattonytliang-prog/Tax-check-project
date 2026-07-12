@@ -3414,6 +3414,8 @@ function resolvedConfirmationFields(message: string, patch: Partial<Client>) {
 }
 
 const assistantThreadsStorageKey = 'hy-tax-ai-assistant-threads'
+const emptyAssistantMessages: AiAssistantMessage[] = []
+const emptyAssistantDrafts: AiAssistantDraft[] = []
 
 function createAssistantThread(title = '新对话', client?: Pick<Client, 'id' | 'name'>): AssistantThread {
   const now = formatDate()
@@ -9168,12 +9170,14 @@ function AiAssistantPage({
   const [assistantThreadsHydrated, setAssistantThreadsHydrated] = useState(false)
   const assistantFileInputRef = useRef<HTMLInputElement | null>(null)
   const assistantChatRef = useRef<HTMLDivElement | null>(null)
+  const assistantChatBottomRef = useRef<HTMLDivElement | null>(null)
   const assistantShouldStickToBottomRef = useRef(true)
+  const assistantProgrammaticScrollRef = useRef(false)
   const structuredIntakeByDraftId = useRef(new Map<string, ParsedTaxDataIntake>())
   const activeAssistantThread = assistantThreads.find((thread) => thread.id === activeAssistantThreadId) || assistantThreads[0]
   const assistantThreadClient = clients.find((client) => client.id === activeAssistantThread?.clientId)
-  const assistantMessages = activeAssistantThread?.messages || []
-  const assistantDrafts = activeAssistantThread?.drafts || []
+  const assistantMessages = activeAssistantThread?.messages || emptyAssistantMessages
+  const assistantDrafts = activeAssistantThread?.drafts || emptyAssistantDrafts
   const showAssistantProcessingMessage = assistantLoading && assistantMessages.at(-1)?.role === 'user'
   const assistantProgressText = (() => {
     if (!assistantProgress) return '正在处理...'
@@ -9196,22 +9200,30 @@ function AiAssistantPage({
   const currentUploadCount = currentAssistantDraft?.rawMaterials.length || 0
   const currentQuestionCount = currentAssistantDraft?.confirmationQuestions.length || 0
   const currentRecordCount = Object.values(currentAssistantDraft?.taxDataRecordCounts || {}).reduce((sum, value) => sum + value, 0)
+  const scrollAssistantChatToBottom = () => {
+    const chat = assistantChatRef.current
+    if (!chat) return
+    assistantProgrammaticScrollRef.current = true
+    chat.scrollTop = chat.scrollHeight
+    assistantChatBottomRef.current?.scrollIntoView({ block: 'end' })
+    window.setTimeout(() => { assistantProgrammaticScrollRef.current = false }, 120)
+  }
   useEffect(() => {
     assistantShouldStickToBottomRef.current = true
-    const frame = window.requestAnimationFrame(() => {
-      const chat = assistantChatRef.current
-      if (chat) chat.scrollTop = chat.scrollHeight
+    const firstFrame = window.requestAnimationFrame(() => {
+      scrollAssistantChatToBottom()
+      window.requestAnimationFrame(scrollAssistantChatToBottom)
     })
-    return () => window.cancelAnimationFrame(frame)
+    return () => window.cancelAnimationFrame(firstFrame)
   }, [activeAssistantThreadId, assistantThreadsHydrated])
   useEffect(() => {
     if (!assistantShouldStickToBottomRef.current) return
-    const frame = window.requestAnimationFrame(() => {
-      const chat = assistantChatRef.current
-      if (chat) chat.scrollTop = chat.scrollHeight
+    const firstFrame = window.requestAnimationFrame(() => {
+      scrollAssistantChatToBottom()
+      window.requestAnimationFrame(scrollAssistantChatToBottom)
     })
-    return () => window.cancelAnimationFrame(frame)
-  }, [assistantMessages.length, showAssistantProcessingMessage])
+    return () => window.cancelAnimationFrame(firstFrame)
+  }, [assistantMessages, showAssistantProcessingMessage, assistantProgressText, assistantPendingFiles.length])
   useEffect(() => {
     window.localStorage.setItem(assistantThreadsStorageKey, JSON.stringify(assistantThreads.slice(0, 20)))
   }, [assistantThreads])
@@ -10621,6 +10633,7 @@ function AiAssistantPage({
             className="ai-assistant-chat"
             aria-live="polite"
             onScroll={(event) => {
+              if (assistantProgrammaticScrollRef.current) return
               const chat = event.currentTarget
               assistantShouldStickToBottomRef.current = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80
             }}
@@ -10690,6 +10703,7 @@ function AiAssistantPage({
                   {assistantProgressText.split('\n').map((line) => <p key={line}>{line}</p>)}
                 </article>
               ) : null}
+              <div ref={assistantChatBottomRef} className="ai-assistant-chat-bottom" aria-hidden="true" />
             </div>
             <div
               className={`ai-assistant-composer ${assistantDragActive ? 'drag-active' : ''}`}
