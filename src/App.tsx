@@ -3560,7 +3560,11 @@ function sanitizeIntakeStageAssistantAnswer(answer: string) {
 }
 
 function assistantMessageBlocks(content: string) {
-  const blocks: Array<{ type: 'paragraph'; text: string } | { type: 'list'; items: string[] }> = []
+  const blocks: Array<
+    { type: 'paragraph'; text: string }
+    | { type: 'list'; items: string[] }
+    | { type: 'table'; headers: string[]; rows: string[][] }
+  > = []
   let paragraph: string[] = []
   let items: string[] = []
   const flushParagraph = () => {
@@ -3572,22 +3576,40 @@ function assistantMessageBlocks(content: string) {
     if (items.length) blocks.push({ type: 'list', items })
     items = []
   }
-  content.split(/\n+/).forEach((rawLine) => {
-    const line = rawLine.trim()
+  const cleanMarkdown = (value: string) => value.replace(/\*\*(.*?)\*\*/g, '$1').trim()
+  const lines = content.split(/\n/)
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim()
     if (!line) {
       flushParagraph()
       flushItems()
-      return
+      continue
+    }
+    const nextLine = lines[index + 1]?.trim() || ''
+    if (line.startsWith('|') && /^\|?(?:\s*:?-+:?\s*\|)+\s*$/.test(nextLine)) {
+      flushParagraph()
+      flushItems()
+      const parseRow = (row: string) => row.replace(/^\||\|$/g, '').split('|').map((cell) => cleanMarkdown(cell))
+      const headers = parseRow(line)
+      const rows: string[][] = []
+      index += 2
+      while (index < lines.length && lines[index].trim().startsWith('|')) {
+        rows.push(parseRow(lines[index].trim()))
+        index += 1
+      }
+      index -= 1
+      blocks.push({ type: 'table', headers, rows })
+      continue
     }
     const item = line.match(/^[-•]\s*(.+)$/) || line.match(/^\d+[.、]\s*(.+)$/)
     if (item) {
       flushParagraph()
-      items.push(item[1].trim())
-      return
+      items.push(cleanMarkdown(item[1]))
+      continue
     }
     flushItems()
-    paragraph.push(line)
-  })
+    paragraph.push(cleanMarkdown(line))
+  }
   flushParagraph()
   flushItems()
   return blocks
@@ -10623,6 +10645,15 @@ function AiAssistantPage({
                               </li>
                             ))}
                           </ol>
+                        ) : block.type === 'table' ? (
+                          <div className="assistant-message-table-wrap" key={`table-${index}`}>
+                            <table className="assistant-message-table">
+                              <thead><tr>{block.headers.map((header, cellIndex) => <th key={`${header}-${cellIndex}`}>{header}</th>)}</tr></thead>
+                              <tbody>{block.rows.map((row, rowIndex) => (
+                                <tr key={`row-${rowIndex}`}>{row.map((cell, cellIndex) => <td key={`${rowIndex}-${cellIndex}`}>{cell}</td>)}</tr>
+                              ))}</tbody>
+                            </table>
+                          </div>
                         ) : (
                           <p key={`paragraph-${index}`}>{block.text}</p>
                         )

@@ -24,6 +24,22 @@ const readOnlyAgentTools = [
   {
     type: 'function',
     function: {
+      name: 'get_account_balance_accounts',
+      description: '查询当前企业指定期间的科目余额表明细，包括科目编码、科目名称、余额和按会计科目编码划分的类别。用户询问有哪些科目、多少类、科目余额或要求表格时必须调用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          clientId: { type: 'string' },
+          periodStart: { type: 'string', description: 'YYYY-MM-DD' },
+          periodEnd: { type: 'string', description: 'YYYY-MM-DD' },
+        },
+        required: ['clientId', 'periodStart', 'periodEnd'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_tax_archive',
       description: '查询当前企业指定期间已入库的标准税务资料类别、记录数和来源文件。回答资料是否存在或缺失前必须调用。',
       parameters: {
@@ -146,6 +162,35 @@ async function executeReadOnlyAgentTool(db, auth, toolCall, fallbackClientId) {
             : [],
         }
       }),
+    }
+  }
+  if (name === 'get_account_balance_accounts') {
+    const start = String(args.periodStart || '').slice(0, 10)
+    const end = String(args.periodEnd || '').slice(0, 10)
+    if (!start || !end) return { error: 'periodStart and periodEnd are required' }
+    const result = await db.prepare(
+      `SELECT account_code, account_name, opening_debit, opening_credit, current_debit, current_credit,
+              ytd_debit, ytd_credit, ending_debit, ending_credit
+       FROM tax_data_account_balances
+       WHERE owner_user_id = ? AND client_id = ? AND period_end >= ? AND period_start <= ?
+       ORDER BY account_code, account_name LIMIT 500`,
+    ).bind(auth.user.id, clientId, start, end).all()
+    const categoryName = (code) => ({
+      1: '资产类', 2: '负债类', 3: '共同类', 4: '所有者权益类', 5: '成本类', 6: '损益类',
+    }[String(code || '').trim().charAt(0)] || '其他类')
+    const accounts = (result.results || []).map((row) => ({ ...row, category: categoryName(row.account_code) }))
+    const categoryCounts = accounts.reduce((summary, row) => {
+      summary[row.category] = (summary[row.category] || 0) + 1
+      return summary
+    }, {})
+    return {
+      client: owned,
+      periodStart: start,
+      periodEnd: end,
+      accountCount: accounts.length,
+      categoryCount: Object.keys(categoryCounts).length,
+      categoryCounts,
+      accounts,
     }
   }
   if (name === 'search_customer_memory') {
@@ -396,7 +441,7 @@ async function runConversationalAssistant({ env, db, auth, model, client, messag
     ? `${message || '请查看这些截图并结合当前企业上下文回答。'}\n\n[视觉模型 ${vision.model} 的截图识别结果]\n${vision.content}`
     : message
   const messages = [
-    { role: 'system', content: conversationalSystemPrompt(client, assistantContext) },
+    { role: 'system', content: `${conversationalSystemPrompt(client, assistantContext)}\nWhen the user asks what accounts exist in an account balance table, how many account categories there are, or requests those accounts in a table, call get_account_balance_accounts for the period inherited from the conversation. Present returned facts directly. Do not replace this request with a tax-archive completeness summary.` },
     ...history.slice(-30).map((item) => ({ role: item.role, content: item.content })),
     { role: 'user', content: userContent },
   ]

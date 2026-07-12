@@ -4749,6 +4749,44 @@ textarea:focus {
   margin: 0;
 }
 
+.assistant-message-table-wrap {
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid var(--line);
+}
+
+.assistant-message-table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  background: #fff;
+  font-size: 14px;
+}
+
+.assistant-message-table th,
+.assistant-message-table td {
+  padding: 9px 11px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.assistant-message-table th {
+  color: #254047;
+  background: #edf7f8;
+  font-weight: 800;
+}
+
+.assistant-message-table th:last-child,
+.assistant-message-table td:last-child {
+  border-right: 0;
+}
+
+.assistant-message-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
 .assistant-binary-actions {
   display: inline-flex;
   gap: 5px;
