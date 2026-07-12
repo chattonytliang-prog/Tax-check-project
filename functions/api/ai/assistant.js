@@ -8,6 +8,22 @@ const readOnlyAgentTools = [
   {
     type: 'function',
     function: {
+      name: 'get_business_metric',
+      description: '查询当前企业指定期间的销售额、营业收入、利润、税额或余额等标准业务指标。连续追问期间时应继承上一轮指标。',
+      parameters: {
+        type: 'object',
+        properties: {
+          clientId: { type: 'string' },
+          metric: { type: 'string', description: '例如：销售额、营业收入、利润、税额、余额' },
+          period: { type: 'string', description: '例如：2026年3月' },
+        },
+        required: ['clientId', 'metric', 'period'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_tax_archive',
       description: '查询当前企业指定期间已入库的标准税务资料类别、记录数和来源文件。回答资料是否存在或缺失前必须调用。',
       parameters: {
@@ -99,6 +115,12 @@ async function executeReadOnlyAgentTool(db, auth, toolCall, fallbackClientId) {
   if (!clientId) return { error: 'clientId is required' }
   const owned = await db.prepare('SELECT id, name FROM clients WHERE id = ? AND owner_user_id = ?').bind(clientId, auth.user.id).first()
   if (!owned) return { error: 'client not found or not authorized' }
+  if (name === 'get_business_metric') {
+    const metric = String(args.metric || '').trim()
+    const period = String(args.period || '').trim()
+    const answer = await deterministicBusinessAnswer(db, auth, owned, `${period}的${metric}是多少`)
+    return { client: owned, metric, period, answer: answer || '当前标准档案暂不支持该指标的确定性查询。' }
+  }
   if (name === 'get_source_files') {
     const result = await db.prepare(
       `SELECT id, file_name, document_type, period_start, period_end, parse_status, evidence_json, created_at
@@ -257,6 +279,52 @@ async function deterministicBusinessAnswer(db, auth, client, message) {
     return `${client.name}${period.label}利润表本期营业收入为 ${incomeAmount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元。来源：${income.file_name || '利润表'}。`
   }
   return `目前无法从标准档案确认${client.name}${period.label}的销售额。该期间没有已收录的增值税申报表主表销售额，也没有利润表“本期营业收入”；我不会用本年累计数或其他月份数据代替。`
+}
+
+function isBusinessWriteRequest(message) {
+  return /(录入|导入|入库|保存|创建|新建|修改|更正|更新|删除|替换|调整).{0,16}(数据|资料|档案|企业|期间|记录|报告)?/.test(String(message || '').replace(/\s+/g, ''))
+}
+
+function conversationalSystemPrompt(client, assistantContext) {
+  return `你是嵌入税务合规软件的中文 AI 助手。请像正常专业助手一样自然、直接地对话。
+当前会话只对应一家企业：${client.name}（clientId: ${client.id}）。“我公司/我们公司”均指该企业。
+企业业务事实必须通过只读工具查询，不得猜测。连续追问要继承历史中的指标和语境，例如上一句问销售额，下一句“2026年3月呢”仍指销售额。
+你可以调用软件提供的只读查询工具，但不能修改代码、规则、公式、数据库结构、认证或权限。
+只有用户明确要求业务写入时才进入业务动作流程；普通对话不要输出 JSON，不要描述内部约束，不要回复无关的“初步分析”。
+线程/企业上下文：${JSON.stringify(assistantContext || {})}`
+}
+
+async function runConversationalAssistant({ env, db, auth, model, client, message, history, assistantContext, reasoning }) {
+  const messages = [
+    { role: 'system', content: conversationalSystemPrompt(client, assistantContext) },
+    ...history.slice(-30).map((item) => ({ role: item.role, content: item.content })),
+    { role: 'user', content: message },
+  ]
+  let response = await fetch(DEEPSEEK_API_URL, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${env.DEEPSEEK_API_KEY}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ model, messages, tools: readOnlyAgentTools, tool_choice: 'auto', temperature: 0.35, max_tokens: 1800, ...reasoning }),
+  })
+  if (!response.ok) throw new Error(`Conversational AI request failed: ${(await response.text()).slice(0, 300)}`)
+  let data = await response.json()
+  const assistantMessage = data?.choices?.[0]?.message || {}
+  if (Array.isArray(assistantMessage.tool_calls) && assistantMessage.tool_calls.length) {
+    messages.push({ role: 'assistant', content: assistantMessage.content || '', tool_calls: assistantMessage.tool_calls })
+    for (const toolCall of assistantMessage.tool_calls.slice(0, 6)) {
+      const result = await executeReadOnlyAgentTool(db, auth, toolCall, client.id)
+      messages.push({ role: 'tool', tool_call_id: toolCall.id, name: toolCall.function?.name, content: JSON.stringify(result) })
+    }
+    response = await fetch(DEEPSEEK_API_URL, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${env.DEEPSEEK_API_KEY}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model, messages, tools: readOnlyAgentTools, tool_choice: 'none', temperature: 0.25, max_tokens: 1800, ...reasoning }),
+    })
+    if (!response.ok) throw new Error(`Conversational AI follow-up failed: ${(await response.text()).slice(0, 300)}`)
+    data = await response.json()
+  }
+  const answer = String(data?.choices?.[0]?.message?.content || '').trim()
+  if (!answer) throw new Error('Conversational AI returned an empty answer')
+  return { answer, usage: data.usage || null }
 }
 
 function compactRisk(risk) {
@@ -573,6 +641,17 @@ export async function onRequestPost({ request, env }) {
 
     const model = env.DEEPSEEK_MODEL || DEFAULT_MODEL
     const reasoning = reasoningConfig(cleanMessage)
+    if (ownedClient && !isBusinessWriteRequest(cleanMessage)) {
+      const conversational = await runConversationalAssistant({
+        env, db, auth, model, client: ownedClient, message: cleanMessage,
+        history: cleanHistory, assistantContext: cleanAssistantContext, reasoning,
+      })
+      return json({
+        answer: conversational.answer,
+        draftPatch: {}, missingFields: [], toolCalls: [], suggestions: [], followUps: [],
+        clientVerified: true, model, usage: conversational.usage,
+      })
+    }
     const messages = [
       {
         role: 'system',
