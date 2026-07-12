@@ -607,9 +607,13 @@ function normalizedStatementName(value: unknown) {
 
 function findStatementRecord(records: TaxDataDetail['records'], line: StandardStatementLine) {
   const target = normalizedStatementName(line.name)
+  const byLineCode = line.rowNo ? records.find((record) => (
+    String(recordValue(record.data, 'line_code', 'lineCode') ?? '').trim() === line.rowNo
+  )) : undefined
+  if (byLineCode) return byLineCode
   return records.find((record) => {
     const name = normalizedStatementName(recordValue(record.data, 'line_name', 'lineName', 'item_name', 'itemName'))
-    return name === target || (target.length >= 5 && (name.includes(target) || target.includes(name)))
+    return name === target
   })
 }
 
@@ -771,10 +775,10 @@ function RawWorkbookComparison({ slot, detail }: { slot: TaxDataSlot; detail: Ta
   const selectedSheet = sheets.find((sheet) => sheet.name === sheetName) || sheets[0]
   const comparisons = selectedSheet ? detail.records.map((record) => {
     const name = comparableRecordName(record.data)
-    const rowIndex = name ? selectedSheet.rows.findIndex((row) => row.some((cell) => {
-      const text = String(cell ?? '').trim()
-      return text === name || (text.length >= 4 && (text.includes(name) || name.includes(text)))
-    })) : -1
+    const normalizedName = normalizedStatementName(name)
+    const rowIndex = normalizedName ? selectedSheet.rows.findIndex((row) => row.some((cell) => (
+      normalizedStatementName(cell) === normalizedName
+    ))) : -1
     const rawRow = rowIndex >= 0 ? selectedSheet.rows[rowIndex] : []
     const rawNumbers = rawRow.map(rawCellNumber).filter((value): value is number => value !== null)
     const expectedNumbers = numericValues(record.data)
