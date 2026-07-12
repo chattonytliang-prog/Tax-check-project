@@ -1,6 +1,5 @@
 import { badRequest, json, requireDb, serverError } from '../_utils.js'
 import { requireUser } from '../auth/_auth.js'
-import { ensureTaxDataIntakeTables } from '../_tax_data_schema.js'
 
 async function all(db, sql, ...params) {
   const result = await db.prepare(sql).bind(...params).all()
@@ -94,7 +93,6 @@ export async function onRequestGet({ request, env }) {
       .split(',').map((item) => item.trim()).filter(Boolean).slice(0, 50)
     if (!clientId || !sourceFileIds.length) return badRequest('clientId and sourceFileIds are required')
 
-    await ensureTaxDataIntakeTables(db)
     const placeholders = sourceFileIds.map(() => '?').join(',')
     const sources = await all(
       db,
@@ -110,9 +108,8 @@ export async function onRequestGet({ request, env }) {
 
     const allowedPlaceholders = allowedIds.map(() => '?').join(',')
     const filter = recordFilter(slotId)
-    let records = await all(
-      db,
-      `SELECT id, source_file_id, record_type, record_subtype, period_start, period_end,
+    const recordsQuery = all(
+      db, `SELECT id, source_file_id, record_type, record_subtype, period_start, period_end,
               record_json, confidence, created_at
        FROM tax_data_standard_records
        WHERE owner_user_id = ? AND client_id = ? AND source_file_id IN (${allowedPlaceholders})${filter.sql}
@@ -120,19 +117,13 @@ export async function onRequestGet({ request, env }) {
        LIMIT 500`,
       auth.user.id, clientId, ...allowedIds, ...filter.params,
     )
-    const countRows = await all(
-      db,
-      `SELECT COUNT(*) AS count FROM tax_data_standard_records
+    const countQuery = all(
+      db, `SELECT COUNT(*) AS count FROM tax_data_standard_records
        WHERE owner_user_id = ? AND client_id = ? AND source_file_id IN (${allowedPlaceholders})${filter.sql}`,
       auth.user.id, clientId, ...allowedIds, ...filter.params,
     )
-    const standardRecordCount = Number(countRows[0]?.count) || 0
-    records = records.map((record) => ({ ...record, data: parseJson(record.record_json), record_json: undefined }))
-    if (!records.length) records = await typedRecords(db, auth.user.id, clientId, allowedIds, slotId)
-    const recordIds = new Set(records.map((record) => record.id))
-    const evidence = await all(
-      db,
-      `SELECT source_file_id, target_id, target_field, raw_value, normalized_value,
+    const evidenceQuery = all(
+      db, `SELECT source_file_id, target_id, target_field, raw_value, normalized_value,
               confidence, sheet_name, row_no, column_no, page_no, note
        FROM tax_data_evidence_fields
        WHERE owner_user_id = ? AND source_file_id IN (${allowedPlaceholders})
@@ -140,6 +131,12 @@ export async function onRequestGet({ request, env }) {
        LIMIT 500`,
       auth.user.id, ...allowedIds,
     )
+    const [queriedRecords, countRows, evidence] = await Promise.all([recordsQuery, countQuery, evidenceQuery])
+    let records = queriedRecords
+    const standardRecordCount = Number(countRows[0]?.count) || 0
+    records = records.map((record) => ({ ...record, data: parseJson(record.record_json), record_json: undefined }))
+    if (!records.length) records = await typedRecords(db, auth.user.id, clientId, allowedIds, slotId)
+    const recordIds = new Set(records.map((record) => record.id))
     const relevantEvidence = evidence.filter((item) => !item.target_id || !recordIds.size || recordIds.has(item.target_id))
 
     return json({

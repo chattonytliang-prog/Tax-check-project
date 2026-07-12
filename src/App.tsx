@@ -624,7 +624,8 @@ function statementAmount(record: TaxDataDetail['records'][number] | undefined, t
 
 function TaxDataRecordView({ slot, detail }: { slot: TaxDataSlot; detail: TaxDataDetail }) {
   const records = detail.records
-  if (!records.length) return <p className="tax-data-detail-status">该归档已有汇总记录，但没有可展示的标准明细。</p>
+  const isFinancialStatement = slot.slotId.startsWith('financial-')
+  if (!records.length && !isFinancialStatement) return <p className="tax-data-detail-status">该归档已有汇总记录，但没有可展示的标准明细。</p>
 
   if (slot.slotId === 'vat-return-main' || slot.slotId === 'vat-schedule-4') {
     const rows = records.map((record) => ({
@@ -4299,6 +4300,7 @@ function App() {
   const [taxDataDetail, setTaxDataDetail] = useState<TaxDataDetail | null>(null)
   const [taxDataDetailLoading, setTaxDataDetailLoading] = useState(false)
   const [taxDataDetailError, setTaxDataDetailError] = useState('')
+  const taxDataDetailCache = useRef(new Map<string, TaxDataDetail>())
 
   useEffect(() => {
     let active = true
@@ -4440,13 +4442,21 @@ function App() {
 
   async function openTaxDataDetail(slot: TaxDataSlot) {
     if (!selectedClient?.id || !slot.sourceFiles.length) return
+    const sourceFileIds = slot.sourceFiles.map((file) => file.id).join(',')
+    const cacheKey = `${selectedClient.id}:${slot.slotId}:${sourceFileIds}`
     setTaxDataDetailSlot(slot)
-    setTaxDataDetail(null)
     setTaxDataDetailError('')
+    const cached = taxDataDetailCache.current.get(cacheKey)
+    if (cached) {
+      setTaxDataDetail(cached)
+      setTaxDataDetailLoading(false)
+      return
+    }
+    setTaxDataDetail(null)
     setTaxDataDetailLoading(true)
     try {
-      const sourceFileIds = slot.sourceFiles.map((file) => file.id).join(',')
       const detail = await apiGet<TaxDataDetail>(`/api/tax-data/detail?clientId=${encodeURIComponent(selectedClient.id)}&slotId=${encodeURIComponent(slot.slotId)}&sourceFileIds=${encodeURIComponent(sourceFileIds)}`)
+      taxDataDetailCache.current.set(cacheKey, detail)
       setTaxDataDetail(detail)
     } catch (error) {
       setTaxDataDetailError(error instanceof Error ? error.message : '资料详情读取失败')
@@ -7552,7 +7562,13 @@ function TaxDataDetailModal({ slot, detail, loading, error, onClose }: {
           </div>
           <button type="button" className="icon-text-button" onClick={onClose}>关闭</button>
         </div>
-        {loading ? <p className="tax-data-detail-status">正在读取资料和标准数据...</p> : null}
+        {loading && !slot.slotId.startsWith('financial-') ? <p className="tax-data-detail-status">正在读取资料和标准数据...</p> : null}
+        {loading && !detail && slot.slotId.startsWith('financial-') ? (
+          <section className="tax-data-detail-section instant-standard-table">
+            <div className="panel-title"><h3>标准报表</h3><span>正在填入已收录金额</span></div>
+            <TaxDataRecordView slot={slot} detail={{ sources: [], records: [], evidence: [], totalRecords: 0, truncated: false }} />
+          </section>
+        ) : null}
         {error ? <p className="period-warning">{error}</p> : null}
         {detail ? (
           <>
