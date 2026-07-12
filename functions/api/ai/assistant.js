@@ -202,6 +202,62 @@ function compactClient(client) {
   }
 }
 
+function deterministicQuestionPeriod(message) {
+  const match = String(message || '').match(/(20\d{2})\s*年\s*(1[0-2]|0?[1-9])\s*月/)
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const endDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  return {
+    label: `${year}年${month}月`,
+    start: `${year}-${String(month).padStart(2, '0')}-01`,
+    end: `${year}-${String(month).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`,
+  }
+}
+
+function recordValue(data, ...keys) {
+  for (const key of keys) {
+    if (data?.[key] !== undefined && data?.[key] !== null && data?.[key] !== '') return data[key]
+  }
+  return null
+}
+
+function metricAmount(value) {
+  const number = Number(String(value ?? '').replace(/,/g, ''))
+  return Number.isFinite(number) ? number : null
+}
+
+async function deterministicBusinessAnswer(db, auth, client, message) {
+  const text = String(message || '').replace(/\s+/g, '')
+  if (/(我们公司|我公司|本公司).{0,8}(叫什么|名称|名字)/.test(text)) {
+    return `当前会话绑定企业为「${client.name}」。`
+  }
+  if (!/销售额/.test(text)) return ''
+  const period = deterministicQuestionPeriod(text)
+  if (!period) return ''
+  const result = await db.prepare(
+    `SELECT r.record_type, r.record_subtype, r.record_json, f.file_name
+     FROM tax_data_standard_records r
+     LEFT JOIN tax_data_source_files f ON f.id = r.source_file_id AND f.owner_user_id = r.owner_user_id
+     WHERE r.owner_user_id = ? AND r.client_id = ?
+       AND COALESCE(r.period_end, r.period_start, '') >= ?
+       AND COALESCE(r.period_start, r.period_end, '') <= ?
+     LIMIT 1000`,
+  ).bind(auth.user.id, client.id, period.start, period.end).all()
+  const records = (result.results || []).map((row) => ({ ...row, data: cleanToolArguments(row.record_json) }))
+  const vat = records.find((row) => row.record_type === 'vat_return' && String(recordValue(row.data, 'rowNo', 'row_no')).match(/^1(?:\D|$)/))
+  const vatAmount = metricAmount(recordValue(vat?.data, 'currentAmount', 'current_amount'))
+  if (vatAmount !== null) {
+    return `${client.name}${period.label}增值税申报表口径销售额为 ${vatAmount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元。来源：${vat.file_name || '增值税申报表主表'}。`
+  }
+  const income = records.find((row) => row.record_type === 'financial_statement' && row.record_subtype === 'income_statement' && /营业收入/.test(String(recordValue(row.data, 'lineName', 'line_name'))))
+  const incomeAmount = metricAmount(recordValue(income?.data, 'currentAmount', 'current_amount'))
+  if (incomeAmount !== null) {
+    return `${client.name}${period.label}利润表本期营业收入为 ${incomeAmount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元。来源：${income.file_name || '利润表'}。`
+  }
+  return `目前无法从标准档案确认${client.name}${period.label}的销售额。该期间没有已收录的增值税申报表主表销售额，也没有利润表“本期营业收入”；我不会用本年累计数或其他月份数据代替。`
+}
+
 function compactRisk(risk) {
   return {
     name: risk?.name,
@@ -492,10 +548,27 @@ export async function onRequestPost({ request, env }) {
     if (!client?.id || !client?.name) return badRequest('Client id and name are required')
 
     const ownedClient = await db
-      .prepare('SELECT id FROM clients WHERE id = ? AND owner_user_id = ?')
+      .prepare('SELECT id, name FROM clients WHERE id = ? AND owner_user_id = ?')
       .bind(client.id, auth.user.id)
       .first()
     const clientVerified = Boolean(ownedClient)
+
+    if (ownedClient) {
+      const deterministicAnswer = await deterministicBusinessAnswer(db, auth, ownedClient, cleanMessage)
+      if (deterministicAnswer) {
+        return json({
+          answer: deterministicAnswer,
+          draftPatch: {},
+          missingFields: [],
+          toolCalls: [],
+          suggestions: [],
+          followUps: [],
+          clientVerified: true,
+          model: 'deterministic-archive-query',
+          usage: null,
+        })
+      }
+    }
 
     const model = env.DEEPSEEK_MODEL || DEFAULT_MODEL
     const reasoning = reasoningConfig(cleanMessage)
