@@ -409,6 +409,7 @@ type AiAssistantDraft = {
 type AssistantThread = {
   id: string
   title: string
+  clientId?: string
   messages: AiAssistantMessage[]
   drafts: AiAssistantDraft[]
   latestMaterialSummary?: AssistantMaterialSummary
@@ -3386,11 +3387,12 @@ function resolvedConfirmationFields(message: string, patch: Partial<Client>) {
 
 const assistantThreadsStorageKey = 'hy-tax-ai-assistant-threads'
 
-function createAssistantThread(title = '新对话'): AssistantThread {
+function createAssistantThread(title = '新对话', client?: Pick<Client, 'id' | 'name'>): AssistantThread {
   const now = formatDate()
   return {
     id: crypto.randomUUID(),
-    title,
+    title: client?.name || title,
+    clientId: client?.id,
     messages: [],
     drafts: [],
     createdAt: now,
@@ -9117,6 +9119,7 @@ function AiAssistantPage({
   const assistantFileInputRef = useRef<HTMLInputElement | null>(null)
   const structuredIntakeByDraftId = useRef(new Map<string, ParsedTaxDataIntake>())
   const activeAssistantThread = assistantThreads.find((thread) => thread.id === activeAssistantThreadId) || assistantThreads[0]
+  const assistantThreadClient = clients.find((client) => client.id === activeAssistantThread?.clientId)
   const assistantMessages = activeAssistantThread?.messages || []
   const assistantDrafts = activeAssistantThread?.drafts || []
   const showAssistantProcessingMessage = assistantLoading && assistantMessages.at(-1)?.role === 'user'
@@ -9208,7 +9211,7 @@ function AiAssistantPage({
     materialSummaryOverride?: AssistantMaterialSummary | null,
   ) => {
     const contextDraft = draftOverride === undefined ? assistantDrafts[0] : draftOverride || undefined
-    const contextClient = contextDraft?.client || selectedClient
+    const contextClient = contextDraft?.client || assistantThreadClient || selectedClient
     const contextRisks = contextDraft ? detectRisks(contextClient, managedRules) : risks
     const contextReport = contextDraft ? undefined : report
     const contextChecklist = filingChecklistForClient(contextClient)
@@ -9264,6 +9267,9 @@ function AiAssistantPage({
         : thread
     ))
   }
+  const bindActiveAssistantThreadToClient = (client: Pick<Client, 'id' | 'name'>) => {
+    updateActiveAssistantThread((thread) => ({ ...thread, clientId: client.id, title: client.name, updatedAt: formatDate() }))
+  }
   const addAssistantPendingFiles = (fileList: FileList | File[]) => {
     const files = Array.from(fileList)
     if (!files.length) return
@@ -9274,7 +9280,7 @@ function AiAssistantPage({
     setAssistantPendingFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))
   }
   const startAssistantThread = () => {
-    const thread = createAssistantThread()
+    const thread = createAssistantThread('新对话', selectedClient)
     setAssistantThreads((current) => [thread, ...current])
     setActiveAssistantThreadId(thread.id)
     setAssistantInput('')
@@ -9912,6 +9918,7 @@ function AiAssistantPage({
           return { status: 'blocked' as const, fileName: file.name, recordCount, reason }
         }
         if (saved.result.client?.id) {
+          bindActiveAssistantThreadToClient(saved.result.client)
           try {
             const refreshed = await apiGet<TaxDataSummary>(`/api/tax-data/summary?clientId=${encodeURIComponent(saved.result.client.id)}`)
             onTaxDataSummaryUpdate(refreshed)
@@ -10289,6 +10296,7 @@ function AiAssistantPage({
             elapsedSeconds: Math.max(1, (Date.now() - current.startedAt) / 1000),
           } : current)
         }
+        if (preferredClient) bindActiveAssistantThreadToClient(preferredClient)
         if (directIntake && filesToImport.length > 1) {
           const saved = outcomes.filter((outcome) => outcome?.status === 'saved')
           const exceptions = outcomes.filter((outcome) => outcome?.status === 'blocked' || outcome?.status === 'failed')
@@ -10318,6 +10326,7 @@ function AiAssistantPage({
       return
     }
     const readOnlyDataQuestion = isReadOnlyBusinessDataQuestion(cleanMessage)
+    if (readOnlyDataQuestion && !activeAssistantThread?.clientId && selectedClient) bindActiveAssistantThreadToClient(selectedClient)
     const parsedTextDraft: AiAssistantDraft | null = readOnlyDataQuestion ? null : (() => {
       try {
         return addAssistantDraftFromParsedImport(parseClientImportText(cleanMessage))
