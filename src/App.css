@@ -2497,6 +2497,54 @@ th {
   font-variant-numeric: tabular-nums;
 }
 
+.financial-statement-table .statement-section {
+  background: #eef6f6;
+  color: #143c42;
+  font-weight: 800;
+  text-align: left;
+}
+
+.financial-statement-table .statement-name {
+  padding-left: 18px;
+}
+
+.financial-statement-table .statement-row-no {
+  width: 62px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.balance-sheet-table {
+  min-width: 1120px;
+  table-layout: fixed;
+}
+
+.balance-sheet-table th:nth-child(1),
+.balance-sheet-table td:nth-child(1),
+.balance-sheet-table th:nth-child(5),
+.balance-sheet-table td:nth-child(5) {
+  width: 24%;
+}
+
+.balance-sheet-table th:nth-child(2),
+.balance-sheet-table td:nth-child(2),
+.balance-sheet-table th:nth-child(6),
+.balance-sheet-table td:nth-child(6) {
+  width: 54px;
+  text-align: center;
+}
+
+.balance-sheet-table th:nth-child(3),
+.balance-sheet-table td:nth-child(3),
+.balance-sheet-table th:nth-child(4),
+.balance-sheet-table td:nth-child(4),
+.balance-sheet-table th:nth-child(7),
+.balance-sheet-table td:nth-child(7),
+.balance-sheet-table th:nth-child(8),
+.balance-sheet-table td:nth-child(8) {
+  width: 13%;
+}
+
 .standard-financial-statement > footer {
   padding: 9px 14px;
   color: var(--muted);

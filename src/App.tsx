@@ -570,6 +570,58 @@ function taxDataAmount(value: unknown) {
   return Number.isFinite(number) ? number.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : String(value)
 }
 
+type StandardStatementLine = { section?: string; rowNo?: string; name?: string }
+
+const smallEnterpriseBalanceAssets: StandardStatementLine[] = [
+  { section: '流动资产' },
+  ...['货币资金|1', '短期投资|2', '应收票据|3', '应收账款|4', '预付账款|5', '应收股利|6', '应收利息|7', '其他应收款|8', '存货|9', '其中：原材料|10', '在产品|11', '库存商品|12', '周转材料|13', '其他流动资产|14', '流动资产合计|15'].map((item) => { const [name, rowNo] = item.split('|'); return { name, rowNo } }),
+  { section: '非流动资产' },
+  ...['长期债券投资|16', '长期股权投资|17', '固定资产原价|18', '减：累计折旧|19', '固定资产账面价值|20', '在建工程|21', '工程物资|22', '固定资产清理|23', '生产性生物资产|24', '无形资产|25', '开发支出|26', '长期待摊费用|27', '其他非流动资产|28', '非流动资产合计|29', '资产总计|30'].map((item) => { const [name, rowNo] = item.split('|'); return { name, rowNo } }),
+]
+
+const smallEnterpriseBalanceLiabilities: StandardStatementLine[] = [
+  { section: '流动负债' },
+  ...['短期借款|31', '应付票据|32', '应付账款|33', '预收账款|34', '应付职工薪酬|35', '应交税费|36', '应付利息|37', '应付利润|38', '其他应付款|39', '其他流动负债|40', '流动负债合计|41'].map((item) => { const [name, rowNo] = item.split('|'); return { name, rowNo } }),
+  { section: '非流动负债' },
+  ...['长期借款|42', '长期应付款|43', '递延收益|44', '其他非流动负债|45', '非流动负债合计|46', '负债合计|47'].map((item) => { const [name, rowNo] = item.split('|'); return { name, rowNo } }),
+  { section: '所有者权益（或股东权益）' },
+  ...['实收资本（或股本）|48', '资本公积|49', '盈余公积|50', '未分配利润|51', '所有者权益（或股东权益）合计|52', '负债和所有者权益（或股东权益）总计|53'].map((item) => { const [name, rowNo] = item.split('|'); return { name, rowNo } }),
+]
+
+const smallEnterpriseIncomeLines: StandardStatementLine[] = [
+  ...['一、营业收入|1', '减：营业成本|2', '税金及附加|3', '其中：消费税|4', '营业税|5', '城市维护建设税|6', '资源税|7', '土地增值税|8', '城镇土地使用税、房产税、车船税、印花税|9', '教育费附加、矿产资源补偿费、排污费|10', '销售费用|11', '其中：商品维修费|12', '广告费和业务宣传费|13', '管理费用|14', '其中：开办费|15', '业务招待费|16', '研究费用|17', '财务费用|18', '其中：利息费用（收入以“-”号填列）|19', '加：投资收益（损失以“-”号填列）|20', '二、营业利润（亏损以“-”号填列）|21', '加：营业外收入|22', '其中：政府补助|23', '减：营业外支出|24', '其中：坏账损失|25', '无法收回的长期债券投资损失|26', '无法收回的长期股权投资损失|27', '自然灾害等不可抗力因素造成的损失|28', '税收滞纳金|29', '三、利润总额（亏损总额以“-”号填列）|30', '减：所得税费用|31', '四、净利润（净亏损以“-”号填列）|32'].map((item) => { const [name, rowNo] = item.split('|'); return { name, rowNo } }),
+]
+
+const smallEnterpriseCashFlowLines: StandardStatementLine[] = [
+  { section: '一、经营活动产生的现金流量' },
+  ...['销售产成品、商品、提供劳务收到的现金|1', '收到其他与经营活动有关的现金|2', '购买原材料、商品、接受劳务支付的现金|3', '支付的职工薪酬|4', '支付的税费|5', '支付其他与经营活动有关的现金|6', '经营活动产生的现金流量净额|7'].map((item) => { const [name, rowNo] = item.split('|'); return { name, rowNo } }),
+  { section: '二、投资活动产生的现金流量' },
+  ...['收回短期投资、长期债券投资和长期股权投资收到的现金|8', '取得投资收益收到的现金|9', '处置固定资产、无形资产和其他非流动资产收回的现金净额|10', '短期投资、长期债券投资和长期股权投资支付的现金|11', '购建固定资产、无形资产和其他非流动资产支付的现金|12', '投资活动产生的现金流量净额|13'].map((item) => { const [name, rowNo] = item.split('|'); return { name, rowNo } }),
+  { section: '三、筹资活动产生的现金流量' },
+  ...['取得借款收到的现金|14', '吸收投资者投资收到的现金|15', '偿还借款本金支付的现金|16', '偿还借款利息支付的现金|17', '分配利润支付的现金|18', '筹资活动产生的现金流量净额|19', '四、现金净增加额|20', '加：期初现金余额|21', '五、期末现金余额|22'].map((item) => { const [name, rowNo] = item.split('|'); return { name, rowNo } }),
+]
+
+function normalizedStatementName(value: unknown) {
+  return String(value ?? '').replace(/[\s：:（）()“”"'、，,。·-]/g, '')
+}
+
+function findStatementRecord(records: TaxDataDetail['records'], line: StandardStatementLine) {
+  const target = normalizedStatementName(line.name)
+  return records.find((record) => {
+    const name = normalizedStatementName(recordValue(record.data, 'line_name', 'lineName', 'item_name', 'itemName'))
+    return name === target || (target.length >= 5 && (name.includes(target) || target.includes(name)))
+  })
+}
+
+function statementAmount(record: TaxDataDetail['records'][number] | undefined, type: 'ending' | 'beginning' | 'current' | 'cumulative') {
+  if (!record) return '-'
+  const keys = type === 'ending' ? ['ending_amount', 'endingAmount']
+    : type === 'beginning' ? ['beginning_amount', 'beginningAmount']
+      : type === 'current' ? ['current_amount', 'currentAmount']
+        : ['cumulative_amount', 'cumulativeAmount']
+  return taxDataAmount(recordValue(record.data, ...keys))
+}
+
 function TaxDataRecordView({ slot, detail }: { slot: TaxDataSlot; detail: TaxDataDetail }) {
   const records = detail.records
   if (!records.length) return <p className="tax-data-detail-status">该归档已有汇总记录，但没有可展示的标准明细。</p>
@@ -605,28 +657,52 @@ function TaxDataRecordView({ slot, detail }: { slot: TaxDataSlot; detail: TaxDat
     </>
   }
 
-  const financialStatementColumns: Record<string, Array<[string, string[]]>> = {
-    'financial-balance-sheet': [['行次', ['row_no', 'rowNo']], ['项目', ['line_name', 'lineName']], ['期末余额', ['ending_amount', 'endingAmount']], ['年初余额', ['beginning_amount', 'beginningAmount']]],
-    'financial-income-statement': [['行次', ['row_no', 'rowNo']], ['项目', ['line_name', 'lineName']], ['本期金额', ['current_amount', 'currentAmount']], ['本年累计金额', ['cumulative_amount', 'cumulativeAmount']]],
-    'financial-cash-flow': [['行次', ['row_no', 'rowNo']], ['项目', ['line_name', 'lineName']], ['本期金额', ['current_amount', 'currentAmount']], ['本年累计金额', ['cumulative_amount', 'cumulativeAmount']]],
+  if (slot.slotId === 'financial-balance-sheet') {
+    const rowCount = Math.max(smallEnterpriseBalanceAssets.length, smallEnterpriseBalanceLiabilities.length)
+    const rows = Array.from({ length: rowCount }, (_, index) => [smallEnterpriseBalanceAssets[index], smallEnterpriseBalanceLiabilities[index]] as const)
+    const renderBalanceSide = (line: StandardStatementLine | undefined) => {
+      if (!line) return <><td /><td /><td /><td /></>
+      if (line.section) return <td className="statement-section" colSpan={4}>{line.section}：</td>
+      const record = findStatementRecord(records, line)
+      return <>
+        <td className="statement-name">{line.name}</td>
+        <td className="statement-row-no">{line.rowNo}</td>
+        <td className="amount-cell">{statementAmount(record, 'ending')}</td>
+        <td className="amount-cell">{statementAmount(record, 'beginning')}</td>
+      </>
+    }
+    return <section className="standard-financial-statement">
+      <header><h3>资产负债表</h3><p>编制单位：{readableImportedText(detail.sources[0]?.file_name.replace(/20\d{2}.*$/, ''), '当前企业')} · {slot.periodLabel}</p><span>会小企 01 表 · 金额单位：元</span></header>
+      <div className="tax-data-table-wrap financial-statement-table-wrap">
+        <table className="tax-data-detail-table financial-statement-table balance-sheet-table">
+          <thead><tr><th>资产</th><th>行次</th><th>期末余额</th><th>年初余额</th><th>负债和所有者权益</th><th>行次</th><th>期末余额</th><th>年初余额</th></tr></thead>
+          <tbody>{rows.map(([asset, liability], index) => <tr key={index}>{renderBalanceSide(asset)}{renderBalanceSide(liability)}</tr>)}</tbody>
+        </table>
+      </div>
+      <footer>标准表式：小企业会计准则 · 数据来源：客户上传原始资料</footer>
+    </section>
   }
-  const financialColumns = financialStatementColumns[slot.slotId]
-  if (financialColumns) return <section className="standard-financial-statement">
+
+  const statementLines = slot.slotId === 'financial-income-statement' ? smallEnterpriseIncomeLines
+    : slot.slotId === 'financial-cash-flow' ? smallEnterpriseCashFlowLines
+      : null
+  if (statementLines) return <section className="standard-financial-statement">
     <header>
       <h3>{slot.name}</h3>
       <p>会计期间：{slot.periodLabel}</p>
-      <span>金额单位：元</span>
+      <span>{slot.slotId === 'financial-income-statement' ? '会小企 02 表' : '会小企 03 表'} · 金额单位：元</span>
     </header>
     <div className="tax-data-table-wrap financial-statement-table-wrap">
       <table className="tax-data-detail-table financial-statement-table">
-        <thead><tr>{financialColumns.map(([label]) => <th key={label}>{label}</th>)}</tr></thead>
-        <tbody>{records.map((record) => <tr key={record.id}>{financialColumns.map(([label, keys], index) => {
-          const value = recordValue(record.data, ...keys)
-          return <td key={label} className={index >= 2 ? 'amount-cell' : undefined}>{index >= 2 ? taxDataAmount(value) : displayTaxDataValue(value)}</td>
-        })}</tr>)}</tbody>
+        <thead><tr><th>项目</th><th>行次</th><th>本年累计金额</th><th>本期金额</th></tr></thead>
+        <tbody>{statementLines.map((line, index) => {
+          if (line.section) return <tr key={`${line.section}-${index}`}><td className="statement-section" colSpan={4}>{line.section}：</td></tr>
+          const record = findStatementRecord(records, line)
+          return <tr key={line.rowNo}><td className="statement-name">{line.name}</td><td className="statement-row-no">{line.rowNo}</td><td className="amount-cell">{statementAmount(record, 'cumulative')}</td><td className="amount-cell">{statementAmount(record, 'current')}</td></tr>
+        })}</tbody>
       </table>
     </div>
-    <footer>数据来源：客户上传原始资料 · 系统标准化收录</footer>
+    <footer>标准表式：小企业会计准则 · 数据来源：客户上传原始资料</footer>
   </section>
 
   const configurations: Record<string, Array<[string, string[]]>> = {
