@@ -549,6 +549,13 @@ function readableImportedText(value: unknown, fallback = '') {
   return text || fallback
 }
 
+function isReadOnlyBusinessDataQuestion(message: string) {
+  const text = message.replace(/\s+/g, '')
+  const asksForData = /(多少|是什么|是多少|有没有|有无|查询|查看|显示|哪一|情况|余额|销售额|收入|成本|利润|税额|人数|金额)/.test(text)
+  const explicitlyEdits = /(改成|修改为|更正为|更新为|填写为|确认是|应当是|录入|导入|保存|入库)/.test(text)
+  return asksForData && !explicitlyEdits
+}
+
 function periodEntryDisplayLabel(entry: PeriodEntry) {
   return readableImportedText(entry.label, `${formatMonthRange(entry.months)} 数据`)
 }
@@ -10310,7 +10317,8 @@ function AiAssistantPage({
       }
       return
     }
-    const parsedTextDraft: AiAssistantDraft | null = (() => {
+    const readOnlyDataQuestion = isReadOnlyBusinessDataQuestion(cleanMessage)
+    const parsedTextDraft: AiAssistantDraft | null = readOnlyDataQuestion ? null : (() => {
       try {
         return addAssistantDraftFromParsedImport(parseClientImportText(cleanMessage))
       } catch {
@@ -10345,7 +10353,7 @@ function AiAssistantPage({
       setAssistantInput('')
       return
     }
-    const cleaningUpdate = applyCleaningMessageToDraft(cleanMessage)
+    const cleaningUpdate = readOnlyDataQuestion ? null : applyCleaningMessageToDraft(cleanMessage)
     if (cleaningUpdate) {
       setActiveAssistantMessages([
         ...nextMessages,
