@@ -4377,6 +4377,20 @@ function App() {
       const total = categories.size
       const missing = total - collected
       const hasValidation = slots.some((slot) => slot.validationMessages.length)
+      const collectedSlots = slots.filter((slot) => slot.status === 'collected')
+      const sourceFileCount = new Set(collectedSlots.flatMap((slot) => slot.sourceFiles.map((file) => file.id))).size
+      const coveredMonths = new Set<string>()
+      for (const slot of collectedSlots) {
+        const start = (slot.periodStart || slot.periodEnd).slice(0, 7)
+        const end = (slot.periodEnd || slot.periodStart).slice(0, 7)
+        if (!start || !end) continue
+        let cursor = monthIndex(start)
+        const last = monthIndex(end)
+        while (cursor <= last && coveredMonths.size < 240) {
+          coveredMonths.add(monthFromIndex(cursor))
+          cursor += 1
+        }
+      }
       const status = activeTaxDataSummary?.pendingConfirmationCount && hasValidation
         ? 'pending'
         : missing === 0 && total > 0
@@ -4384,7 +4398,7 @@ function App() {
           : collected > 0
             ? 'partial'
             : 'missing'
-      return { group, slots, collected, missing, total, status }
+      return { group, slots, collected, missing, total, status, sourceFileCount, coveredMonthCount: coveredMonths.size }
     })
   }, [taxDataSlotsByGroup, activeTaxDataSummary?.pendingConfirmationCount])
   const selectedTaxDataFolderSummary = taxDataFolderSummaries.find((folder) => folder.group === selectedTaxDataFolder)
@@ -6063,7 +6077,9 @@ function App() {
                   <div className="tax-data-board-summary">
                     <div>
                       <span>{taxDataViewMode === 'overview' ? '历史出现资料类别' : '本期已收录资料类别'}</span>
-                      <strong>{displayedTaxDataStats.collectedCategoryCount}/{displayedTaxDataStats.totalCategoryCount || 18}</strong>
+                      <strong>{taxDataViewMode === 'overview'
+                        ? `${displayedTaxDataStats.collectedCategoryCount} 类`
+                        : `${displayedTaxDataStats.collectedCategoryCount}/${displayedTaxDataStats.totalCategoryCount || 18}`}</strong>
                     </div>
                     <div>
                       <span>来源文件</span>
@@ -6079,7 +6095,7 @@ function App() {
                     </div>
                     <div>
                       <span>{taxDataViewMode === 'overview' ? '从未收录资料类别' : '本期缺失资料'}</span>
-                      <strong>{displayedTaxDataStats.missingCount} 项</strong>
+                      <strong>{displayedTaxDataStats.missingCount} 类</strong>
                     </div>
                   </div>
                   {taxDataFolderSummaries.length ? (
@@ -6098,7 +6114,11 @@ function App() {
                               <span className="tax-data-folder-index">{String(index + 1).padStart(2, '0')}</span>
                               <span className="tax-data-folder-icon">{active ? <FolderOpen /> : <Folder />}</span>
                               <strong>{folder.group}</strong>
-                              <small>{folder.collected}/{folder.total} 类资料已收录</small>
+                              <small>{taxDataViewMode === 'overview'
+                                ? folder.collected
+                                  ? `已收录 ${folder.collected} 类 · ${folder.sourceFileCount} 份文件 · 覆盖 ${folder.coveredMonthCount} 个月`
+                                  : '尚无历史资料'
+                                : `${folder.collected}/${folder.total} 类资料已收录`}</small>
                               <em>{taxDataViewMode === 'overview'
                                 ? folder.collected > 0 ? '历史有资料' : '无历史资料'
                                 : folder.status === 'complete' ? '齐全' : folder.status === 'partial' ? '部分缺失' : folder.status === 'pending' ? '待确认' : '缺资料'}</em>
@@ -6114,7 +6134,9 @@ function App() {
                               ? selectedTaxDataFolderSummary?.collected ? '已有历史资料' : '尚未收录资料'
                               : selectedTaxDataFolderSummary?.status === 'complete' ? '资料齐全' : selectedTaxDataFolderSummary?.status === 'partial' ? '资料部分收录' : '资料待补齐'}</strong>
                           </div>
-                          <small>{selectedTaxDataFolderSummary?.collected || 0}/{selectedTaxDataFolderSummary?.total || 0} 类资料已收录</small>
+                          <small>{taxDataViewMode === 'overview'
+                            ? `历史收录 ${selectedTaxDataFolderSummary?.collected || 0} 类 · ${selectedTaxDataFolderSummary?.sourceFileCount || 0} 份源文件`
+                            : `${selectedTaxDataFolderSummary?.collected || 0}/${selectedTaxDataFolderSummary?.total || 0} 类资料已收录`}</small>
                         </header>
                         <div className="tax-data-slot-list">
                           {selectedTaxDataSlots.map((slot) => (
