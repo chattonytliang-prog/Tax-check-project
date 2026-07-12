@@ -2328,6 +2328,50 @@ th {
   overflow-wrap: anywhere;
 }
 
+.tax-data-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.tax-data-metric-grid article {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px;
+  background: var(--surface-2);
+}
+
+.tax-data-metric-grid span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tax-data-metric-grid strong {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.business-table th,
+.business-table td {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.business-table th:nth-child(2),
+.business-table td:nth-child(2) {
+  min-width: 220px;
+  white-space: normal;
+}
+
+@media (max-width: 900px) {
+  .tax-data-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .intake-overview .eyebrow {
   margin-top: 0;
   color: var(--teal);

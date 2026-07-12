@@ -545,6 +545,80 @@ function sourceFileActionLabel(fileName: string) {
   return fileName.toLowerCase().endsWith('.pdf') ? '预览源文件' : '下载源文件'
 }
 
+function recordValue(data: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    if (data[key] !== undefined && data[key] !== null && data[key] !== '') return data[key]
+  }
+  return null
+}
+
+function taxDataAmount(value: unknown) {
+  if (value === null || value === undefined || value === '' || value === '-') return '-'
+  const number = Number(value)
+  return Number.isFinite(number) ? number.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : String(value)
+}
+
+function TaxDataRecordView({ slot, detail }: { slot: TaxDataSlot; detail: TaxDataDetail }) {
+  const records = detail.records
+  if (!records.length) return <p className="tax-data-detail-status">该归档已有汇总记录，但没有可展示的标准明细。</p>
+
+  if (slot.slotId === 'vat-return-main' || slot.slotId === 'vat-schedule-4') {
+    const rows = records.map((record) => ({
+      id: record.id,
+      rowNo: recordValue(record.data, 'row_no', 'rowNo'),
+      name: recordValue(record.data, 'item_name', 'itemName'),
+      currentAmount: recordValue(record.data, 'current_amount', 'currentAmount'),
+      cumulativeAmount: recordValue(record.data, 'cumulative_amount', 'cumulativeAmount'),
+      currentTax: recordValue(record.data, 'current_tax', 'currentTax'),
+      cumulativeTax: recordValue(record.data, 'cumulative_tax', 'cumulativeTax'),
+    }))
+    const byRow = new Map(rows.map((row) => [String(row.rowNo), row]))
+    const metrics: Array<[string, unknown]> = [
+      ['销售额', byRow.get('1')?.currentAmount],
+      ['销项税额', byRow.get('11')?.currentTax ?? byRow.get('11')?.currentAmount],
+      ['进项税额', byRow.get('12')?.currentTax ?? byRow.get('12')?.currentAmount],
+      ['应纳税额', byRow.get('19')?.currentTax ?? byRow.get('19')?.currentAmount],
+      ['期末留抵税额', byRow.get('20')?.currentTax ?? byRow.get('20')?.currentAmount],
+    ]
+    return <>
+      <div className="tax-data-metric-grid">
+        {metrics.map(([label, value]) => <article key={String(label)}><span>{label}</span><strong>¥ {taxDataAmount(value)}</strong></article>)}
+      </div>
+      <div className="tax-data-table-wrap">
+        <table className="tax-data-detail-table business-table">
+          <thead><tr><th>行次</th><th>项目</th><th>本期金额</th><th>累计金额</th><th>本期税额</th><th>累计税额</th></tr></thead>
+          <tbody>{rows.map((row) => <tr key={row.id}><td>{displayTaxDataValue(row.rowNo)}</td><td>{displayTaxDataValue(row.name)}</td><td>{taxDataAmount(row.currentAmount)}</td><td>{taxDataAmount(row.cumulativeAmount)}</td><td>{taxDataAmount(row.currentTax)}</td><td>{taxDataAmount(row.cumulativeTax)}</td></tr>)}</tbody>
+        </table>
+      </div>
+    </>
+  }
+
+  const configurations: Record<string, Array<[string, string[]]>> = {
+    'financial-balance-sheet': [['行次', ['row_no', 'rowNo']], ['项目', ['line_name', 'lineName']], ['期初余额', ['beginning_amount', 'beginningAmount']], ['期末余额', ['ending_amount', 'endingAmount']]],
+    'financial-income-statement': [['行次', ['row_no', 'rowNo']], ['项目', ['line_name', 'lineName']], ['本期金额', ['current_amount', 'currentAmount']], ['本年累计', ['cumulative_amount', 'cumulativeAmount']]],
+    'financial-cash-flow': [['行次', ['row_no', 'rowNo']], ['项目', ['line_name', 'lineName']], ['本期金额', ['current_amount', 'currentAmount']], ['本年累计', ['cumulative_amount', 'cumulativeAmount']]],
+    'account-balance': [['科目编码', ['account_code', 'accountCode']], ['科目名称', ['account_name', 'accountName']], ['期初借方', ['opening_debit', 'openingDebit']], ['期初贷方', ['opening_credit', 'openingCredit']], ['本期借方', ['current_debit', 'currentDebit']], ['本期贷方', ['current_credit', 'currentCredit']], ['期末借方', ['ending_debit', 'endingDebit']], ['期末贷方', ['ending_credit', 'endingCredit']]],
+    ledger: [['日期', ['entry_date', 'entryDate']], ['凭证号', ['voucher_no', 'voucherNo']], ['科目', ['account_name', 'accountName']], ['摘要', ['summary']], ['借方金额', ['debit_amount', 'debitAmount']], ['贷方金额', ['credit_amount', 'creditAmount']], ['余额', ['balance_amount', 'balanceAmount']]],
+    payroll: [['员工', ['employee_name', 'employeeName']], ['应发工资', ['gross_pay', 'grossPay']], ['社保', ['social_security', 'socialSecurity']], ['公积金', ['housing_fund', 'housingFund']], ['应纳税所得额', ['taxable_income', 'taxableIncome']], ['代扣个税', ['tax_withheld', 'taxWithheld']]],
+    'iit-withholding': [['人员', ['person_name', 'personName']], ['所得项目', ['income_item', 'incomeItem']], ['本期收入', ['current_income', 'currentIncome']], ['累计收入', ['cumulative_income', 'cumulativeIncome']], ['应纳税所得额', ['taxable_income', 'taxableIncome']], ['已扣缴税额', ['tax_withheld', 'taxWithheld']]],
+    'invoice-output': [['开票日期', ['invoice_date', 'invoiceDate']], ['发票号码', ['invoice_no', 'invoiceNo']], ['购方名称', ['counterparty_name', 'counterpartyName']], ['商品或服务', ['goods_name', 'goodsName']], ['金额', ['amount']], ['税额', ['tax_amount', 'taxAmount']], ['状态', ['invoice_status', 'invoiceStatus']]],
+    'invoice-input': [['开票日期', ['invoice_date', 'invoiceDate']], ['发票号码', ['invoice_no', 'invoiceNo']], ['销方名称', ['counterparty_name', 'counterpartyName']], ['商品或服务', ['goods_name', 'goodsName']], ['金额', ['amount']], ['税额', ['tax_amount', 'taxAmount']], ['状态', ['invoice_status', 'invoiceStatus']]],
+  }
+  const columns = configurations[slot.slotId]
+  if (!columns) return <p className="tax-data-detail-status">该类资料已完成归档，当前没有可视化明细模板。</p>
+  const amountLabels = /金额|余额|工资|社保|公积金|所得额|税额/
+  return <div className="tax-data-table-wrap">
+    <table className="tax-data-detail-table business-table">
+      <thead><tr>{columns.map(([label]) => <th key={label}>{label}</th>)}</tr></thead>
+      <tbody>{records.map((record) => <tr key={record.id}>{columns.map(([label, keys]) => {
+        const value = recordValue(record.data, ...keys)
+        return <td key={label}>{amountLabels.test(label) ? taxDataAmount(value) : displayTaxDataValue(value)}</td>
+      })}</tr>)}</tbody>
+    </table>
+    {detail.truncated ? <p className="section-helper">当前展示前 500 条，完整记录仍保存在系统中。</p> : null}
+  </div>
+}
+
 function taxDataSlotCoversMonth(slot: TaxDataSlot, month: string) {
   if (slot.status !== 'collected' || !month) return false
   const startMonth = (slot.periodStart || slot.periodEnd).slice(0, 7)
@@ -7228,23 +7302,8 @@ function TaxDataDetailModal({ slot, detail, loading, error, onClose }: {
               </div>
             </section>
             <section className="tax-data-detail-section">
-              <div className="panel-title"><h3>处理后的标准数据</h3><span>{detail.totalRecords} 条</span></div>
-              {detail.records.length ? (
-                <div className="tax-data-table-wrap">
-                  <table className="tax-data-detail-table">
-                    <thead><tr><th>类型</th><th>期间</th><th>标准字段和值</th><th>可信度</th></tr></thead>
-                    <tbody>{detail.records.map((record) => (
-                      <tr key={record.id}>
-                        <td>{record.record_subtype || record.record_type}</td>
-                        <td>{record.period_start}<br />{record.period_end}</td>
-                        <td><dl>{Object.entries(record.data).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{displayTaxDataValue(value)}</dd></div>)}</dl></td>
-                        <td>{record.confidence}</td>
-                      </tr>
-                    ))}</tbody>
-                  </table>
-                  {detail.truncated ? <p className="section-helper">当前展示前 500 条，完整记录仍保存在系统中。</p> : null}
-                </div>
-              ) : <p className="tax-data-detail-status">该归档已有汇总记录，但没有可展示的标准明细。</p>}
+              <div className="panel-title"><h3>数据概览与明细</h3><span>{detail.totalRecords} 条</span></div>
+              <TaxDataRecordView slot={slot} detail={detail} />
             </section>
             <section className="tax-data-detail-section">
               <div className="panel-title"><h3>原值与字段对应</h3><span>{detail.evidence.length} 项证据</span></div>
