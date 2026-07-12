@@ -2219,6 +2219,67 @@ th {
   border-color: rgba(12, 140, 130, 0.16);
 }
 
+.tax-data-coverage-matrix {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px;
+  background: var(--surface-2);
+}
+
+.tax-data-coverage-year {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.tax-data-coverage-year > div {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(58px, 1fr));
+  gap: 6px;
+}
+
+.tax-data-coverage-year button {
+  display: grid;
+  gap: 3px;
+  min-height: 50px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 6px;
+  background: white;
+  text-align: left;
+}
+
+.tax-data-coverage-year button.has-data {
+  border-color: rgba(12, 140, 130, 0.36);
+  background: rgba(12, 140, 130, 0.08);
+}
+
+.tax-data-coverage-year button span {
+  font-weight: 800;
+}
+
+.tax-data-coverage-year button small,
+.tax-data-coverage-matrix > p {
+  color: var(--muted);
+}
+
+.tax-data-coverage-matrix > p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.tax-data-folder-tile.history {
+  border-left-color: #168b82;
+}
+
+.tax-data-folder-tile.history em {
+  color: #08766f;
+  background: rgba(12, 140, 130, 0.1);
+}
+
 .tax-data-detail-modal {
   width: min(1320px, 100%);
 }
@@ -2369,6 +2430,14 @@ th {
 @media (max-width: 900px) {
   .tax-data-metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tax-data-coverage-year {
+    grid-template-columns: 1fr;
+  }
+
+  .tax-data-coverage-year > div {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

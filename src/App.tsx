@@ -6030,9 +6030,39 @@ function App() {
                       </>
                     ) : <p>查看企业历年已收录的资料类别；是否齐全请切换到具体月份。</p>}
                   </div>
+                  {taxDataViewMode === 'overview' ? (
+                    <div className="tax-data-coverage-matrix" aria-label="各月资料覆盖情况">
+                      {taxDataPeriodYears.map((year) => (
+                        <div key={year} className="tax-data-coverage-year">
+                          <strong>{year}年</strong>
+                          <div>
+                            {monthNames.map((label, index) => {
+                              const month = `${year}-${String(index + 1).padStart(2, '0')}`
+                              const categoryCount = new Set((activeTaxDataSummary?.slots || [])
+                                .filter((slot) => taxDataSlotCoversMonth(slot, month))
+                                .map((slot) => slot.slotId)).size
+                              return <button
+                                key={month}
+                                type="button"
+                                className={categoryCount ? 'has-data' : ''}
+                                onClick={() => {
+                                  setSelectedTaxDataMonth(month)
+                                  setTaxDataViewMode('month')
+                                }}
+                              >
+                                <span>{label}</span>
+                                <small>{categoryCount ? `${categoryCount}类` : '无资料'}</small>
+                              </button>
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                      <p>总览仅表示历史覆盖，不代表任何月份资料齐全。点击月份查看当期缺失情况。</p>
+                    </div>
+                  ) : null}
                   <div className="tax-data-board-summary">
                     <div>
-                      <span>已收录资料类别</span>
+                      <span>{taxDataViewMode === 'overview' ? '历史出现资料类别' : '本期已收录资料类别'}</span>
                       <strong>{displayedTaxDataStats.collectedCategoryCount}/{displayedTaxDataStats.totalCategoryCount || 18}</strong>
                     </div>
                     <div>
@@ -6048,7 +6078,7 @@ function App() {
                       <strong>{activeTaxDataSummary?.pendingConfirmationCount || 0} 项</strong>
                     </div>
                     <div>
-                      <span>缺失资料</span>
+                      <span>{taxDataViewMode === 'overview' ? '从未收录资料类别' : '本期缺失资料'}</span>
                       <strong>{displayedTaxDataStats.missingCount} 项</strong>
                     </div>
                   </div>
@@ -6057,11 +6087,12 @@ function App() {
                       <div className="tax-data-folder-grid" aria-label="资料分类">
                         {taxDataFolderSummaries.map((folder, index) => {
                           const active = folder.group === selectedTaxDataFolderSummary?.group
+                          const displayStatus = taxDataViewMode === 'overview' ? (folder.collected ? 'history' : 'missing') : folder.status
                           return (
                             <button
                               key={folder.group}
                               type="button"
-                              className={`tax-data-folder-tile ${folder.status}${active ? ' active' : ''}`}
+                              className={`tax-data-folder-tile ${displayStatus}${active ? ' active' : ''}`}
                               onClick={() => setSelectedTaxDataFolder(folder.group)}
                             >
                               <span className="tax-data-folder-index">{String(index + 1).padStart(2, '0')}</span>
@@ -6069,7 +6100,7 @@ function App() {
                               <strong>{folder.group}</strong>
                               <small>{folder.collected}/{folder.total} 类资料已收录</small>
                               <em>{taxDataViewMode === 'overview'
-                                ? folder.collected > 0 ? '已收录' : '未收录'
+                                ? folder.collected > 0 ? '历史有资料' : '无历史资料'
                                 : folder.status === 'complete' ? '齐全' : folder.status === 'partial' ? '部分缺失' : folder.status === 'pending' ? '待确认' : '缺资料'}</em>
                             </button>
                           )
