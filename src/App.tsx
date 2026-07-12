@@ -13,7 +13,6 @@ import {
   Folder,
   FolderOpen,
   Gauge,
-  Info,
   LayoutDashboard,
   LogOut,
   Plus,
@@ -2747,6 +2746,15 @@ function coerceImportedClientPatch(patch: Record<string, unknown>) {
   const coerced: Partial<Client> = {}
   Object.entries(patch).forEach(([key, value]) => {
     if (value === undefined || value === null || value === '') return
+    if (key === 'name') {
+      const candidate = String(value).trim()
+      if (/^(开票日期|填发日期|序号|项目|名称|企业名称|纳税人名称|单位名称|日期|合计|总计)$/.test(candidate) || /^\d{4,}$/.test(candidate)) return
+    }
+    if (key === 'creditCode') {
+      const candidate = String(value).replace(/\s+/g, '').toUpperCase()
+      if (!/^[0-9A-Z]{18}$/.test(candidate)) return
+      value = candidate
+    }
     const current = emptyClient[key as keyof Client]
     coerced[key as keyof Client] = (typeof current === 'number'
       ? Number(String(value).replace(/,/g, '')) || 0
@@ -3438,7 +3446,7 @@ function buildStructuredRiskFinding(client: Client, risk: RiskResult): Structure
   }
 }
 
-function buildStructuredReport(client: Client, risks: RiskResult[], aiReview?: AiReview): StructuredReport {
+function buildStructuredReport(client: Client, risks: RiskResult[]): StructuredReport {
   const level = getOverallLevel(risks)
   const highRisks = riskCountByRank(risks, 3)
   const mediumRisks = riskCountByRank(risks, 2)
@@ -3451,12 +3459,9 @@ function buildStructuredReport(client: Client, risks: RiskResult[], aiReview?: A
     ...completeness.suggestedMaterials,
     ...risks.flatMap((risk) => risk.materials),
   ])).slice(0, 12)
-  const expertReviewItems = Array.from(new Set([
-    ...(aiReview?.dataQualityWarnings || []),
-    ...(aiReview?.nearThresholdWarnings || []),
-    ...(aiReview?.riskReviewNotes || []),
-    ...suggestedMaterials.map((item) => `复核资料：${item}`),
-  ])).slice(0, 10)
+  const expertReviewItems = Array.from(new Set(
+    suggestedMaterials.map((item) => `复核资料：${item}`),
+  )).slice(0, 10)
 
   return {
     version: 'professional-v1',
@@ -5344,12 +5349,12 @@ function App() {
           client: reportClient,
           risks: risksForAi,
           content: baseReport.content,
-          structuredReport: buildStructuredReport(reportClient, risks, reviewResponse.review),
+          structuredReport: buildStructuredReport(reportClient, risks),
           aiReview: reviewResponse.review,
         }),
         wait(2000),
       ])
-      const reviewedStructuredReport = buildStructuredReport(reportClient, risks, reviewResponse.review)
+      const reviewedStructuredReport = buildStructuredReport(reportClient, risks)
 
       report = {
         ...baseReport,
@@ -10340,7 +10345,7 @@ function ReportPage({
   const safeRisks = Array.isArray(risks) ? risks : []
   const structured = isCompleteStructuredReport(report?.structured)
     ? report.structured
-    : buildStructuredReport(client, safeRisks, report?.aiReview)
+    : buildStructuredReport(client, safeRisks)
   const fallbackContent = report ? reportTextContent(report) : buildProfessionalReportContent(structured)
   const draft = sanitizePublicReportContent(fallbackContent || buildReportContent(client, safeRisks))
   const aiMessage = aiStage === 'reviewing'
@@ -10380,24 +10385,6 @@ function ReportPage({
       setAssistantLoading(false)
     }
   }
-  const reviewGroups = [
-    {
-      title: '输入数据疑点',
-      items: report?.aiReview?.dataQualityWarnings || [],
-      empty: 'AI 未发现明显字段冲突或缺失。',
-    },
-    {
-      title: '接近阈值提醒',
-      items: report?.aiReview?.nearThresholdWarnings || [],
-      empty: '暂无接近规则阈值的观察项。',
-    },
-    {
-      title: '命中风险复核',
-      items: report?.aiReview?.riskReviewNotes || [],
-      empty: '暂无额外复核说明。',
-    },
-  ]
-
   return (
     <section className="page">
       <header className="page-header">
@@ -10460,38 +10447,6 @@ function ReportPage({
         </div>
       ) : (
         <div className="report-workspace">
-          <section className="ai-review-panel">
-            <div className="ai-review-header">
-              <div>
-                <p className="eyebrow">AI 数据复核提示</p>
-                <h3>复核结果不改变规则引擎命中结论</h3>
-              </div>
-              <span className={report?.aiGenerated ? 'ai-review-status active' : 'ai-review-status'}>
-                {report?.aiGenerated ? 'AI 已复核' : '本地模板'}
-              </span>
-            </div>
-            {report?.aiReview ? (
-              <div className="ai-review-grid">
-                {reviewGroups.map((group) => (
-                  <article className="ai-review-card" key={group.title}>
-                    <h4>{group.title}</h4>
-                    {group.items.length ? (
-                      <ul>
-                        {group.items.map((item) => <li key={item}>{item}</li>)}
-                      </ul>
-                    ) : (
-                      <p>{group.empty}</p>
-                    )}
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className="ai-review-empty">
-                <Info />
-                <p>当前报告没有可展示的 AI 复核明细。重新生成报告后，系统会自动调用 AI 复核并在此展示数据疑点、阈值提醒和风险复核说明。</p>
-              </div>
-            )}
-          </section>
           <section className="ai-assistant-panel">
             <div className="ai-assistant-header">
               <div>
