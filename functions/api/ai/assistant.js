@@ -259,6 +259,8 @@ async function deterministicBusinessAnswer(db, auth, client, message) {
   if (!period) return ''
   const metricMatch = text.match(/20\d{2}年(?:1[0-2]|0?[1-9])月(?:的)?(.+?)(?:是多少|有多少|多少|是什么|呢|[？?]|$)/)
   const requestedMetric = String(metricMatch?.[1] || '').replace(/^(?:公司|我公司|我们公司|本公司)/, '').trim()
+  const isArchiveOverviewQuestion = /^(?:有什么|有哪些|都有什么|都有哪些|收录了什么|收录了哪些|已收录什么|已收录哪些|缺什么|缺少什么)(?:数据|资料|报表|文件)?$/.test(requestedMetric)
+  if (isArchiveOverviewQuestion) return ''
   if (requestedMetric && requestedMetric !== '销售额') {
     const financialLine = await db.prepare(
       `SELECT s.statement_type, l.line_code, l.line_name, l.current_amount, l.cumulative_amount,
