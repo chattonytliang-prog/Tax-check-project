@@ -558,6 +558,25 @@ function isReadOnlyBusinessDataQuestion(message: string) {
   return asksForData && !explicitlyEdits
 }
 
+function fileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(reader.error || new Error('图片读取失败'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function AssistantPendingAttachment({ file, onRemove }: { file: File; onRemove: () => void }) {
+  const [preview] = useState(() => file.type.startsWith('image/') ? URL.createObjectURL(file) : '')
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
+  return <span className={preview ? 'image-attachment' : ''}>
+    {preview ? <img src={preview} alt={file.name} /> : <FileText />}
+    <small>{file.name}</small>
+    <button type="button" aria-label={`移除 ${file.name}`} onClick={onRemove}>×</button>
+  </span>
+}
+
 function periodEntryDisplayLabel(entry: PeriodEntry) {
   return readableImportedText(entry.label, `${formatMonthRange(entry.months)} 数据`)
 }
@@ -10264,6 +10283,35 @@ function AiAssistantPage({
     if ((!cleanMessage && !assistantPendingFiles.length) || assistantLoading) return
     if (assistantPendingFiles.length) {
       const directIntake = hasDirectIntakeAuthorization(cleanMessage)
+      const imageFiles = assistantPendingFiles.filter((file) => file.type.startsWith('image/'))
+      if (!directIntake && imageFiles.length === assistantPendingFiles.length) {
+        const nextMessages: AiAssistantMessage[] = [
+          ...assistantMessages,
+          { id: crypto.randomUUID(), role: 'user', content: `${cleanMessage || '请查看这些截图。'}\n\n附件：${imageFiles.map((file) => file.name).join('、')}` },
+        ]
+        setAssistantInput('')
+        setAssistantPendingFiles([])
+        setActiveAssistantMessages(nextMessages)
+        setAssistantLoading(true)
+        setAssistantError('')
+        try {
+          await Promise.all(imageFiles.map((file) => uploadAssistantMaterial(file)))
+          const images = await Promise.all(imageFiles.map(fileAsDataUrl))
+          const response = await apiSend<AiAssistantResponse>('/api/ai/assistant', 'POST', {
+            message: cleanMessage || '请查看这些截图并结合当前企业上下文回答。',
+            images,
+            history: assistantMessages.map((item) => ({ role: item.role, content: item.content })),
+            client: assistantThreadClient || selectedClient,
+            risks: [], report: null, assistantContext: buildAssistantContext(),
+          })
+          setActiveAssistantMessages([...nextMessages, { id: crypto.randomUUID(), role: 'assistant', content: sanitizeAssistantAnswer(response.answer), response }])
+        } catch (error) {
+          setAssistantError(error instanceof Error ? error.message : String(error))
+        } finally {
+          setAssistantLoading(false)
+        }
+        return
+      }
       const filesToImport = directIntake
         ? [...assistantPendingFiles].sort((left, right) => Number(Boolean(extractCompanyNameFromText(right.name))) - Number(Boolean(extractCompanyNameFromText(left.name))))
         : assistantPendingFiles
@@ -10599,17 +10647,17 @@ function AiAssistantPage({
               {assistantPendingFiles.length ? (
                 <div className="ai-assistant-attachments" aria-label="待发送附件">
                   {assistantPendingFiles.map((file, index) => (
-                    <span key={`${file.name}-${file.size}-${index}`}>
-                      <FileText />
-                      {file.name}
-                      <button type="button" aria-label={`移除 ${file.name}`} onClick={() => removeAssistantPendingFile(index)}>×</button>
-                    </span>
+                    <AssistantPendingAttachment key={`${file.name}-${file.size}-${index}`} file={file} onRemove={() => removeAssistantPendingFile(index)} />
                   ))}
                 </div>
               ) : null}
               <textarea
                 value={assistantInput}
                 onChange={(event) => setAssistantInput(event.target.value)}
+                onPaste={(event) => {
+                  const files = Array.from(event.clipboardData.items).flatMap((item) => item.kind === 'file' ? [item.getAsFile()].filter((file): file is File => Boolean(file)) : [])
+                  if (files.length) { event.preventDefault(); addAssistantPendingFiles(files) }
+                }}
                 onKeyDown={(event) => {
                   if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
                   event.preventDefault()

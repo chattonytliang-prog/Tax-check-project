@@ -278,7 +278,26 @@ async function deterministicBusinessAnswer(db, auth, client, message) {
   if (income && incomeAmount !== null) {
     return `${client.name}${period.label}利润表本期营业收入为 ${incomeAmount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元。来源：${income.file_name || '利润表'}。`
   }
-  return `目前无法从标准档案确认${client.name}${period.label}的销售额。该期间没有已收录的增值税申报表主表销售额，也没有利润表“本期营业收入”；我不会用本年累计数或其他月份数据代替。`
+  const statement = await db.prepare(
+    `SELECT s.id, f.file_name
+     FROM tax_data_financial_statements s
+     LEFT JOIN tax_data_source_files f ON f.id = s.source_file_id AND f.owner_user_id = s.owner_user_id
+     WHERE s.owner_user_id = ? AND s.client_id = ? AND s.statement_type = 'income_statement'
+       AND COALESCE(s.period_end, s.period_start, '') >= ?
+       AND COALESCE(s.period_start, s.period_end, '') <= ?
+     LIMIT 1`,
+  ).bind(auth.user.id, client.id, period.start, period.end).first()
+  if (statement) {
+    const line = await db.prepare(
+      `SELECT current_amount, cumulative_amount FROM tax_data_financial_statement_lines
+       WHERE statement_id = ? AND line_name LIKE '%营业收入%' LIMIT 1`,
+    ).bind(statement.id).first()
+    const current = metricAmount(line?.current_amount)
+    const cumulative = metricAmount(line?.cumulative_amount)
+    if (current !== null) return `${client.name}${period.label}利润表本期营业收入为 ${current.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元。来源：${statement.file_name || '利润表'}。`
+    return `${client.name}${period.label}的利润表已经收录，但“本期营业收入”为空${cumulative !== null ? `，表内“本年累计营业收入”为 ${cumulative.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元` : ''}。因此目前不能确认3月单月销售额；累计数不能直接当作当月数。`
+  }
+  return `目前无法从标准档案确认${client.name}${period.label}的销售额。该期间未收录可提供当月销售额的增值税申报表主表或利润表本期营业收入；我不会用累计数或其他月份数据代替。`
 }
 
 function isBusinessWriteRequest(message) {
@@ -294,11 +313,21 @@ function conversationalSystemPrompt(client, assistantContext) {
 线程/企业上下文：${JSON.stringify(assistantContext || {})}`
 }
 
-async function runConversationalAssistant({ env, db, auth, model, client, message, history, assistantContext, reasoning }) {
+function normalizeImageInputs(images) {
+  return (Array.isArray(images) ? images : []).filter((item) => (
+    typeof item === 'string' && /^data:image\/(?:png|jpeg|webp);base64,/i.test(item) && item.length <= 8_000_000
+  )).slice(0, 4)
+}
+
+async function runConversationalAssistant({ env, db, auth, model, client, message, history, assistantContext, reasoning, images = [] }) {
+  const userContent = images.length ? [
+    { type: 'text', text: message || '请查看这些截图并结合当前企业上下文回答。' },
+    ...images.map((image) => ({ type: 'image_url', image_url: { url: image } })),
+  ] : message
   const messages = [
     { role: 'system', content: conversationalSystemPrompt(client, assistantContext) },
     ...history.slice(-30).map((item) => ({ role: item.role, content: item.content })),
-    { role: 'user', content: message },
+    { role: 'user', content: userContent },
   ]
   let response = await fetch(DEEPSEEK_API_URL, {
     method: 'POST',
@@ -609,10 +638,11 @@ export async function onRequestPost({ request, env }) {
     const auth = await requireUser(request, db)
     if (auth.response) return auth.response
 
-    const { message = '', history = [], client = null, risks = [], report = null, assistantContext = null } = await readJson(request)
+    const { message = '', history = [], client = null, risks = [], report = null, assistantContext = null, images = [] } = await readJson(request)
     const cleanMessage = String(message || '').trim()
     const cleanHistory = normalizeHistory(history)
     const cleanAssistantContext = normalizeAssistantContext(assistantContext)
+    const cleanImages = normalizeImageInputs(images)
     if (!cleanMessage) return badRequest('Message is required')
     if (!client?.id || !client?.name) return badRequest('Client id and name are required')
 
@@ -622,7 +652,7 @@ export async function onRequestPost({ request, env }) {
       .first()
     const clientVerified = Boolean(ownedClient)
 
-    if (ownedClient) {
+    if (ownedClient && !cleanImages.length) {
       const deterministicAnswer = await deterministicBusinessAnswer(db, auth, ownedClient, cleanMessage)
       if (deterministicAnswer) {
         return json({
@@ -644,7 +674,7 @@ export async function onRequestPost({ request, env }) {
     if (ownedClient && !isBusinessWriteRequest(cleanMessage)) {
       const conversational = await runConversationalAssistant({
         env, db, auth, model, client: ownedClient, message: cleanMessage,
-        history: cleanHistory, assistantContext: cleanAssistantContext, reasoning,
+        history: cleanHistory, assistantContext: cleanAssistantContext, reasoning, images: cleanImages,
       })
       return json({
         answer: conversational.answer,
