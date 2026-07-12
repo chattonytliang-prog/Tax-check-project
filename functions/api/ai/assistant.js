@@ -212,14 +212,29 @@ async function executeReadOnlyAgentTool(db, auth, toolCall, fallbackClientId) {
   if (name === 'search_customer_memory') {
     const query = String(args.query || '').trim()
     try {
+      if (!query) {
+        const result = await db.prepare(
+          `SELECT memory_key, memory_value, source, confidence, updated_at
+           FROM assistant_customer_memories
+           WHERE owner_user_id = ? AND client_id = ?
+           ORDER BY updated_at DESC LIMIT 50`,
+        ).bind(auth.user.id, clientId).all()
+        return { client: owned, memories: result.results || [] }
+      }
       const result = await db.prepare(
         `SELECT memory_key, memory_value, source, confidence, updated_at
          FROM assistant_customer_memories
          WHERE owner_user_id = ? AND client_id = ?
-           AND (? = '' OR memory_key LIKE ? OR memory_value LIKE ?)
-         ORDER BY updated_at DESC LIMIT 50`,
-      ).bind(auth.user.id, clientId, query, `%${query}%`, `%${query}%`).all()
-      return { client: owned, memories: result.results || [] }
+         ORDER BY updated_at DESC LIMIT 80`,
+      ).bind(auth.user.id, clientId).all()
+      const normalized = query.toLowerCase()
+      return {
+        client: owned,
+        memories: (result.results || []).filter((item) => (
+          String(item.memory_key || '').toLowerCase().includes(normalized)
+          || String(item.memory_value || '').toLowerCase().includes(normalized)
+        )).slice(0, 50),
+      }
     } catch {
       return { client: owned, memories: [] }
     }
