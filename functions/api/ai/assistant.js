@@ -32,6 +32,7 @@ const readOnlyAgentTools = [
           clientId: { type: 'string' },
           periodStart: { type: 'string', description: 'YYYY-MM-DD' },
           periodEnd: { type: 'string', description: 'YYYY-MM-DD' },
+          includeBalances: { type: 'boolean', description: '只有用户要求查看金额或余额时才设为 true' },
         },
         required: ['clientId', 'periodStart', 'periodEnd'],
       },
@@ -178,7 +179,22 @@ async function executeReadOnlyAgentTool(db, auth, toolCall, fallbackClientId) {
     const categoryName = (code) => ({
       1: '资产类', 2: '负债类', 3: '共同类', 4: '所有者权益类', 5: '成本类', 6: '损益类',
     }[String(code || '').trim().charAt(0)] || '其他类')
-    const accounts = (result.results || []).map((row) => ({ ...row, category: categoryName(row.account_code) }))
+    const includeBalances = args.includeBalances === true
+    const accounts = (result.results || []).map((row) => ({
+      category: categoryName(row.account_code),
+      accountCode: row.account_code,
+      accountName: row.account_name,
+      ...(includeBalances ? {
+        openingDebit: row.opening_debit,
+        openingCredit: row.opening_credit,
+        currentDebit: row.current_debit,
+        currentCredit: row.current_credit,
+        ytdDebit: row.ytd_debit,
+        ytdCredit: row.ytd_credit,
+        endingDebit: row.ending_debit,
+        endingCredit: row.ending_credit,
+      } : {}),
+    }))
     const categoryCounts = accounts.reduce((summary, row) => {
       summary[row.category] = (summary[row.category] || 0) + 1
       return summary
@@ -441,7 +457,7 @@ async function runConversationalAssistant({ env, db, auth, model, client, messag
     ? `${message || '请查看这些截图并结合当前企业上下文回答。'}\n\n[视觉模型 ${vision.model} 的截图识别结果]\n${vision.content}`
     : message
   const messages = [
-    { role: 'system', content: `${conversationalSystemPrompt(client, assistantContext)}\nWhen the user asks what accounts exist in an account balance table, how many account categories there are, or requests those accounts in a table, call get_account_balance_accounts for the period inherited from the conversation. Present returned facts directly. Do not replace this request with a tax-archive completeness summary.` },
+    { role: 'system', content: `${conversationalSystemPrompt(client, assistantContext)}\nWhen the user asks what accounts exist in an account balance table, how many account categories there are, or requests those accounts in a table, call get_account_balance_accounts for the period inherited from the conversation. Present returned facts directly. Do not replace this request with a tax-archive completeness summary. If the user explicitly asks to show all accounts, output every returned account in a Markdown table instead of asking which category they want.` },
     ...history.slice(-30).map((item) => ({ role: item.role, content: item.content })),
     { role: 'user', content: userContent },
   ]
@@ -462,7 +478,7 @@ async function runConversationalAssistant({ env, db, auth, model, client, messag
     response = await fetch(DEEPSEEK_API_URL, {
       method: 'POST',
       headers: { authorization: `Bearer ${env.DEEPSEEK_API_KEY}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ model, messages, tools: readOnlyAgentTools, tool_choice: 'none', temperature: 0.25, max_tokens: 1800, ...reasoning }),
+      body: JSON.stringify({ model, messages, tools: readOnlyAgentTools, tool_choice: 'none', temperature: 0.25, max_tokens: 5000, ...reasoning }),
     })
     if (!response.ok) throw new Error(`Conversational AI follow-up failed: ${(await response.text()).slice(0, 300)}`)
     data = await response.json()
