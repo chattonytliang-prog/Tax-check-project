@@ -326,6 +326,12 @@ function metricAmount(value) {
   return Number.isFinite(number) ? number : null
 }
 
+function findBestNamedRow(rows, nameField, requestedName) {
+  const exact = rows.find((row) => String(row?.[nameField] || '').trim() === requestedName)
+  if (exact) return exact
+  return rows.find((row) => String(row?.[nameField] || '').includes(requestedName))
+}
+
 async function deterministicBusinessAnswer(db, auth, client, message) {
   const text = String(message || '').replace(/\s+/g, '')
   if (/(我们公司|我公司|本公司).{0,8}(叫什么|名称|名字)/.test(text)) {
@@ -338,7 +344,7 @@ async function deterministicBusinessAnswer(db, auth, client, message) {
   const isArchiveOverviewQuestion = /^(?:有什么|有哪些|都有什么|都有哪些|收录了什么|收录了哪些|已收录什么|已收录哪些|缺什么|缺少什么)(?:数据|资料|报表|文件)?$/.test(requestedMetric)
   if (isArchiveOverviewQuestion) return ''
   if (requestedMetric && requestedMetric !== '销售额') {
-    const financialLine = await db.prepare(
+    const financialLines = await db.prepare(
       `SELECT s.statement_type, l.line_code, l.line_name, l.current_amount, l.cumulative_amount,
               l.beginning_amount, l.ending_amount, f.file_name
        FROM tax_data_financial_statements s
@@ -347,9 +353,9 @@ async function deterministicBusinessAnswer(db, auth, client, message) {
        WHERE s.owner_user_id = ? AND s.client_id = ?
          AND COALESCE(s.period_end, s.period_start, '') >= ?
          AND COALESCE(s.period_start, s.period_end, '') <= ?
-         AND (TRIM(l.line_name) = ? OR l.line_name LIKE ?)
-       ORDER BY CASE WHEN TRIM(l.line_name) = ? THEN 0 ELSE 1 END, l.id LIMIT 1`,
-    ).bind(auth.user.id, client.id, period.start, period.end, requestedMetric, `%${requestedMetric}%`, requestedMetric).first()
+       ORDER BY l.id LIMIT 500`,
+    ).bind(auth.user.id, client.id, period.start, period.end).all()
+    const financialLine = findBestNamedRow(financialLines.results || [], 'line_name', requestedMetric)
     if (financialLine) {
       const source = financialLine.file_name || (financialLine.statement_type === 'balance_sheet' ? '资产负债表' : financialLine.statement_type === 'income_statement' ? '利润表' : '现金流量表')
       if (financialLine.statement_type === 'balance_sheet') {
@@ -361,14 +367,14 @@ async function deterministicBusinessAnswer(db, auth, client, message) {
       const cumulative = metricAmount(financialLine.cumulative_amount)
       return `${client.name}${period.label}${financialLine.line_name}：本期金额${current === null ? '为空' : `为 ${current.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元`}${cumulative === null ? '' : `，本年累计金额为 ${cumulative.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元`}。来源：${source}${financialLine.line_code ? `第${financialLine.line_code}行` : ''}。`
     }
-    const account = await db.prepare(
+    const accounts = await db.prepare(
       `SELECT account_code, account_name, ending_debit, ending_credit, f.file_name
        FROM tax_data_account_balances a
        LEFT JOIN tax_data_source_files f ON f.id = a.source_file_id AND f.owner_user_id = a.owner_user_id
        WHERE a.owner_user_id = ? AND a.client_id = ? AND a.period_end >= ? AND a.period_start <= ?
-         AND (TRIM(a.account_name) = ? OR a.account_name LIKE ?)
-       ORDER BY CASE WHEN TRIM(a.account_name) = ? THEN 0 ELSE 1 END, a.account_code LIMIT 1`,
-    ).bind(auth.user.id, client.id, period.start, period.end, requestedMetric, `%${requestedMetric}%`, requestedMetric).first()
+       ORDER BY a.account_code, a.account_name LIMIT 500`,
+    ).bind(auth.user.id, client.id, period.start, period.end).all()
+    const account = findBestNamedRow(accounts.results || [], 'account_name', requestedMetric)
     if (account) {
       const debit = metricAmount(account.ending_debit)
       const credit = metricAmount(account.ending_credit)
@@ -407,10 +413,11 @@ async function deterministicBusinessAnswer(db, auth, client, message) {
      LIMIT 1`,
   ).bind(auth.user.id, client.id, period.start, period.end).first()
   if (statement) {
-    const line = await db.prepare(
-      `SELECT current_amount, cumulative_amount FROM tax_data_financial_statement_lines
-       WHERE statement_id = ? AND line_name LIKE '%营业收入%' LIMIT 1`,
-    ).bind(statement.id).first()
+    const statementLines = await db.prepare(
+      `SELECT line_name, current_amount, cumulative_amount FROM tax_data_financial_statement_lines
+       WHERE statement_id = ? ORDER BY id LIMIT 500`,
+    ).bind(statement.id).all()
+    const line = findBestNamedRow(statementLines.results || [], 'line_name', '营业收入')
     const current = metricAmount(line?.current_amount)
     const cumulative = metricAmount(line?.cumulative_amount)
     if (current !== null) return `${client.name}${period.label}利润表本期营业收入为 ${current.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 元。来源：${statement.file_name || '利润表'}。`
