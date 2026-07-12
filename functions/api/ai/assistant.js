@@ -343,6 +343,7 @@ async function deterministicBusinessAnswer(db, auth, client, message) {
   const requestedMetric = String(metricMatch?.[1] || '').replace(/^(?:公司|我公司|我们公司|本公司)/, '').trim()
   const isArchiveOverviewQuestion = /^(?:有什么|有哪些|都有什么|都有哪些|收录了什么|收录了哪些|已收录什么|已收录哪些|缺什么|缺少什么)(?:数据|资料|报表|文件)?$/.test(requestedMetric)
   if (isArchiveOverviewQuestion) return ''
+  if (/(风险|资料|文件|报表|补充|提供|缺失|缺少|还缺|需要我)/.test(requestedMetric)) return ''
   if (requestedMetric && requestedMetric !== '销售额') {
     const financialLines = await db.prepare(
       `SELECT s.statement_type, l.line_code, l.line_name, l.current_amount, l.cumulative_amount,
