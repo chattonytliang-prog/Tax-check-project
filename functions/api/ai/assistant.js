@@ -424,31 +424,59 @@ function normalizeImageInputs(images) {
 }
 
 async function analyzeImages(env, images, prompt) {
-  const apiKey = env.QWEN_API_KEY || env.DASHSCOPE_API_KEY || env.VISION_API_KEY
-  const apiUrl = env.VISION_API_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
-  const model = env.VISION_MODEL || 'qwen-vl-max-latest'
-  if (!apiKey) throw new Error('截图粘贴已启用，但视觉模型尚未配置。请配置 QWEN_API_KEY（或 DASHSCOPE_API_KEY）后使用截图对话。')
-  const response = await fetch(apiUrl, {
+  const promptText = `请准确识别截图中的界面、文字、数字和异常，不要推测看不清的内容。用户问题：${prompt || '请说明截图内容。'}`
+  const qwenKey = env.QWEN_API_KEY || env.DASHSCOPE_API_KEY || env.VISION_API_KEY
+  const providers = []
+  const preferredProvider = String(env.VISION_PROVIDER || 'auto').toLowerCase()
+  if (preferredProvider !== 'qwen' && env.DEEPSEEK_API_KEY) {
+    providers.push({
+      name: 'DeepSeek',
+      apiKey: env.DEEPSEEK_API_KEY,
+      apiUrl: env.DEEPSEEK_VISION_API_URL || DEEPSEEK_API_URL,
+      model: env.DEEPSEEK_VISION_MODEL || env.DEEPSEEK_MODEL || DEFAULT_MODEL,
+    })
+  }
+  if (preferredProvider !== 'deepseek' && qwenKey) {
+    providers.push({
+      name: 'Qwen-VL',
+      apiKey: qwenKey,
+      apiUrl: env.VISION_API_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+      model: env.VISION_MODEL || 'qwen-vl-max-latest',
+    })
+  }
+  if (!providers.length) throw new Error('截图粘贴已启用，但视觉模型尚未配置。当前未发现可用于图片输入的 DEEPSEEK_API_KEY、QWEN_API_KEY、DASHSCOPE_API_KEY 或 VISION_API_KEY。')
+
+  const errors = []
+  for (const provider of providers) {
+    const result = await callVisionProvider(provider, images, promptText)
+    if (result.ok) return result.value
+    errors.push(`${provider.name}: ${result.error}`)
+  }
+  throw new Error(`截图识别失败。已尝试 ${errors.join('；')}`)
+}
+
+async function callVisionProvider(provider, images, promptText) {
+  const response = await fetch(provider.apiUrl, {
     method: 'POST',
-    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    headers: { authorization: `Bearer ${provider.apiKey}`, 'content-type': 'application/json' },
     body: JSON.stringify({
-      model,
+      model: provider.model,
       messages: [{
         role: 'user',
         content: [
           ...images.map((image) => ({ type: 'image_url', image_url: { url: image } })),
-          { type: 'text', text: `请准确识别截图中的界面、文字、数字和异常，不要推测看不清的内容。用户问题：${prompt || '请说明截图内容。'}` },
+          { type: 'text', text: promptText },
         ],
       }],
       temperature: 0.1,
       max_tokens: 1800,
     }),
   })
-  if (!response.ok) throw new Error(`视觉模型请求失败：${(await response.text()).slice(0, 300)}`)
+  if (!response.ok) return { ok: false, error: (await response.text()).slice(0, 300) }
   const data = await response.json()
   const content = String(data?.choices?.[0]?.message?.content || '').trim()
-  if (!content) throw new Error('视觉模型没有返回可用的截图识别结果。')
-  return { content, model }
+  if (!content) return { ok: false, error: '模型没有返回可用的截图识别结果' }
+  return { ok: true, value: { content, model: provider.model, provider: provider.name } }
 }
 
 async function runConversationalAssistant({ env, db, auth, model, client, message, history, assistantContext, reasoning, images = [] }) {
