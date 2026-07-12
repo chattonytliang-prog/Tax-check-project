@@ -2594,6 +2594,29 @@ th {
   font-size: 13px;
 }
 
+.vat-return-statement > header .vat-official-note {
+  max-width: 900px;
+  margin: 0 auto 12px;
+  color: #3f5054;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.vat-return-meta {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  color: #334b50;
+  font-size: 12px;
+  text-align: left;
+}
+
+.vat-return-meta span {
+  position: static !important;
+  color: inherit !important;
+  font-size: inherit !important;
+}
+
 .vat-return-table {
   min-width: 1040px;
   table-layout: fixed;

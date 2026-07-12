@@ -601,6 +601,15 @@ const smallEnterpriseCashFlowLines: StandardStatementLine[] = [
   ...['取得借款收到的现金|14', '吸收投资者投资收到的现金|15', '偿还借款本金支付的现金|16', '偿还借款利息支付的现金|17', '分配利润支付的现金|18', '筹资活动产生的现金流量净额|19', '四、现金净增加额|20', '加：期初现金余额|21', '五、期末现金余额|22'].map((item) => { const [name, rowNo] = item.split('|'); return { name, rowNo } }),
 ]
 
+const vatGeneralReturnLines = [
+  ['1', '（一）按适用税率计税销售额'], ['2', '其中：应税货物销售额'], ['3', '应税劳务销售额'], ['4', '纳税检查调整的销售额'],
+  ['5', '（二）按简易办法计税销售额'], ['6', '其中：纳税检查调整的销售额'], ['7', '（三）免、抵、退办法出口销售额'], ['8', '（四）免税销售额'], ['9', '其中：免税货物销售额'], ['10', '免税劳务销售额'],
+  ['11', '销项税额'], ['12', '进项税额'], ['13', '上期留抵税额'], ['14', '进项税额转出'], ['15', '免、抵、退应退税额'], ['16', '按适用税率计算的纳税检查应补缴税额'],
+  ['17=12+13-14-15+16', '应抵扣税额合计'], ['18', '实际抵扣税额'], ['19=11-18', '应纳税额'], ['20=17-18', '期末留抵税额'], ['21', '简易计税办法计算的应纳税额'], ['22', '按简易计税办法计算的纳税检查应补缴税额'], ['23', '应纳税额减征额'], ['24=19+21-23', '应纳税额合计'],
+  ['25', '期初未缴税额（多缴为负数）'], ['26', '实收出口开具专用缴款书退税额'], ['27=28+29+30+31', '本期已缴税额'], ['28', '①分次预缴税额'], ['29', '②出口开具专用缴款书预缴税额'], ['30', '③本期缴纳上期应纳税额'], ['31', '④本期缴纳欠缴税额'], ['32=24+25+26-27', '期末未缴税额（多缴为负数）'], ['33=25+26-27', '其中：欠缴税额（≥0）'], ['34=24-28-29', '本期应补（退）税额'], ['35', '即征即退实际退税额'], ['36', '期初未缴查补税额'], ['37', '本期入库查补税额'], ['38=16+22+36-37', '期末未缴查补税额'],
+  ['39', '城市维护建设税本期应补（退）税额'], ['40', '教育费附加本期应补（退）费额'], ['41', '地方教育附加本期应补（退）费额'],
+] as const
+
 function normalizedStatementName(value: unknown) {
   return String(value ?? '').replace(/[\s：:（）()“”"'、，,。·-]/g, '')
 }
@@ -639,35 +648,21 @@ function TaxDataRecordView({ slot, detail }: { slot: TaxDataSlot; detail: TaxDat
   if (!records.length && !isFinancialStatement) return <p className="tax-data-detail-status">该归档已有汇总记录，但没有可展示的标准明细。</p>
 
   if (slot.slotId === 'vat-return-main') {
-    const rows = records.map((record) => ({
-      id: record.id,
-      rowNo: recordValue(record.data, 'row_no', 'rowNo'),
-      name: recordValue(record.data, 'item_name', 'itemName'),
-      currentAmount: recordValue(record.data, 'current_amount', 'currentAmount'),
-      cumulativeAmount: recordValue(record.data, 'cumulative_amount', 'cumulativeAmount'),
-      currentTax: recordValue(record.data, 'current_tax', 'currentTax'),
-      cumulativeTax: recordValue(record.data, 'cumulative_tax', 'cumulativeTax'),
-    }))
-    const vatGroup = (rowNo: unknown) => {
-      const number = Number(String(rowNo).match(/^\d+/)?.[0] || 0)
-      if (number <= 10) return '销售额'
-      if (number <= 24) return '税款计算'
-      if (number <= 38) return '税款缴纳'
-      return '附加税费'
+    const recordsByRow = new Map(records.map((record) => [String(recordValue(record.data, 'row_no', 'rowNo')).match(/^\d+/)?.[0] || '', record]))
+    const groupStarts: Record<number, { name: string; count: number }> = {
+      1: { name: '销售额', count: 10 }, 11: { name: '税款计算', count: 14 }, 25: { name: '税款缴纳', count: 14 }, 39: { name: '附加税费', count: 3 },
     }
-    const groups = rows.reduce<Array<{ name: string; rows: typeof rows }>>((result, row) => {
-      const name = vatGroup(row.rowNo)
-      const current = result[result.length - 1]
-      if (current?.name === name) current.rows.push(row)
-      else result.push({ name, rows: [row] })
-      return result
-    }, [])
     return <section className="standard-financial-statement vat-return-statement">
-      <header><h3>{slot.name}</h3><strong>（一般纳税人适用）</strong><p>税款所属期：{slot.periodLabel}</p><span>金额单位：元（列至角分）</span></header>
+      <header><h3>{slot.name}</h3><strong>（一般纳税人适用）</strong><p className="vat-official-note">根据国家税收法律法规及增值税相关规定制定本表。纳税人不论有无销售额，均应按税务机关核定的纳税期限填写本表，并向当地税务机关申报。</p><div className="vat-return-meta"><span>税款所属时间：{slot.periodLabel}</span><span>填表日期：-</span><span>金额单位：元（列至角分）</span></div></header>
       <div className="tax-data-table-wrap financial-statement-table-wrap">
         <table className="tax-data-detail-table vat-return-table">
           <thead><tr><th rowSpan={2}>分类</th><th rowSpan={2}>项目</th><th rowSpan={2}>栏次</th><th colSpan={2}>一般项目</th><th colSpan={2}>即征即退项目</th></tr><tr><th>本月数</th><th>本年累计</th><th>本月数</th><th>本年累计</th></tr></thead>
-          <tbody>{groups.flatMap((group) => group.rows.map((row, index) => <tr key={row.id}>{index === 0 ? <td className="vat-group-cell" rowSpan={group.rows.length}>{group.name}</td> : null}<td>{displayTaxDataValue(row.name)}</td><td>{displayTaxDataValue(row.rowNo)}</td><td className="amount-cell">{taxDataAmount(row.currentAmount)}</td><td className="amount-cell">{taxDataAmount(row.cumulativeAmount)}</td><td className="amount-cell">{taxDataAmount(row.currentTax)}</td><td className="amount-cell">{taxDataAmount(row.cumulativeTax)}</td></tr>))}</tbody>
+          <tbody>{vatGeneralReturnLines.map(([rowNo, name]) => {
+            const numericRow = Number(rowNo.match(/^\d+/)?.[0])
+            const record = recordsByRow.get(String(numericRow))
+            const group = groupStarts[numericRow]
+            return <tr key={rowNo}>{group ? <td className="vat-group-cell" rowSpan={group.count}>{group.name}</td> : null}<td>{name}</td><td>{rowNo}</td><td className="amount-cell">{taxDataAmount(recordValue(record?.data || {}, 'current_amount', 'currentAmount'))}</td><td className="amount-cell">{taxDataAmount(recordValue(record?.data || {}, 'cumulative_amount', 'cumulativeAmount'))}</td><td className="amount-cell">{taxDataAmount(recordValue(record?.data || {}, 'current_tax', 'currentTax'))}</td><td className="amount-cell">{taxDataAmount(recordValue(record?.data || {}, 'cumulative_tax', 'cumulativeTax'))}</td></tr>
+          })}</tbody>
         </table>
       </div>
       <footer>标准表式：增值税及附加税费申报表 · 数据来源：客户上传原始资料</footer>
