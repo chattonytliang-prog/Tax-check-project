@@ -618,6 +618,104 @@ function TaxDataRecordView({ slot, detail }: { slot: TaxDataSlot; detail: TaxDat
   </div>
 }
 
+function taxDataSheetPattern(slotId: string) {
+  if (slotId === 'financial-balance-sheet') return /资产负债/
+  if (slotId === 'financial-income-statement') return /利润|损益/
+  if (slotId === 'financial-cash-flow') return /现金流量/
+  if (slotId === 'account-balance') return /科目余额|余额表/
+  if (slotId === 'ledger') return /明细账|序时账/
+  if (slotId === 'payroll') return /工资|薪酬/
+  if (slotId === 'iit-withholding') return /个税|所得|申报/
+  if (slotId.startsWith('invoice-')) return /发票|开票/
+  return /.*/
+}
+
+function comparableRecordName(data: Record<string, unknown>) {
+  return String(recordValue(data, 'line_name', 'lineName', 'item_name', 'itemName', 'account_name', 'accountName', 'employee_name', 'employeeName', 'person_name', 'personName', 'invoice_no', 'invoiceNo') || '').trim()
+}
+
+function numericValues(data: Record<string, unknown>) {
+  return Object.entries(data).flatMap(([key, value]) => {
+    if (/row|code|date|rate/i.test(key) || value === null || value === undefined || value === '') return []
+    const number = Number(String(value).replace(/,/g, ''))
+    return Number.isFinite(number) ? [number] : []
+  })
+}
+
+function rawCellNumber(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  const normalized = String(value ?? '').replace(/,/g, '').replace(/[¥￥%]/g, '').trim()
+  if (!normalized || !/^-?\d+(?:\.\d+)?$/.test(normalized)) return null
+  return Number(normalized)
+}
+
+function RawWorkbookComparison({ slot, detail }: { slot: TaxDataSlot; detail: TaxDataDetail }) {
+  const source = detail.sources.find((item) => item.stored && /\.xlsx?$/i.test(item.file_name))
+  const [sheets, setSheets] = useState<Array<{ name: string; rows: unknown[][] }>>([])
+  const [sheetName, setSheetName] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  if (!source) return null
+  const selectedSheet = sheets.find((sheet) => sheet.name === sheetName) || sheets[0]
+  const comparisons = selectedSheet ? detail.records.map((record) => {
+    const name = comparableRecordName(record.data)
+    const rowIndex = name ? selectedSheet.rows.findIndex((row) => row.some((cell) => {
+      const text = String(cell ?? '').trim()
+      return text === name || (text.length >= 4 && (text.includes(name) || name.includes(text)))
+    })) : -1
+    const rawRow = rowIndex >= 0 ? selectedSheet.rows[rowIndex] : []
+    const rawNumbers = rawRow.map(rawCellNumber).filter((value): value is number => value !== null)
+    const expectedNumbers = numericValues(record.data)
+    const valuesMatch = expectedNumbers.every((expected) => rawNumbers.some((actual) => Math.abs(actual - expected) < 0.005))
+    return { id: record.id, name: name || `记录 ${record.id}`, rowIndex, matched: rowIndex >= 0 && valuesMatch }
+  }) : []
+  const matchedCount = comparisons.filter((item) => item.matched).length
+  const unmatched = comparisons.filter((item) => !item.matched)
+
+  const loadWorkbook = async () => {
+    if (loading || sheets.length) return
+    setLoading(true)
+    setError('')
+    try {
+      const response = await fetch(`/api/tax-data/source?sourceFileId=${encodeURIComponent(source.id)}`, { credentials: 'same-origin' })
+      if (!response.ok) throw new Error('原始文件读取失败')
+      const XLSX = await import('@e965/xlsx')
+      const workbook = XLSX.read(await response.arrayBuffer(), { type: 'array', cellDates: true })
+      const parsedSheets = workbook.SheetNames.map((name) => ({
+        name,
+        rows: XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[name], { header: 1, raw: false, defval: '', blankrows: false }).slice(0, 500).map((row) => row.slice(0, 50)),
+      }))
+      const preferred = parsedSheets.find((sheet) => taxDataSheetPattern(slot.slotId).test(sheet.name)) || parsedSheets[0]
+      setSheets(parsedSheets)
+      setSheetName(preferred?.name || '')
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : '原始表格解析失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return <section className="tax-data-detail-section raw-workbook-section">
+    <div className="panel-title">
+      <div><h3>原始表格与差异核对</h3><p className="section-helper">在线读取客户原始 Excel，并自动对应当前标准化表；待复核项以原始文件为准。</p></div>
+      {!sheets.length ? <button type="button" className="secondary-button compact-button" onClick={() => void loadWorkbook()} disabled={loading}>{loading ? '正在读取...' : '在线核对原表'}</button> : null}
+    </div>
+    {error ? <p className="period-warning">{error}</p> : null}
+    {selectedSheet ? <>
+      <div className="raw-workbook-toolbar">
+        <label>原始工作表<select value={selectedSheet.name} onChange={(event) => setSheetName(event.target.value)}>{sheets.map((sheet) => <option key={sheet.name} value={sheet.name}>{sheet.name}</option>)}</select></label>
+        <strong>{matchedCount}/{comparisons.length} 行自动对应通过</strong>
+        <span className={unmatched.length ? 'has-difference' : 'all-matched'}>{unmatched.length ? `${unmatched.length} 行待复核` : '全部自动对应通过'}</span>
+      </div>
+      {unmatched.length ? <div className="tax-data-difference-list"><strong>需要复核</strong>{unmatched.slice(0, 20).map((item) => <span key={item.id}>{item.name}{item.rowIndex < 0 ? '：原表未找到对应项目' : '：对应行数值不一致'}</span>)}</div> : null}
+      <div className="tax-data-table-wrap raw-workbook-table-wrap">
+        <table className="tax-data-detail-table raw-workbook-table"><tbody>{selectedSheet.rows.map((row, rowIndex) => <tr key={rowIndex}><th>{rowIndex + 1}</th>{row.map((cell, cellIndex) => <td key={cellIndex}>{displayTaxDataValue(cell)}</td>)}</tr>)}</tbody></table>
+      </div>
+    </> : null}
+  </section>
+}
+
 function taxDataSlotCoversMonth(slot: TaxDataSlot, month: string) {
   if (slot.status !== 'collected' || !month) return false
   const startMonth = (slot.periodStart || slot.periodEnd).slice(0, 7)
@@ -7363,6 +7461,7 @@ function TaxDataDetailModal({ slot, detail, loading, error, onClose }: {
               <div className="panel-title"><h3>数据概览与明细</h3><span>{detail.totalRecords} 条</span></div>
               <TaxDataRecordView slot={slot} detail={detail} />
             </section>
+            <RawWorkbookComparison slot={slot} detail={detail} />
             <section className="tax-data-detail-section">
               <div className="panel-title"><h3>原值与字段对应</h3><span>{detail.evidence.length} 项证据</span></div>
               {detail.evidence.length ? (
