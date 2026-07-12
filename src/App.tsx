@@ -16,6 +16,7 @@ import {
   LayoutDashboard,
   LogOut,
   Plus,
+  Pencil,
   RefreshCcw,
   Search,
   Settings2,
@@ -552,7 +553,7 @@ function readableImportedText(value: unknown, fallback = '') {
 
 function isReadOnlyBusinessDataQuestion(message: string) {
   const text = message.replace(/\s+/g, '')
-  const asksForData = /(多少|是什么|是多少|有没有|有无|查询|查看|显示|哪一|情况|余额|销售额|收入|成本|利润|税额|人数|金额)/.test(text)
+  const asksForData = /(多少|什么|吗|呢|[？?]|怎么|为什么|为何|能否|是否|有没有|有无|查询|查看|显示|哪一|情况|余额|销售额|收入|成本|利润|税额|人数|金额|叫什么)/.test(text)
   const explicitlyEdits = /(改成|修改为|更正为|更新为|填写为|确认是|应当是|录入|导入|保存|入库)/.test(text)
   return asksForData && !explicitlyEdits
 }
@@ -9211,7 +9212,7 @@ function AiAssistantPage({
     materialSummaryOverride?: AssistantMaterialSummary | null,
   ) => {
     const contextDraft = draftOverride === undefined ? assistantDrafts[0] : draftOverride || undefined
-    const contextClient = contextDraft?.client || assistantThreadClient || selectedClient
+    const contextClient = assistantThreadClient || contextDraft?.client || selectedClient
     const contextRisks = contextDraft ? detectRisks(contextClient, managedRules) : risks
     const contextReport = contextDraft ? undefined : report
     const contextChecklist = filingChecklistForClient(contextClient)
@@ -9300,6 +9301,11 @@ function AiAssistantPage({
     apiDelete<{ ok: boolean }>(`/api/assistant/threads?id=${encodeURIComponent(threadId)}`).catch((error) => {
       console.warn('Assistant thread delete saved locally only.', error)
     })
+  }
+  const renameAssistantThread = (thread: AssistantThread) => {
+    const title = window.prompt('请输入会话名称', thread.title)?.trim()
+    if (!title || title === thread.title) return
+    setAssistantThreads((current) => current.map((item) => item.id === thread.id ? { ...item, title: title.slice(0, 80), updatedAt: formatDate() } : item))
   }
   const taxFactAmountFields = ['currentAmount', 'cumulativeAmount', 'endingAmount', 'currentTax', 'taxAmount', 'taxWithheld', 'grossPay', 'currentIncome', 'endingDebit', 'endingCredit']
   const taxFactKey = (record: ParsedTaxDataIntake['records'][number]) => {
@@ -9995,6 +10001,7 @@ function AiAssistantPage({
     setAssistantDragActive(false)
   }
   const applyCleaningMessageToDraft = (message: string) => {
+    if (isReadOnlyBusinessDataQuestion(message)) return null
     const inferred = inferAssistantCleaningPatch(message, assistantDrafts[0]?.client)
     const resolvedFields = resolvedConfirmationFields(message, inferred?.patch || {})
     if (!inferred && !resolvedFields.size) return null
@@ -10381,7 +10388,7 @@ function AiAssistantPage({
       const response = await apiSend<AiAssistantResponse>('/api/ai/assistant', 'POST', {
         message: cleanMessage,
         history: assistantMessages.map((item) => ({ role: item.role, content: item.content })),
-        client: assistantDrafts[0]?.client || selectedClient,
+        client: readOnlyDataQuestion ? (assistantThreadClient || selectedClient) : (assistantDrafts[0]?.client || assistantThreadClient || selectedClient),
         risks: assistantDrafts.length ? [] : risks,
         report: assistantDrafts.length ? null : report,
         assistantContext: buildAssistantContext(),
@@ -10444,6 +10451,19 @@ function AiAssistantPage({
                   <strong>{thread.title}</strong>
                   <small>{thread.messages.length} 条消息 · {thread.drafts.length} 个草稿</small>
                 </span>
+                <i
+                  className="assistant-thread-rename"
+                  role="button"
+                  tabIndex={0}
+                  aria-label="重命名对话"
+                  title="重命名对话"
+                  onClick={(event) => { event.stopPropagation(); renameAssistantThread(thread) }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); renameAssistantThread(thread) }
+                  }}
+                >
+                  <Pencil />
+                </i>
                 <i
                   role="button"
                   tabIndex={0}

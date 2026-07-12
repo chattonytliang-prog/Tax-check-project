@@ -4647,6 +4647,11 @@ textarea:focus {
   color: #8f3d42;
 }
 
+.assistant-thread-item .assistant-thread-rename:hover {
+  background: rgba(12, 140, 130, 0.1);
+  color: #08766f;
+}
+
 .assistant-thread-item i svg {
   width: 14px;
   height: 14px;
