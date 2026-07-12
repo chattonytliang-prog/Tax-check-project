@@ -332,6 +332,10 @@ function findBestNamedRow(rows, nameField, requestedName) {
   return rows.find((row) => String(row?.[nameField] || '').includes(requestedName))
 }
 
+function containsRawToolMarkup(content) {
+  return /<｜｜DSML｜｜tool_calls>|<\|\|DSML\|\|tool_calls>|<tool_call|<\/｜｜DSML｜｜invoke>|query_account_balance/i.test(String(content || ''))
+}
+
 async function deterministicBusinessAnswer(db, auth, client, message) {
   const text = String(message || '').replace(/\s+/g, '')
   if (/(我们公司|我公司|本公司).{0,8}(叫什么|名称|名字)/.test(text)) {
@@ -526,7 +530,7 @@ async function runConversationalAssistant({ env, db, auth, model, client, messag
     ? `${message || '请查看这些截图并结合当前企业上下文回答。'}\n\n[视觉模型 ${vision.model} 的截图识别结果]\n${vision.content}`
     : message
   const messages = [
-    { role: 'system', content: `${conversationalSystemPrompt(client, assistantContext)}\n客户长期记忆：${JSON.stringify(customerMemories)}\nWhen the user asks what accounts exist in an account balance table, how many account categories there are, or requests those accounts in a table, call get_account_balance_accounts for the period inherited from the conversation. Present returned facts directly. Do not replace this request with a tax-archive completeness summary. If the user explicitly asks to show all accounts, output every returned account in a Markdown table instead of asking which category they want.` },
+    { role: 'system', content: `${conversationalSystemPrompt(client, assistantContext)}\n客户长期记忆：${JSON.stringify(customerMemories)}\n只能使用本请求 tools 数组中声明的工具名。禁止输出 DSML、XML、伪工具调用或不存在的工具名；如果不能调用工具，就用中文直接说明已有事实和缺口。\nWhen the user asks what accounts exist in an account balance table, how many account categories there are, or requests those accounts in a table, call get_account_balance_accounts for the period inherited from the conversation. Present returned facts directly. Do not replace this request with a tax-archive completeness summary. If the user explicitly asks to show all accounts, output every returned account in a Markdown table instead of asking which category they want.` },
     ...history.slice(-30).map((item) => ({ role: item.role, content: item.content })),
     { role: 'user', content: userContent },
   ]
@@ -552,7 +556,32 @@ async function runConversationalAssistant({ env, db, auth, model, client, messag
     if (!response.ok) throw new Error(`Conversational AI follow-up failed: ${(await response.text()).slice(0, 300)}`)
     data = await response.json()
   }
-  const answer = String(data?.choices?.[0]?.message?.content || '').trim()
+  let answer = String(data?.choices?.[0]?.message?.content || '').trim()
+  if (containsRawToolMarkup(answer)) {
+    const repairResponse = await fetch(DEEPSEEK_API_URL, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${env.DEEPSEEK_API_KEY}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: `${conversationalSystemPrompt(client, assistantContext)}\n客户长期记忆：${JSON.stringify(customerMemories)}\n你刚才输出了无效工具调用标记。现在必须只用普通中文回答，禁止输出任何工具调用、XML、DSML、JSON。基于已知上下文说明风险、缺失资料和下一步；不能确定的就明确说需要补资料。`,
+          },
+          { role: 'user', content: userContent },
+        ],
+        tool_choice: 'none',
+        temperature: 0.2,
+        max_tokens: 1800,
+        ...reasoning,
+      }),
+    })
+    if (repairResponse.ok) {
+      const repairData = await repairResponse.json()
+      const repaired = String(repairData?.choices?.[0]?.message?.content || '').trim()
+      if (repaired && !containsRawToolMarkup(repaired)) answer = repaired
+    }
+  }
   if (!answer) throw new Error('Conversational AI returned an empty answer')
   return { answer, usage: data.usage || null }
 }
