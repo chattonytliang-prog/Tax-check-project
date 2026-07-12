@@ -540,6 +540,19 @@ function displayTaxDataValue(value: unknown) {
   return String(value)
 }
 
+function readableImportedText(value: unknown, fallback = '') {
+  const text = String(value ?? '')
+    .replace(/\?{2,}/g, '')
+    .replace(/\uFFFD+/g, '')
+    .replace(/[|｜·/\s-]+$/g, '')
+    .trim()
+  return text || fallback
+}
+
+function periodEntryDisplayLabel(entry: PeriodEntry) {
+  return readableImportedText(entry.label, `${formatMonthRange(entry.months)} 数据`)
+}
+
 function sourceFileActionLabel(fileName: string) {
   return fileName.toLowerCase().endsWith('.pdf') ? '预览源文件' : '下载源文件'
 }
@@ -592,10 +605,31 @@ function TaxDataRecordView({ slot, detail }: { slot: TaxDataSlot; detail: TaxDat
     </>
   }
 
+  const financialStatementColumns: Record<string, Array<[string, string[]]>> = {
+    'financial-balance-sheet': [['行次', ['row_no', 'rowNo']], ['项目', ['line_name', 'lineName']], ['期末余额', ['ending_amount', 'endingAmount']], ['年初余额', ['beginning_amount', 'beginningAmount']]],
+    'financial-income-statement': [['行次', ['row_no', 'rowNo']], ['项目', ['line_name', 'lineName']], ['本期金额', ['current_amount', 'currentAmount']], ['本年累计金额', ['cumulative_amount', 'cumulativeAmount']]],
+    'financial-cash-flow': [['行次', ['row_no', 'rowNo']], ['项目', ['line_name', 'lineName']], ['本期金额', ['current_amount', 'currentAmount']], ['本年累计金额', ['cumulative_amount', 'cumulativeAmount']]],
+  }
+  const financialColumns = financialStatementColumns[slot.slotId]
+  if (financialColumns) return <section className="standard-financial-statement">
+    <header>
+      <h3>{slot.name}</h3>
+      <p>会计期间：{slot.periodLabel}</p>
+      <span>金额单位：元</span>
+    </header>
+    <div className="tax-data-table-wrap financial-statement-table-wrap">
+      <table className="tax-data-detail-table financial-statement-table">
+        <thead><tr>{financialColumns.map(([label]) => <th key={label}>{label}</th>)}</tr></thead>
+        <tbody>{records.map((record) => <tr key={record.id}>{financialColumns.map(([label, keys], index) => {
+          const value = recordValue(record.data, ...keys)
+          return <td key={label} className={index >= 2 ? 'amount-cell' : undefined}>{index >= 2 ? taxDataAmount(value) : displayTaxDataValue(value)}</td>
+        })}</tr>)}</tbody>
+      </table>
+    </div>
+    <footer>数据来源：客户上传原始资料 · 系统标准化收录</footer>
+  </section>
+
   const configurations: Record<string, Array<[string, string[]]>> = {
-    'financial-balance-sheet': [['行次', ['row_no', 'rowNo']], ['项目', ['line_name', 'lineName']], ['期初余额', ['beginning_amount', 'beginningAmount']], ['期末余额', ['ending_amount', 'endingAmount']]],
-    'financial-income-statement': [['行次', ['row_no', 'rowNo']], ['项目', ['line_name', 'lineName']], ['本期金额', ['current_amount', 'currentAmount']], ['本年累计', ['cumulative_amount', 'cumulativeAmount']]],
-    'financial-cash-flow': [['行次', ['row_no', 'rowNo']], ['项目', ['line_name', 'lineName']], ['本期金额', ['current_amount', 'currentAmount']], ['本年累计', ['cumulative_amount', 'cumulativeAmount']]],
     'account-balance': [['科目编码', ['account_code', 'accountCode']], ['科目名称', ['account_name', 'accountName']], ['期初借方', ['opening_debit', 'openingDebit']], ['期初贷方', ['opening_credit', 'openingCredit']], ['本期借方', ['current_debit', 'currentDebit']], ['本期贷方', ['current_credit', 'currentCredit']], ['期末借方', ['ending_debit', 'endingDebit']], ['期末贷方', ['ending_credit', 'endingCredit']]],
     ledger: [['日期', ['entry_date', 'entryDate']], ['凭证号', ['voucher_no', 'voucherNo']], ['科目', ['account_name', 'accountName']], ['摘要', ['summary']], ['借方金额', ['debit_amount', 'debitAmount']], ['贷方金额', ['credit_amount', 'creditAmount']], ['余额', ['balance_amount', 'balanceAmount']]],
     payroll: [['员工', ['employee_name', 'employeeName']], ['应发工资', ['gross_pay', 'grossPay']], ['社保', ['social_security', 'socialSecurity']], ['公积金', ['housing_fund', 'housingFund']], ['应纳税所得额', ['taxable_income', 'taxableIncome']], ['代扣个税', ['tax_withheld', 'taxWithheld']]],
@@ -2955,11 +2989,14 @@ function groupedRiskSections(risks: RiskResult[]) {
 }
 
 function getProjectScope(client: Client): ProjectScope {
-  return client.projectScope || '单主体'
+  return client.projectScope === '集团项目' ? '集团项目' : '单主体'
 }
 
 function getEntityRole(client: Client): EntityRole {
-  return (client.entityRole || (getProjectScope(client) === '集团项目' ? '经营主体' : '单体企业')) as EntityRole
+  const allowed: EntityRole[] = ['单体企业', '集团总部', '经营主体', '关联主体', '个体户/个人独资']
+  return allowed.includes(client.entityRole as EntityRole)
+    ? client.entityRole as EntityRole
+    : getProjectScope(client) === '集团项目' ? '经营主体' : '单体企业'
 }
 
 function getGroupName(client: Client) {
@@ -6329,7 +6366,7 @@ function App() {
                     <div className="period-entry-grid">
                       {selectedClient.periodEntries.map((entry) => (
                         <article key={entry.id} className="period-entry-card">
-                          <span>{entry.label}</span>
+                          <span>{periodEntryDisplayLabel(entry)}</span>
                           <strong>{formatMonthRange(entry.months)}</strong>
                           <small>{entry.months.length} 个月｜保存于 {entry.savedAt}</small>
                           <div className="period-card-actions">
@@ -6376,9 +6413,9 @@ function App() {
                         <strong>{getProjectScope(client)}</strong>
                         <small>{getGroupName(client) || getEntityRole(client)}</small>
                       </td>
-                      <td>{client.industry}</td>
-                      <td>{client.taxpayerType}</td>
-                      <td>{client.region}</td>
+                      <td>{readableImportedText(client.industry, '未填写')}</td>
+                      <td>{readableImportedText(client.taxpayerType, '未填写')}</td>
+                      <td>{readableImportedText(client.region, '未填写')}</td>
                       <td>{client.periodEntries.length ? `${client.periodEntries.length} 期` : '未归档'}</td>
                       <td><LevelBadge level={level} /></td>
                       <td>{report ? '已生成' : '未生成'}</td>
@@ -6596,7 +6633,7 @@ function App() {
                           key={entry.id}
                           className={checked ? 'period-entry-card active' : 'period-entry-card'}
                         >
-                          <span>{entry.label}</span>
+                          <span>{periodEntryDisplayLabel(entry)}</span>
                           <strong>{formatMonthRange(entry.months)}</strong>
                           <small>{entry.months.length} 个月｜保存于 {entry.savedAt}</small>
                           <div className="period-card-actions">

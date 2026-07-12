@@ -2434,6 +2434,76 @@ th {
   flex-wrap: wrap;
 }
 
+.standard-financial-statement {
+  border: 1px solid #9fb5bb;
+  background: #fff;
+}
+
+.standard-financial-statement > header {
+  position: relative;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid #9fb5bb;
+  text-align: center;
+}
+
+.standard-financial-statement > header h3 {
+  margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.standard-financial-statement > header p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.standard-financial-statement > header span {
+  position: absolute;
+  right: 18px;
+  bottom: 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.financial-statement-table-wrap {
+  max-height: 520px;
+  border: 0;
+  border-radius: 0;
+}
+
+.financial-statement-table {
+  table-layout: fixed;
+}
+
+.financial-statement-table th,
+.financial-statement-table td {
+  border-right: 1px solid #cad7da;
+  border-bottom: 1px solid #cad7da;
+}
+
+.financial-statement-table th:first-child,
+.financial-statement-table td:first-child {
+  width: 72px;
+  text-align: center;
+}
+
+.financial-statement-table th:nth-child(2),
+.financial-statement-table td:nth-child(2) {
+  width: 42%;
+}
+
+.financial-statement-table .amount-cell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.standard-financial-statement > footer {
+  padding: 9px 14px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+}
+
 .raw-workbook-toolbar label {
   display: grid;
   gap: 4px;
@@ -2500,6 +2570,12 @@ th {
 }
 
 @media (max-width: 900px) {
+  .standard-financial-statement > header span {
+    position: static;
+    display: block;
+    margin-top: 6px;
+  }
+
   .tax-data-metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
