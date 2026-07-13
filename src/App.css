@@ -1401,6 +1401,19 @@ td small,
   font-size: 12px;
 }
 
+.tax-data-coverage-line,
+.tax-data-coverage-chip {
+  display: block;
+  color: #08766f;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.tax-data-coverage-line {
+  max-width: 100%;
+}
+
 .tax-data-folder-tile em {
   align-self: end;
   border-radius: 999px;

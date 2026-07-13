@@ -972,6 +972,31 @@ function taxDataSlotCoversMonth(slot: TaxDataSlot, month: string) {
   return Boolean(startMonth && endMonth && startMonth <= month && month <= endMonth)
 }
 
+function taxDataSlotCoveredMonths(slot: TaxDataSlot) {
+  if (slot.status !== 'collected') return []
+  const start = (slot.periodStart || slot.periodEnd).slice(0, 7)
+  const end = (slot.periodEnd || slot.periodStart).slice(0, 7)
+  if (!start || !end) return []
+  const months: string[] = []
+  let cursor = monthIndex(start)
+  const last = monthIndex(end)
+  while (cursor <= last && months.length < 240) {
+    months.push(monthFromIndex(cursor))
+    cursor += 1
+  }
+  return months
+}
+
+function formatTaxDataCoverageMonths(months: string[], limit = 8) {
+  const unique = Array.from(new Set(months)).filter(Boolean).sort((a, b) => monthIndex(a) - monthIndex(b))
+  if (!unique.length) return '未覆盖月份'
+  if (areMonthsContinuous(unique)) return formatMonthRange(unique)
+  const visible = unique.slice(0, limit)
+  return unique.length > visible.length
+    ? `${visible.join('、')} 等 ${unique.length} 个月`
+    : visible.join('、')
+}
+
 const taxDataFolderOrder = [
   '增值税资料',
   '企业所得税资料',
@@ -4922,16 +4947,9 @@ function App() {
       const sourceFileCount = new Set(collectedSlots.flatMap((slot) => slot.sourceFiles.map((file) => file.id))).size
       const coveredMonths = new Set<string>()
       for (const slot of collectedSlots) {
-        const start = (slot.periodStart || slot.periodEnd).slice(0, 7)
-        const end = (slot.periodEnd || slot.periodStart).slice(0, 7)
-        if (!start || !end) continue
-        let cursor = monthIndex(start)
-        const last = monthIndex(end)
-        while (cursor <= last && coveredMonths.size < 240) {
-          coveredMonths.add(monthFromIndex(cursor))
-          cursor += 1
-        }
+        taxDataSlotCoveredMonths(slot).forEach((month) => coveredMonths.add(month))
       }
+      const coveredMonthList = Array.from(coveredMonths).sort((a, b) => monthIndex(a) - monthIndex(b))
       const status = activeTaxDataSummary?.pendingConfirmationCount && hasValidation
         ? 'pending'
         : missing === 0 && total > 0
@@ -4939,7 +4957,7 @@ function App() {
           : collected > 0
             ? 'partial'
             : 'missing'
-      return { group, slots, collected, missing, total, status, sourceFileCount, coveredMonthCount: coveredMonths.size }
+      return { group, slots, collected, missing, total, status, sourceFileCount, coveredMonthCount: coveredMonthList.length, coveredMonths: coveredMonthList }
     })
   }, [taxDataSlotsByGroup, activeTaxDataSummary?.pendingConfirmationCount])
   const selectedTaxDataFolderSummary = taxDataFolderSummaries.find((folder) => folder.group === selectedTaxDataFolder)
@@ -5315,11 +5333,6 @@ function App() {
   const selectedClientAvailableMonths = useMemo(() => (
     new Set(selectedClient?.periodEntries.flatMap((entry) => entry.months) || [])
   ), [selectedClient])
-  const periodEntriesForMonth = (client: Client, year: string, monthIndexValue: number) => {
-    const month = `${year}-${String(monthIndexValue + 1).padStart(2, '0')}`
-    return client.periodEntries.filter((entry) => entry.months.includes(month))
-  }
-
   const selectPeriodMonths = (months: string[], label: string) => {
     if (!selectedClient) return
     const expectedMonths = Array.from(new Set(months)).sort((a, b) => monthIndex(a) - monthIndex(b))
@@ -5378,14 +5391,6 @@ function App() {
   const analyzePeriodEntry = (client: Client, entry: ClientPeriodEntry) => {
     setSelectedClientId(client.id)
     setSelectedPeriodEntryIds([entry.id])
-    setRiskDetectionStep('confirm')
-    setPage('result')
-  }
-
-  const analyzeMonth = (client: Client, entries: ClientPeriodEntry[]) => {
-    if (!entries.length) return
-    setSelectedClientId(client.id)
-    setSelectedPeriodEntryIds([entries[0].id])
     setRiskDetectionStep('confirm')
     setPage('result')
   }
@@ -6648,9 +6653,12 @@ function App() {
                               <strong>{folder.group}</strong>
                               <small>{taxDataViewMode === 'overview'
                                 ? folder.collected
-                                  ? `已收录 ${folder.collected} 类 · ${folder.sourceFileCount} 份文件 · 覆盖 ${folder.coveredMonthCount} 个月`
+                                  ? `已收录 ${folder.collected} 类 · ${folder.sourceFileCount} 份文件`
                                   : '尚无历史资料'
                                 : `${folder.collected}/${folder.total} 类资料已收录`}</small>
+                              {taxDataViewMode === 'overview' && folder.collected ? (
+                                <span className="tax-data-coverage-line">覆盖：{formatTaxDataCoverageMonths(folder.coveredMonths)}</span>
+                              ) : null}
                               <em>{taxDataViewMode === 'overview'
                                 ? folder.collected > 0 ? '历史有资料' : '无历史资料'
                                 : folder.status === 'complete' ? '齐全' : folder.status === 'partial' ? '部分缺失' : folder.status === 'pending' ? '待确认' : '缺资料'}</em>
@@ -6667,7 +6675,9 @@ function App() {
                               : selectedTaxDataFolderSummary?.status === 'complete' ? '资料齐全' : selectedTaxDataFolderSummary?.status === 'partial' ? '资料部分收录' : '资料待补齐'}</strong>
                           </div>
                           <small>{taxDataViewMode === 'overview'
-                            ? `历史收录 ${selectedTaxDataFolderSummary?.collected || 0} 类 · ${selectedTaxDataFolderSummary?.sourceFileCount || 0} 份源文件`
+                            ? selectedTaxDataFolderSummary?.collected
+                              ? `历史收录 ${selectedTaxDataFolderSummary.collected} 类 · ${selectedTaxDataFolderSummary.sourceFileCount} 份源文件 · 覆盖 ${formatTaxDataCoverageMonths(selectedTaxDataFolderSummary.coveredMonths, 18)}`
+                              : '尚无历史资料'
                             : `${selectedTaxDataFolderSummary?.collected || 0}/${selectedTaxDataFolderSummary?.total || 0} 类资料已收录`}</small>
                         </header>
                         <div className="tax-data-slot-list">
@@ -6696,6 +6706,9 @@ function App() {
                                     : `${taxDataPeriodTypeLabel(slot.periodType)}收录 · ${taxDataParserTypeLabel(slot.parserType)}`}
                                 </small>
                                 {slot.sourceFiles[0]?.file_name ? <em>{slot.sourceFiles[0].file_name}</em> : null}
+                                {taxDataViewMode === 'overview' && slot.status === 'collected' ? (
+                                  <span className="tax-data-coverage-chip">覆盖：{formatTaxDataCoverageMonths(taxDataSlotCoveredMonths(slot), 12)}</span>
+                                ) : null}
                                 {slot.sourceFiles[0]?.template_matches?.[0] ? (
                                   <span className={slot.sourceFiles[0].auto_import_eligible ? 'tax-data-template-state passed' : 'tax-data-template-state failed'}>
                                     {slot.sourceFiles[0].auto_import_eligible ? '模板校验通过' : '模板待复核'} · {slot.sourceFiles[0].template_matches[0].templateName} v{slot.sourceFiles[0].template_matches[0].version}
@@ -6726,34 +6739,6 @@ function App() {
                     </div>
                   )}
                 </section>
-                <div className="archive-year-list">
-                  {selectedClientPeriodYears.map((year) => (
-                    <article key={year} className="archive-year-card">
-                      <div>
-                        <strong>{year} 年月度数据</strong>
-                        <small>有数据的月份可直接进入分析；空缺月份需要先录入。</small>
-                      </div>
-                      <div className="archive-month-grid">
-                        {monthNames.map((label, index) => {
-                          const entries = periodEntriesForMonth(selectedClient, year, index)
-                          const hasData = entries.length > 0
-                          return (
-                            <button
-                              key={`${year}-${label}`}
-                              type="button"
-                              className={hasData ? 'archive-month-cell has-data' : 'archive-month-cell'}
-                              disabled={!hasData}
-                              onClick={() => analyzeMonth(selectedClient, entries)}
-                            >
-                              <span>{label}</span>
-                              <small>{hasData ? `${entries.length} 期` : '空缺'}</small>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </article>
-                  ))}
-                </div>
                 {selectedClient.periodEntries.length > 0 && (
                   <div className="archive-period-list">
                     <strong>已录入期间</strong>
