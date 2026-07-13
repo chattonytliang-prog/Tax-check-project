@@ -11,7 +11,11 @@ async function apiError(response: Response) {
 }
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init)
+  let response = await fetch(url, init)
+  if ([502, 503, 504].includes(response.status)) {
+    await new Promise((resolve) => setTimeout(resolve, 800))
+    response = await fetch(url, init)
+  }
   if (!response.ok) throw new Error(await apiError(response))
   return response.json() as Promise<T>
 }

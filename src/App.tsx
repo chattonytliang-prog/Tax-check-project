@@ -10309,8 +10309,9 @@ function AiAssistantPage({
         : autoCleanMessages)
     } catch (error) {
       console.warn('Failed to import assistant file.', error)
-      setAssistantError('文件解析失败，请检查 Excel、CSV、TSV、JSON、文本或 PDF 是否完整且未加密。')
-      return { status: 'failed' as const, fileName: file?.name || '未知文件', recordCount: 0, reason: error instanceof Error ? error.message : String(error) }
+      const reason = error instanceof Error ? error.message : String(error)
+      setAssistantError(`文件解析或入库失败：${reason}`)
+      return { status: 'failed' as const, fileName: file?.name || '未知文件', recordCount: 0, reason }
     }
   }
   const handleAssistantDrop = (event: React.DragEvent<HTMLElement>) => {

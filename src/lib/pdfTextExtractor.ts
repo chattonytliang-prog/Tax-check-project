@@ -1,8 +1,7 @@
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
 
 export async function extractPdfTextPages(buffer: ArrayBuffer) {
-  if (typeof window === 'undefined') await import('pdfjs-dist/legacy/build/pdf.worker.mjs')
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
   if (typeof window !== 'undefined') pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
   const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) })
   const document = await loadingTask.promise
