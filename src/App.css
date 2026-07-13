@@ -2344,6 +2344,14 @@ th {
   min-width: 0;
 }
 
+.tax-data-source-list article .tax-data-source-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
 .tax-data-source-list strong {
   overflow-wrap: anywhere;
 }

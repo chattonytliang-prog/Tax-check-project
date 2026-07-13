@@ -754,7 +754,7 @@ async function saveStandardizedTaxData(db, auth, toolCall, client, body) {
           period_start = excluded.period_start,
           period_end = excluded.period_end,
           parse_status = excluded.parse_status,
-          storage_key = excluded.storage_key,
+          storage_key = COALESCE(excluded.storage_key, tax_data_source_files.storage_key),
           evidence_json = excluded.evidence_json
         WHERE tax_data_source_files.owner_user_id = excluded.owner_user_id`,
       )

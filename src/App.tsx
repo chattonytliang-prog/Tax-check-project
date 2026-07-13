@@ -585,6 +585,10 @@ function sourceFileActionLabel(fileName: string) {
   return fileName.toLowerCase().endsWith('.pdf') ? '预览源文件' : '下载源文件'
 }
 
+function canReimportSourceFile(fileName: string) {
+  return /\.(xlsx|xls|csv|tsv|txt|json|pdf)$/i.test(fileName)
+}
+
 function recordValue(data: Record<string, unknown>, ...keys: string[]) {
   for (const key of keys) {
     if (data[key] !== undefined && data[key] !== null && data[key] !== '') return data[key]
@@ -4664,6 +4668,110 @@ function App() {
     }
   }
 
+  async function reimportArchivedSource(source: TaxDataDetail['sources'][number], slot: TaxDataSlot) {
+    if (!selectedClient?.id) return
+    if (!source.stored) {
+      setTaxDataDetailError('该源文件只有归档索引，没有保存原件，无法自动重新标准化。')
+      return
+    }
+    if (!canReimportSourceFile(source.file_name)) {
+      setTaxDataDetailError('该源文件格式暂不支持自动重新标准化。')
+      return
+    }
+    setTaxDataDetailError('')
+    setTaxDataDetailLoading(true)
+    try {
+      const response = await fetch(`/api/tax-data/source?sourceFileId=${encodeURIComponent(source.id)}`, { credentials: 'include' })
+      if (!response.ok) throw new Error(await response.text())
+      const blob = await response.blob()
+      const buffer = await blob.arrayBuffer()
+      const isExcelFile = /\.(xlsx|xls)$/i.test(source.file_name)
+      const isPdfFile = /\.pdf$/i.test(source.file_name)
+      const parsedImport: ParsedClientImport = isExcelFile
+        ? await parseClientImportWorkbook(buffer, source.file_name)
+        : isPdfFile
+          ? {
+              patch: {},
+              mappings: [],
+              unmappedHeaders: [],
+              detectedTables: ['PDF 文本提取'],
+              detectedSourceType: 'PDF 税务资料',
+              taxDataIntake: parseTaxDataPdfText(source.file_name, await extractPdfTextPages(buffer)),
+            }
+          : parseClientImportText(decodeClientImportText(buffer))
+      const intake = parsedImport.taxDataIntake
+      if (!intake?.records.length) throw new Error('已保存源文件未解析出可入库标准记录。')
+      if (!intake.autoImportEligible) {
+        const failures = intake.templateMatches
+          .flatMap((match) => match.validations.filter((validation) => validation.blocking && validation.status === 'failed').map((validation) => `${match.templateName}：${validation.label}`))
+        throw new Error(`模板校验未通过，未写入业务数据。${failures.join('、')}`)
+      }
+      const batchId = `reimport:${source.id}`
+      const sourceFiles = [{
+        id: source.id,
+        materialId: source.id,
+        clientId: selectedClient.id,
+        fileName: source.file_name,
+        contentType: source.content_type || blob.type,
+        fileSize: source.file_size || blob.size,
+        documentType: source.document_type || intake.documentTypes[0] || 'other_material',
+        sourceSystem: '已归档源文件',
+        periodStart: source.period_start || slot.periodStart,
+        periodEnd: source.period_end || slot.periodEnd,
+        parseStatus: 'parsed',
+        evidence: {
+          recordCounts: intake.recordCounts,
+          warnings: intake.warnings,
+          templateMatches: intake.templateMatches,
+          autoImportEligible: intake.autoImportEligible,
+        },
+      }]
+      const chunkSize = 80
+      const chunks = Array.from({ length: Math.ceil(intake.records.length / chunkSize) }, (_, index) => index * chunkSize)
+      for (const offset of chunks) {
+        const records = intake.records.slice(offset, offset + chunkSize).map((record) => ({ ...record, sourceFileId: source.id }))
+        const recordIds = new Set(records.map((record) => record.id))
+        const result = await apiSend<{ results: Array<{ name: string; status: string; message: string }> }>('/api/assistant/tools', 'POST', {
+          toolCalls: [{
+            name: 'save_standardized_tax_data',
+            arguments: {
+              batchId,
+              clientId: selectedClient.id,
+              clientName: selectedClient.name,
+              clientCreditCode: selectedClient.creditCode,
+              periodStart: source.period_start || slot.periodStart,
+              periodEnd: source.period_end || slot.periodEnd,
+              status: offset + records.length >= intake.records.length ? 'confirmed' : 'importing',
+              sourceFiles,
+              records,
+              evidenceFields: intake.evidenceFields.filter((item) => recordIds.has(item.targetId)).map((item) => ({ ...item, sourceFileId: source.id })),
+              conflicts: offset === 0 ? intake.conflicts : [],
+              summary: { totalRecordCount: intake.records.length, recordCounts: intake.recordCounts, warnings: intake.warnings, source: 'archived_source_reimport' },
+            },
+            reason: `使用已保存源文件重新标准化：${source.file_name}`,
+            requiresConfirmation: false,
+          }],
+          allowSave: true,
+          currentDraft: { id: batchId, client: selectedClient },
+        })
+        const failed = result.results.find((item) => item.status === 'failed' || item.status === 'rejected')
+        if (failed) throw new Error(failed.message)
+      }
+      taxDataDetailCache.current.clear()
+      try {
+        const refreshed = await apiGet<TaxDataSummary>(`/api/tax-data/summary?clientId=${encodeURIComponent(selectedClient.id)}`)
+        setTaxDataSummary(refreshed)
+      } catch (error) {
+        console.warn('Failed to refresh tax data summary after source reimport.', error)
+      }
+      await openTaxDataDetail(slot)
+    } catch (error) {
+      setTaxDataDetailError(error instanceof Error ? error.message : '重新标准化失败')
+    } finally {
+      setTaxDataDetailLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!loggedIn || !selectedClient?.id) {
       return
@@ -7728,6 +7836,7 @@ function App() {
           detail={taxDataDetail}
           loading={taxDataDetailLoading}
           error={taxDataDetailError}
+          onReimportSource={reimportArchivedSource}
           onClose={() => setTaxDataDetailSlot(null)}
         />
       </main>
@@ -7735,11 +7844,12 @@ function App() {
   )
 }
 
-function TaxDataDetailModal({ slot, detail, loading, error, onClose }: {
+function TaxDataDetailModal({ slot, detail, loading, error, onReimportSource, onClose }: {
   slot: TaxDataSlot | null
   detail: TaxDataDetail | null
   loading: boolean
   error: string
+  onReimportSource?: (source: TaxDataDetail['sources'][number], slot: TaxDataSlot) => void
   onClose: () => void
 }) {
   if (!slot) return null
@@ -7754,7 +7864,7 @@ function TaxDataDetailModal({ slot, detail, loading, error, onClose }: {
           </div>
           <button type="button" className="icon-text-button" onClick={onClose}>关闭</button>
         </div>
-        {loading && !slot.slotId.startsWith('financial-') ? <p className="tax-data-detail-status">正在读取资料和标准数据...</p> : null}
+        {loading && !slot.slotId.startsWith('financial-') ? <p className="tax-data-detail-status">正在打开已归档明细...</p> : null}
         {loading && !detail && slot.slotId.startsWith('financial-') ? (
           <section className="tax-data-detail-section instant-standard-table">
             <div className="panel-title"><h3>标准报表</h3><span>正在填入已收录金额</span></div>
@@ -7771,9 +7881,14 @@ function TaxDataDetailModal({ slot, detail, loading, error, onClose }: {
                   <article key={source.id}>
                     <FileText />
                     <div><strong>{source.file_name}</strong><small>{source.period_start} 至 {source.period_end} · {source.parse_status}</small></div>
-                    {source.stored
-                      ? <a className="secondary-button compact-button" href={`/api/tax-data/source?sourceFileId=${encodeURIComponent(source.id)}`} target="_blank" rel="noreferrer">{sourceFileActionLabel(source.file_name)}</a>
-                      : <span className="tax-data-source-unavailable">仅保留归档索引</span>}
+                    <div className="tax-data-source-actions">
+                      {source.stored
+                        ? <a className="secondary-button compact-button" href={`/api/tax-data/source?sourceFileId=${encodeURIComponent(source.id)}`} target="_blank" rel="noreferrer">{sourceFileActionLabel(source.file_name)}</a>
+                        : <span className="tax-data-source-unavailable">仅保留归档索引</span>}
+                      {source.stored && canReimportSourceFile(source.file_name) && onReimportSource
+                        ? <button type="button" className="secondary-button compact-button" onClick={() => onReimportSource(source, slot)}>重新标准化</button>
+                        : null}
+                    </div>
                   </article>
                 ))}
               </div>
