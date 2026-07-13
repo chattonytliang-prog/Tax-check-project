@@ -72,7 +72,7 @@ import {
 } from './lib/clientImportParser'
 import { extractPdfTextPages } from './lib/pdfTextExtractor'
 import { parseTaxDataPdfText, type ParsedTaxDataIntake } from './lib/taxDataIntakeParser'
-import { binaryAssistantReplyMessage, hasDirectIntakeAuthorization, instantAssistantReply, isArchiveChecklistQuestion, isBinaryAssistantQuestion } from './lib/assistantIntakeIntent'
+import { binaryAssistantReplyMessage, hasDirectIntakeAuthorization, inferAssistantThreadRenameTitle, instantAssistantReply, isArchiveChecklistQuestion, isBinaryAssistantQuestion } from './lib/assistantIntakeIntent'
 import {
   classifyIntakeMaterial,
   detectIntakePeriod,
@@ -9562,6 +9562,11 @@ function AiAssistantPage({
         : thread
     ))
   }
+  const setActiveAssistantThreadTitle = (title: string) => {
+    const cleanTitle = title.replace(/\s+/g, ' ').trim().slice(0, 80)
+    if (!cleanTitle) return
+    updateActiveAssistantThread((thread) => ({ ...thread, title: cleanTitle, updatedAt: formatDate() }))
+  }
   const bindActiveAssistantThreadToClient = (client: Pick<Client, 'id' | 'name'>) => {
     updateActiveAssistantThread((thread) => ({
       ...thread,
@@ -10768,6 +10773,19 @@ function AiAssistantPage({
     setAssistantInput('')
     updateAssistantThreadTitle(cleanMessage)
     setActiveAssistantMessages(nextMessages)
+    const requestedThreadTitle = inferAssistantThreadRenameTitle(
+      cleanMessage,
+      assistantThreadClient?.name || assistantDrafts[0]?.client.name || selectedClient?.name || '',
+    )
+    if (requestedThreadTitle) {
+      setActiveAssistantThreadTitle(requestedThreadTitle)
+      setActiveAssistantMessages([
+        ...nextMessages,
+        { id: crypto.randomUUID(), role: 'assistant', content: `已把当前对话名称改为「${requestedThreadTitle}」。` },
+      ])
+      if (isRunActive()) assistantAbortRef.current = null
+      return
+    }
     const instantReply = instantAssistantReply(cleanMessage)
     if (instantReply) {
       setActiveAssistantMessages([...nextMessages, { id: crypto.randomUUID(), role: 'assistant', content: instantReply }])

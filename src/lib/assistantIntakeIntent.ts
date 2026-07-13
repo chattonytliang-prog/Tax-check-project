@@ -31,6 +31,25 @@ export function isArchiveChecklistQuestion(message: string) {
   )
 }
 
+export function inferAssistantThreadRenameTitle(message: string, currentClientName = '') {
+  const text = message.replace(/\s+/g, '').trim()
+  if (!text) return ''
+  const mentionsThreadTitle = (
+    /(线程|对话|会话|聊天|聊天记录|任务).{0,10}(名字|名称|标题)/.test(text)
+    || /(名字|名称|标题).{0,10}(线程|对话|会话|聊天|聊天记录|任务)/.test(text)
+  )
+  if (!mentionsThreadTitle) return ''
+  if (!/(改|改成|改为|修改|重命名|命名|叫)/.test(text)) return ''
+
+  const clientAliasPattern = /(我们公司|我公司|本公司|当前企业|这个企业|该企业|公司名字|公司名称|企业名字|企业名称)/
+  if (clientAliasPattern.test(text)) return currentClientName.trim().slice(0, 80)
+
+  const titleMatch = text.match(/(?:改成|改为|修改为|重命名为|命名为|叫做|叫)[「“"']?([^」”"'，。！？!?、\n]+)/)
+  const title = (titleMatch?.[1] || '').replace(/(这个|当前)?(线程|对话|会话|聊天|聊天记录|任务)(的)?(名字|名称|标题)?/g, '').trim()
+  if (!title || clientAliasPattern.test(title)) return currentClientName.trim().slice(0, 80)
+  return title.slice(0, 80)
+}
+
 export function binaryAssistantReplyMessage(question: string, answer: '是' | '否') {
   return `针对“${question.replace(/[？?。]+$/, '')}”，我的回答是：${answer}。`
 }

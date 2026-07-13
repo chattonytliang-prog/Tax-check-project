@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { binaryAssistantReplyMessage, hasDirectIntakeAuthorization, instantAssistantReply, isArchiveChecklistQuestion, isBinaryAssistantQuestion } from './assistantIntakeIntent'
+import { binaryAssistantReplyMessage, hasDirectIntakeAuthorization, inferAssistantThreadRenameTitle, instantAssistantReply, isArchiveChecklistQuestion, isBinaryAssistantQuestion } from './assistantIntakeIntent'
 
 describe('hasDirectIntakeAuthorization', () => {
   it.each([
@@ -52,5 +52,19 @@ describe('archive checklist questions', () => {
     expect(isArchiveChecklistQuestion('2026年3月已经有哪些资料？')).toBe(true)
     expect(isArchiveChecklistQuestion('资料齐全吗')).toBe(true)
     expect(isArchiveChecklistQuestion('帮我分析税务风险')).toBe(false)
+  })
+})
+
+describe('assistant thread rename intent', () => {
+  it('uses the current client name when the user asks to rename the thread to our company', () => {
+    expect(inferAssistantThreadRenameTitle('改一下名字，你线程的名字，改成我们公司名字', '北京正泰浦电气科技有限公司')).toBe('北京正泰浦电气科技有限公司')
+  })
+
+  it('extracts an explicit thread title', () => {
+    expect(inferAssistantThreadRenameTitle('把当前对话标题改成北京正泰浦电气科技有限公司', '')).toBe('北京正泰浦电气科技有限公司')
+  })
+
+  it('does not treat business data rename requests as thread rename permission', () => {
+    expect(inferAssistantThreadRenameTitle('把客户名称改成北京正泰浦电气科技有限公司', '北京正泰浦电气科技有限公司')).toBe('')
   })
 })
