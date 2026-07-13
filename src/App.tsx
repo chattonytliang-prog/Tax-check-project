@@ -7875,7 +7875,7 @@ function TaxDataDetailModal({ slot, detail, loading, error, onReimportSource, on
         {loading && !slot.slotId.startsWith('financial-') ? <p className="tax-data-detail-status">正在打开已归档明细...</p> : null}
         {loading && !detail && slot.slotId.startsWith('financial-') ? (
           <section className="tax-data-detail-section instant-standard-table">
-            <div className="panel-title"><h3>标准报表</h3><span>正在填入已收录金额</span></div>
+            <div className="panel-title"><h3>标准报表</h3><span>按已入库结构化数据展示</span></div>
             <TaxDataRecordView slot={slot} detail={{ sources: [], records: [], evidence: [], totalRecords: 0, truncated: false }} />
           </section>
         ) : null}
