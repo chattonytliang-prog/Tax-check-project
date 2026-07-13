@@ -684,7 +684,15 @@ const payrollStandardColumns: Array<{ label: string; keys: string[]; amount?: bo
 
 function payrollSequence(record: TaxDataDetail['records'][number], fallback: number) {
   const value = recordValue(record.data, 'source_sequence_no', 'sourceSequenceNo', 'source_row_no', 'sourceRowNo')
-  const numeric = Number(String(value ?? '').replace(/[^\d.-]/g, ''))
+  let numeric = Number(String(value ?? '').replace(/[^\d.-]/g, ''))
+  if (!Number.isFinite(numeric)) {
+    try {
+      const raw = JSON.parse(String(recordValue(record.data, 'raw_json', 'rawJson') || '{}'))
+      numeric = Number(String(raw.sourceSequenceNo ?? raw.sourceRowNo ?? '').replace(/[^\d.-]/g, ''))
+    } catch {
+      numeric = NaN
+    }
+  }
   return Number.isFinite(numeric) ? numeric : fallback + 1
 }
 

@@ -86,9 +86,12 @@ async function typedRecords(db, ownerUserId, clientId, sourceFileIds, slotId, pe
     const period = periodClause('r.period_start', 'r.period_end', periodStart, periodEnd)
     sql = `SELECT l.id, r.source_file_id, r.period_start, r.period_end, l.source_sequence_no, l.employee_name, l.id_type, l.id_number, l.id_number_masked,
                   l.gross_pay, l.social_security, l.medical_insurance, l.unemployment_insurance, l.housing_fund,
-                  l.cumulative_income, l.cumulative_deduction, l.taxable_income, l.tax_rate, l.tax_payable, l.paid_tax, l.tax_due_refund, l.tax_withheld, l.net_pay
+                  l.cumulative_income, l.cumulative_deduction, l.taxable_income, l.tax_rate, l.tax_payable, l.paid_tax, l.tax_due_refund, l.tax_withheld, l.net_pay,
+                  l.raw_json
            FROM tax_data_payroll_runs r JOIN tax_data_payroll_lines l ON l.payroll_run_id = r.id
-           WHERE r.owner_user_id = ? AND r.client_id = ? AND r.source_file_id IN (${placeholders})${period.sql} ORDER BY l.id LIMIT 500`
+           WHERE r.owner_user_id = ? AND r.client_id = ? AND r.source_file_id IN (${placeholders})${period.sql}
+           ORDER BY CAST(COALESCE(NULLIF(l.source_sequence_no, ''), json_extract(l.raw_json, '$.sourceRowNo'), l.id) AS REAL), l.id
+           LIMIT 500`
     base.push(...period.params)
   } else if (slotId === 'iit-withholding') {
     const period = periodClause('r.period_start', 'r.period_end', periodStart, periodEnd)
