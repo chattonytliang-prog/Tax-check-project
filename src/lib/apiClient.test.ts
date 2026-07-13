@@ -15,6 +15,7 @@ function mockFetch(response: Partial<Response> & { jsonBody?: unknown; jsonError
 
 describe('apiClient', () => {
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
   })
 
@@ -66,5 +67,38 @@ describe('apiClient', () => {
     mockFetch({ ok: false, status: 500, jsonError: new Error('invalid json') })
 
     await expect(apiGet('/api/items')).rejects.toThrow('API request failed: 500')
+  })
+
+  it('retries transient gateway failures once before returning JSON', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 503, json: vi.fn().mockResolvedValue({}) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: vi.fn().mockResolvedValue({ recovered: true }) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const request = apiGet('/api/transient')
+    await vi.advanceTimersByTimeAsync(800)
+
+    await expect(request).resolves.toEqual({ recovered: true })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('uses server detail when a transient retry still fails with a server error wrapper', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 504, json: vi.fn().mockResolvedValue({}) })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: vi.fn().mockResolvedValue({ error: 'Server error', detail: 'D1 busy' }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const request: Promise<Error> = apiGet<never>('/api/transient').catch((error: Error) => error)
+    await vi.advanceTimersByTimeAsync(800)
+
+    const error = await request
+    expect(error).toBeInstanceOf(Error)
+    expect(error.message).toBe('D1 busy')
   })
 })

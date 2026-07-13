@@ -104,14 +104,8 @@ export function detectTaxDataPeriod(text: string): Period {
     const end = monthPeriod(range[3], range[4])
     return { periodStart: start.periodStart, periodEnd: range[5] ? `${range[3]}-${range[4].padStart(2, '0')}-${range[5].padStart(2, '0')}` : end.periodEnd }
   }
-  const compactRange = text.match(/(20\d{2})(\d{2})\s*[-~—]\s*(20\d{2})(\d{2})/)
-  if (compactRange) {
-    return { periodStart: monthPeriod(compactRange[1], compactRange[2]).periodStart, periodEnd: monthPeriod(compactRange[3], compactRange[4]).periodEnd }
-  }
   const fullDates = Array.from(text.matchAll(/(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})日?/g))
   if (fullDates.length >= 2) return { periodStart: isoDate(fullDates[0][0]), periodEnd: isoDate(fullDates[1][0]) }
-  const compact = text.match(/(20\d{2})(\d{2})(?!\d)/)
-  if (compact) return monthPeriod(compact[1], compact[2])
   const month = text.match(/(20\d{2})\s*[年./-]\s*(\d{1,2})\s*月?/)
   return month ? monthPeriod(month[1], month[2]) : {}
 }
@@ -512,7 +506,7 @@ function vatLineRecords(text: string, period: Period) {
   return records
 }
 
-function vatScheduleFourRecords(text: string, period: Period) {
+export function parseVatScheduleFourRecords(text: string, period: Period = {}) {
   const records: StandardTaxRecord[] = []
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
   let pending: { rowNo: string; itemName: string } | null = null
@@ -568,7 +562,7 @@ export function parseTaxDataPdfText(fileName: string, pages: string[]): ParsedTa
   }
   result.documentTypes = [/附列资料|附表/.test(`${fileName} ${text}`) ? 'vat_return_schedule' : 'vat_return']
   const period = detectTaxDataPeriod(`${fileName} ${text.slice(0, 1500)}`)
-  result.records = result.documentTypes[0] === 'vat_return_schedule' ? vatScheduleFourRecords(text, period) : vatLineRecords(text, period)
+  result.records = result.documentTypes[0] === 'vat_return_schedule' ? parseVatScheduleFourRecords(text, period) : vatLineRecords(text, period)
   result.recordCounts.vat_return = result.records.length
   result.records.forEach((record, index) => {
     result.evidenceFields.push(...evidenceFor(record, '', index + 1, Object.entries(record.payload).slice(0, 3).map(([field, value]) => [field, value])))

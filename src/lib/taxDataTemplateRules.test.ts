@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseTaxDataPdfText, parseTaxDataWorkbook } from './taxDataIntakeParser'
-import { supportedTaxDataTemplates } from './taxDataTemplateRules'
+import { matchPdfTemplate, matchWorkbookTemplate, supportedTaxDataTemplates } from './taxDataTemplateRules'
 
 describe('tax data template rules', () => {
   it('publishes every supported production template with a stable version', () => {
@@ -75,5 +75,54 @@ describe('tax data template rules', () => {
 
     expect(new Set(parsed.records.map((record) => record.recordSubtype))).toEqual(new Set(['balance_sheet', 'income_statement', 'cash_flow_statement']))
     expect(parsed.templateMatches.every((match) => match.templateId === 'small_enterprise_financial_batch_excel_v1' && match.autoImportEligible)).toBe(true)
+  })
+
+  it('returns no workbook template when the document type has no candidate rule', () => {
+    const match = matchWorkbookTemplate('unknown.xlsx', { name: 'Sheet1', rows: [['header']] }, 'other_material', false, 0)
+
+    expect(match).toBeUndefined()
+  })
+
+  it('keeps matched templates at medium confidence until blocking validations pass', () => {
+    const match = matchWorkbookTemplate('2024\u5e749\u6708-2024\u5e7410\u6708\u5de5\u8d44\u8868.xlsx', {
+      name: 'Sheet1',
+      rows: [
+        ['\u5de5\u8d44\u8868'],
+        ['\u59d3\u540d', '\u8eab\u4efd\u8bc1\u4ef6\u7c7b\u578b', '\u8eab\u4efd\u8bc1\u4ef6\u53f7\u7801', '\u5de5\u8d44', '\u57fa\u672c\u517b\u8001\u4fdd\u9669\u8d39', '\u57fa\u672c\u533b\u7597\u4fdd\u9669\u8d39', '\u5931\u4e1a\u4fdd\u9669\u8d39', '\u5e94\u7eb3\u7a0e\u6240\u5f97\u989d'],
+      ],
+    }, 'payroll', false, 0)
+
+    expect(match).toMatchObject({
+      templateId: 'payroll_multi_month_excel_v1',
+      matched: true,
+      autoImportEligible: false,
+      confidence: 'medium',
+    })
+  })
+
+  it('returns the best pdf template candidate with validation warnings', () => {
+    const match = matchPdfTemplate(
+      'untrusted-name.pdf',
+      [
+        '澧炲€肩◣鍙婇檮鍔犵◣璐圭敵鎶ヨ〃',
+        '涓€鑸撼绋庝汉閫傜敤',
+        '绋庢鎵€灞炴椂闂?',
+        '绾崇◣浜哄悕绉?',
+        '閿€鍞',
+        '閿€椤圭◣棰?',
+        '杩涢」绋庨',
+        '搴旂撼绋庨',
+      ].join('\n'),
+      'vat_return',
+      true,
+      2,
+    )
+
+    expect(match).toMatchObject({
+      templateId: 'vat_general_return_main_pdf_v1',
+      matched: false,
+      confidence: 'low',
+    })
+    expect(match?.validations).toContainEqual(expect.objectContaining({ code: 'file_name', status: 'warning', blocking: false }))
   })
 })

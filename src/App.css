@@ -4812,6 +4812,42 @@ textarea:focus {
   color: var(--ink);
 }
 
+.ai-assistant-message-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.ai-assistant-message-head strong {
+  margin: 0;
+}
+
+.ai-assistant-message-head button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  border: 1px solid rgba(12, 140, 130, 0.18);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #087a7a;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.ai-assistant-message-head button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ai-assistant-message-head button:hover {
+  border-color: rgba(18, 174, 234, 0.34);
+  background: rgba(18, 174, 234, 0.08);
+}
+
 .ai-assistant-empty-chat p,
 .ai-assistant-message p,
 .ai-assistant-message li {

@@ -109,22 +109,26 @@ function resultFor(rule: WorkbookTemplateRule | PdfTemplateRule, signatureText: 
   }
 }
 
+function rankTemplateMatches(matches: TemplateMatch[]) {
+  if (matches.length < 2) return matches
+  return matches.sort((a, b) => Number(b.matched) - Number(a.matched) || b.validations.filter((item) => item.status === 'passed').length - a.validations.filter((item) => item.status === 'passed').length)
+}
+
 export function matchWorkbookTemplate(fileName: string, sheet: IntakeSheet, documentType: IntakeDocumentType, hasPeriod: boolean, recordCount: number) {
   const text = normalizeText(`${fileName}\n${sheet.name}\n${sheet.rows.slice(0, 12).flat().join('\n')}`)
   const candidates = workbookRules.filter((rule) => rule.documentType === documentType)
-  const ranked = candidates.map((rule) => {
+  const ranked = rankTemplateMatches(candidates.map((rule) => {
     const fileNameMatched = !rule.fileName || rule.fileName.test(fileName)
     const sheetNameMatched = !rule.sheetName || rule.sheetName.test(sheet.name)
     return resultFor(rule, text, fileNameMatched, sheetNameMatched, hasPeriod, recordCount)
-  }).sort((a, b) => Number(b.matched) - Number(a.matched) || b.validations.filter((item) => item.status === 'passed').length - a.validations.filter((item) => item.status === 'passed').length)
+  }))
   return ranked[0]
 }
 
 export function matchPdfTemplate(fileName: string, text: string, documentType: IntakeDocumentType, hasPeriod: boolean, recordCount: number) {
   const sample = normalizeText(`${fileName}\n${text}`)
   const candidates = pdfRules.filter((rule) => rule.documentType === documentType)
-  const ranked = candidates.map((rule) => resultFor(rule, sample, !rule.fileName || rule.fileName.test(fileName), true, hasPeriod, recordCount))
-    .sort((a, b) => Number(b.matched) - Number(a.matched) || b.validations.filter((item) => item.status === 'passed').length - a.validations.filter((item) => item.status === 'passed').length)
+  const ranked = rankTemplateMatches(candidates.map((rule) => resultFor(rule, sample, !rule.fileName || rule.fileName.test(fileName), true, hasPeriod, recordCount)))
   return ranked[0]
 }
 

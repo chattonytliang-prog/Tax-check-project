@@ -22,6 +22,7 @@ import {
   Settings2,
   ShieldCheck,
   Sparkles,
+  Square,
   Trash2,
   UserCog,
   Printer,
@@ -3112,7 +3113,7 @@ function coerceImportedClientPatch(patch: Record<string, unknown>) {
     if (value === undefined || value === null || value === '') return
     if (key === 'name') {
       const candidate = String(value).trim()
-      if (/^(开票日期|填发日期|序号|项目|名称|企业名称|纳税人名称|单位名称|日期|合计|总计)$/.test(candidate) || /^\d{4,}$/.test(candidate)) return
+      if (isInvalidImportedCompanyName(candidate)) return
     }
     if (key === 'creditCode') {
       const candidate = String(value).replace(/\s+/g, '').toUpperCase()
@@ -3153,6 +3154,18 @@ function isPlaceholderCompanyName(value: unknown) {
   return /^(?:你知道)?(?:我|我们|本|该|这家|客户)公司(?:叫什么名字|叫什么|名称是什么|是什么)?$/.test(name)
 }
 
+function isInvalidImportedCompanyName(value: unknown) {
+  const name = String(value ?? '').trim()
+  const compactName = name.replace(/[《》【】（）()[\]？?。！!，,\s]/g, '')
+  if (!compactName) return true
+  if (/^\d{4,}$/.test(compactName)) return true
+  if (/^(开票日期|填发日期|序号|项目|名称|企业名称|纳税人名称|单位名称|日期|合计|总计)$/.test(compactName)) return true
+  if (isPlaceholderCompanyName(compactName)) return true
+  if (/^(增值税|附加税费|税额抵减|科目余额表|余额表|工资表|明细账|资产负债表|利润表|现金流量表|发票清单|综合所得申报|个人所得税|企业所得税|纳税申报|申报表|附列资料|情况表|资料|报表)/.test(compactName)) return true
+  if (/(申报表|附列资料|情况表|余额表|工资表|明细账|发票清单|纳税申报表|资料|报表)$/.test(compactName)) return true
+  return false
+}
+
 function inferClientPatchFromFileName(fileName: string): Partial<Client> {
   const baseName = fileName.replace(/\.[^.]+$/, '')
   const periodMatch = baseName.match(/(20\d{2})[年.\-/]?\s*(0?[1-9]|1[0-2])\s*月?/)
@@ -3161,14 +3174,9 @@ function inferClientPatchFromFileName(fileName: string): Partial<Client> {
   const month = periodMatch?.[2] || rangePeriodMatch?.[2] || ''
   const periodMonth = year && month ? `${year}-${month.padStart(2, '0')}` : ''
   const inferredCompanyName = extractCompanyNameFromText(baseName)
-  const name = inferredCompanyName || baseName
-    .replace(/[（(].*?[）)]/g, '')
-    .replace(/20\d{2}[年.\-/]?\s*(0?[1-9]|1[0-2])\s*月?/g, '')
-    .replace(/20\d{2}\s*(0[1-9]|1[0-2])\s*[-至到]\s*20\d{2}\s*(0[1-9]|1[0-2])/g, '')
-    .replace(/\b20\d{6}\b/g, '')
-    .replace(/[_\-—]+/g, ' ')
-    .replace(/明细账|全部科目|余额表|批量导出|科目余额表|资产负债表|利润表|现金流量表|导出/g, '')
-    .trim()
+  const name = inferredCompanyName && !isInvalidImportedCompanyName(inferredCompanyName)
+    ? inferredCompanyName
+    : ''
   return {
     ...(name ? { name } : {}),
     ...(periodMonth
@@ -9367,6 +9375,8 @@ function AiAssistantPage({
   const assistantChatBottomRef = useRef<HTMLDivElement | null>(null)
   const assistantShouldStickToBottomRef = useRef(true)
   const assistantProgrammaticScrollRef = useRef(false)
+  const assistantAbortRef = useRef<AbortController | null>(null)
+  const assistantRunIdRef = useRef(0)
   const structuredIntakeByDraftId = useRef(new Map<string, ParsedTaxDataIntake>())
   const activeAssistantThread = assistantThreads.find((thread) => thread.id === activeAssistantThreadId) || assistantThreads[0]
   const assistantThreadClient = clients.find((client) => client.id === activeAssistantThread?.clientId)
@@ -9394,6 +9404,9 @@ function AiAssistantPage({
   const currentUploadCount = currentAssistantDraft?.rawMaterials.length || 0
   const currentQuestionCount = currentAssistantDraft?.confirmationQuestions.length || 0
   const currentRecordCount = Object.values(currentAssistantDraft?.taxDataRecordCounts || {}).reduce((sum, value) => sum + value, 0)
+  const currentAssistantClientName = currentAssistantDraft?.client.name && !isInvalidImportedCompanyName(currentAssistantDraft.client.name)
+    ? currentAssistantDraft.client.name
+    : selectedClient.name || '待确认'
   const scrollAssistantChatToBottom = () => {
     const chat = assistantChatRef.current
     if (!chat) return
@@ -9586,6 +9599,27 @@ function AiAssistantPage({
     if (!title || title === thread.title) return
     setAssistantThreads((current) => current.map((item) => item.id === thread.id ? { ...item, title: title.slice(0, 80), updatedAt: formatDate() } : item))
   }
+  const stopAssistantRun = () => {
+    assistantRunIdRef.current += 1
+    assistantAbortRef.current?.abort()
+    assistantAbortRef.current = null
+    setAssistantLoading(false)
+    setAssistantProgress(null)
+    setAssistantNotice('已停止当前处理。已经完成入库的文件不会自动回滚；未完成的回复不会再追加到对话。')
+  }
+  const editAssistantUserMessage = (messageId: string) => {
+    if (assistantLoading) {
+      stopAssistantRun()
+    }
+    const targetIndex = assistantMessages.findIndex((item) => item.id === messageId)
+    const target = assistantMessages[targetIndex]
+    if (targetIndex < 0 || target?.role !== 'user') return
+    setAssistantInput(target.content)
+    setAssistantPendingFiles([])
+    setAssistantError('')
+    setAssistantNotice('已把这条消息放回输入框。修改后点发送，会从这里重新继续；这条之后的旧回复已从当前对话移除。')
+    setActiveAssistantMessages((current) => current.slice(0, targetIndex))
+  }
   const compressActiveAssistantThread = async () => {
     if (!activeAssistantThread || assistantMemoryLoading) return
     const client = assistantThreadClient || selectedClient
@@ -9737,32 +9771,36 @@ function AiAssistantPage({
       preferredClient?: Client
     },
   ) => {
+    const safePatchData = { ...patchData }
+    if (isInvalidImportedCompanyName(safePatchData.name)) {
+      delete safePatchData.name
+    }
     const targetMode: Exclude<AiAssistantTargetMode, 'auto'> = options.preferredClient
       ? 'existing'
       : clients.length === 0
       ? 'new'
-      : patchData.name && !clients.some((client) => (
-          client.creditCode && patchData.creditCode
-            ? client.creditCode === patchData.creditCode
-            : client.name === patchData.name
+      : safePatchData.name && !clients.some((client) => (
+          client.creditCode && safePatchData.creditCode
+            ? client.creditCode === safePatchData.creditCode
+            : client.name === safePatchData.name
         ))
           ? 'new'
           : 'existing'
     const matchedClient = targetMode === 'existing'
       ? options.preferredClient || clients.find((client) => (
-        (patchData.creditCode && client.creditCode === patchData.creditCode)
-        || (patchData.name && client.name === patchData.name)
-      )) || (!patchData.name && !patchData.creditCode ? selectedClient : null)
+        (safePatchData.creditCode && client.creditCode === safePatchData.creditCode)
+        || (safePatchData.name && client.name === safePatchData.name)
+      )) || (!safePatchData.name && !safePatchData.creditCode ? selectedClient : null)
       : null
     const baseClient = targetMode === 'existing' && matchedClient
       ? matchedClient
       : blankDraftClient()
     const draftClient = applyExplicitDerivedPatch(baseClient, {
-      ...patchData,
+      ...safePatchData,
       id: baseClient.id,
       periodEntries: baseClient.periodEntries,
     }, `清洗资料明确值：${options.sourceType}`)
-    const labels = Object.keys(patchData).map(fieldLabel)
+    const labels = Object.keys(safePatchData).map(fieldLabel)
     const now = formatDate()
     const rawMaterials = options.rawMaterial ? [options.rawMaterial] : []
     const confirmationQuestions = filterCurrentFileConfirmationQuestions(uniqueByQuestion([
@@ -9774,7 +9812,7 @@ function AiAssistantPage({
       targetMode,
       client: draftClient,
       labels: uniqueLabels(labels),
-      mappings: options.mappings.filter((item) => Object.prototype.hasOwnProperty.call(patchData, item.field)),
+      mappings: options.mappings.filter((item) => Object.prototype.hasOwnProperty.call(safePatchData, item.field)),
       unmappedHeaders: options.unmappedHeaders,
       detectedTables: options.detectedTables,
       sourceType: options.sourceType,
@@ -10576,6 +10614,11 @@ function AiAssistantPage({
   const askAssistant = async (message = assistantInput) => {
     const cleanMessage = message.trim()
     if ((!cleanMessage && !assistantPendingFiles.length) || assistantLoading) return
+    const runId = assistantRunIdRef.current + 1
+    assistantRunIdRef.current = runId
+    const abortController = new AbortController()
+    assistantAbortRef.current = abortController
+    const isRunActive = () => assistantRunIdRef.current === runId && !abortController.signal.aborted
     if (assistantPendingFiles.length) {
       const directIntake = hasDirectIntakeAuthorization(cleanMessage)
       const imageFiles = assistantPendingFiles.filter((file) => file.type.startsWith('image/'))
@@ -10598,12 +10641,16 @@ function AiAssistantPage({
             history: assistantMessages.map((item) => ({ role: item.role, content: item.content })),
             client: assistantThreadClient || selectedClient,
             risks: [], report: null, assistantContext: buildAssistantContext(),
-          })
+          }, { signal: abortController.signal })
+          if (!isRunActive()) return
           setActiveAssistantMessages([...nextMessages, { id: crypto.randomUUID(), role: 'assistant', content: sanitizeAssistantAnswer(response.answer), response }])
         } catch (error) {
-          setAssistantError(error instanceof Error ? error.message : String(error))
+          if (isRunActive()) setAssistantError(error instanceof Error && error.name === 'AbortError' ? '已停止当前处理。' : error instanceof Error ? error.message : String(error))
         } finally {
-          setAssistantLoading(false)
+          if (isRunActive()) {
+            setAssistantLoading(false)
+            assistantAbortRef.current = null
+          }
         }
         return
       }
@@ -10638,6 +10685,7 @@ function AiAssistantPage({
         const outcomes: Array<Awaited<ReturnType<typeof importAssistantFile>>> = []
         let preferredClient = clients.find((client) => filesToImport.some((file) => extractCompanyNameFromText(file.name) === client.name))
         for (const [fileIndex, file] of filesToImport.entries()) {
+          if (!isRunActive()) break
           setAssistantProgress((current) => ({
             totalFiles: filesToImport.length,
             currentFile: fileIndex + 1,
@@ -10651,6 +10699,7 @@ function AiAssistantPage({
             silentDirectResult: directIntake && filesToImport.length > 1,
             preferredClient,
           })
+          if (!isRunActive()) break
           outcomes.push(outcome)
           if (outcome?.status === 'saved' && outcome.client) preferredClient = outcome.client
           setAssistantProgress((current) => current ? {
@@ -10660,6 +10709,7 @@ function AiAssistantPage({
             elapsedSeconds: Math.max(1, (Date.now() - current.startedAt) / 1000),
           } : current)
         }
+        if (!isRunActive()) return
         if (preferredClient) bindActiveAssistantThreadToClient(preferredClient)
         if (directIntake && filesToImport.length > 1) {
           const saved = outcomes.filter((outcome) => outcome?.status === 'saved')
@@ -10684,8 +10734,11 @@ function AiAssistantPage({
           ])
         }
       } finally {
-        setAssistantProgress(null)
-        setAssistantLoading(false)
+        if (isRunActive()) {
+          setAssistantProgress(null)
+          setAssistantLoading(false)
+          assistantAbortRef.current = null
+        }
       }
       return
     }
@@ -10708,10 +10761,12 @@ function AiAssistantPage({
     const instantReply = instantAssistantReply(cleanMessage)
     if (instantReply) {
       setActiveAssistantMessages([...nextMessages, { id: crypto.randomUUID(), role: 'assistant', content: instantReply }])
+      if (isRunActive()) assistantAbortRef.current = null
       return
     }
     if (isArchiveChecklistQuestion(cleanMessage)) {
       runAssistantChecklist()
+      if (isRunActive()) assistantAbortRef.current = null
       return
     }
     if (parsedTextDraft) {
@@ -10724,6 +10779,7 @@ function AiAssistantPage({
         },
       ])
       setAssistantInput('')
+      if (isRunActive()) assistantAbortRef.current = null
       return
     }
     const cleaningUpdate = readOnlyDataQuestion ? null : applyCleaningMessageToDraft(cleanMessage)
@@ -10737,6 +10793,7 @@ function AiAssistantPage({
         },
       ])
       setAssistantInput('')
+      if (isRunActive()) assistantAbortRef.current = null
       return
     }
     setAssistantLoading(true)
@@ -10749,7 +10806,8 @@ function AiAssistantPage({
         risks: assistantDrafts.length ? [] : risks,
         report: assistantDrafts.length ? null : report,
         assistantContext: buildAssistantContext(),
-      })
+      }, { signal: abortController.signal })
+      if (!isRunActive()) return
       setActiveAssistantMessages([
         ...nextMessages,
         {
@@ -10760,6 +10818,7 @@ function AiAssistantPage({
         },
       ])
       const toolResults = await executeAssistantToolCalls(response)
+      if (!isRunActive()) return
       if (toolResults.length) {
         setActiveAssistantMessages((current) => [
           ...current,
@@ -10772,9 +10831,12 @@ function AiAssistantPage({
       }
       setAssistantInput('')
     } catch (error) {
-      setAssistantError(error instanceof Error ? error.message : String(error))
+      if (isRunActive()) setAssistantError(error instanceof Error && error.name === 'AbortError' ? '已停止当前处理。' : error instanceof Error ? error.message : String(error))
     } finally {
-      setAssistantLoading(false)
+      if (isRunActive()) {
+        setAssistantLoading(false)
+        assistantAbortRef.current = null
+      }
     }
   }
 
@@ -10887,7 +10949,14 @@ function AiAssistantPage({
               {assistantMessages.length ? (
                 assistantMessages.map((item) => (
                   <article key={item.id} className={`ai-assistant-message ${item.role}`}>
-                    <strong>{item.role === 'user' ? '你' : 'AI 助手'}</strong>
+                    <div className="ai-assistant-message-head">
+                      <strong>{item.role === 'user' ? '你' : 'AI 助手'}</strong>
+                      {item.role === 'user' ? (
+                        <button type="button" onClick={() => editAssistantUserMessage(item.id)}>
+                          <Pencil /> 修改
+                        </button>
+                      ) : null}
+                    </div>
                     <div className="ai-assistant-message-content">
                       {assistantMessageBlocks(item.content).map((block, index) => (
                         block.type === 'list' ? (
@@ -10981,8 +11050,13 @@ function AiAssistantPage({
               />
             </div>
             <div className="ai-assistant-actions">
-              <button type="button" className="primary-button" onClick={() => void askAssistant()} disabled={assistantLoading || (!assistantInput.trim() && !assistantPendingFiles.length)}>
-                <Sparkles /> {assistantLoading ? '正在处理...' : '发送'}
+              <button
+                type="button"
+                className={assistantLoading ? 'secondary-button danger-secondary' : 'primary-button'}
+                onClick={() => assistantLoading ? stopAssistantRun() : void askAssistant()}
+                disabled={!assistantLoading && !assistantInput.trim() && !assistantPendingFiles.length}
+              >
+                {assistantLoading ? <Square /> : <Sparkles />} {assistantLoading ? '停止' : '发送'}
               </button>
               <button type="button" className="secondary-button compact-button" onClick={() => assistantFileInputRef.current?.click()} disabled={assistantLoading}>
                 <FileText /> 上传文件
@@ -10994,7 +11068,7 @@ function AiAssistantPage({
         <aside className="assistant-status-panel" aria-label="当前处理状态">
           <div>
             <span>当前企业</span>
-            <strong>{currentAssistantDraft?.client.name || selectedClient.name || '待确认'}</strong>
+            <strong>{currentAssistantClientName}</strong>
           </div>
           <div>
             <span>已上传资料</span>

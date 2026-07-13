@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseTaxDataPdfText, parseTaxDataWorkbook } from './taxDataIntakeParser'
+import { parseTaxDataPdfText, parseTaxDataWorkbook, parseVatScheduleFourRecords } from './taxDataIntakeParser'
 
 describe('tax data intake parser', () => {
   it('parses account balances and ledger rows with periods', () => {
@@ -21,6 +21,15 @@ describe('tax data intake parser', () => {
           ['日期', '凭证字号', '科目编码', '科目名称', '摘要', '借方', '贷方', '方向', '余额'],
           ['2025-01-31', '记-1', '1001', '库存现金', '报销', '2', '', '借', '12'],
           ['2025-01-31', '', '1001', '库存现金', '本期合计', '2', '', '借', '12'],
+        ],
+      },
+      {
+        name: '2001 empty ledger',
+        rows: [
+          ['2025年1月至2025年12月'],
+          ['日期', '凭证字号', '科目编码', '科目名称', '摘要', '借方', '贷方', '方向', '余额'],
+          ['no transaction'],
+          ['summary only'],
         ],
       },
     ])
@@ -56,5 +65,68 @@ describe('tax data intake parser', () => {
     expect(parsed.records).toHaveLength(2)
     expect(parsed.records[0].periodStart).toBe('2025-12-01')
     expect(parsed.evidenceFields.length).toBeGreaterThan(0)
+  })
+
+  it('returns a warning when PDF text has no specialized tax parser', () => {
+    const parsed = parseTaxDataPdfText('contract.pdf', ['plain contract text'])
+
+    expect(parsed.records).toEqual([])
+    expect(parsed.warnings).toHaveLength(1)
+  })
+
+  it('skips ledger-like sheets that have headers but no transaction rows', () => {
+    const parsed = parseTaxDataWorkbook('\u660e\u7ec6\u8d26_\u5168\u90e8\u79d1\u76ee.xls', [{
+      name: '1001',
+      rows: [
+        ['\u660e\u7ec6\u8d26'],
+        ['\u65e5\u671f', '\u51ed\u8bc1\u5b57\u53f7', '\u79d1\u76ee\u7f16\u7801', '\u79d1\u76ee\u540d\u79f0', '\u6458\u8981', '\u501f\u65b9', '\u8d37\u65b9', '\u65b9\u5411', '\u4f59\u989d'],
+        [''],
+        [''],
+      ],
+    }])
+
+    expect(parsed.records).toEqual([])
+    expect(parsed.documentTypes).toEqual([])
+    expect(parsed.warnings).toEqual([])
+  })
+
+  it('marks deterministic payroll workbook imports eligible when validations pass', () => {
+    const parsed = parseTaxDataWorkbook('2024\u5e749\u6708-2024\u5e7410\u6708\u5de5\u8d44\u8868.xlsx', [{
+      name: 'Sheet1',
+      rows: [
+        ['\u5de5\u8d44\u8868'],
+        ['\u5355\u4f4d\uff1a\u6d4b\u8bd5\u4f01\u4e1a', '9/1/24'],
+        ['\u59d3\u540d', '\u8eab\u4efd\u8bc1\u4ef6\u7c7b\u578b', '\u8eab\u4efd\u8bc1\u4ef6\u53f7\u7801', '\u5de5\u8d44', '\u57fa\u672c\u517b\u8001\u4fdd\u9669\u8d39', '\u57fa\u672c\u533b\u7597\u4fdd\u9669\u8d39', '\u5931\u4e1a\u4fdd\u9669\u8d39', '\u5e94\u7eb3\u7a0e\u6240\u5f97\u989d', '\u7a0e\u7387', '\u5e94\u7eb3\u7a0e\u989d'],
+        ['Alice', '\u5c45\u6c11\u8eab\u4efd\u8bc1', '110101199001011234', '5000', '400', '100', '20', '1000', '0.03', '30'],
+      ],
+    }])
+
+    expect(parsed.records).toHaveLength(1)
+    expect(parsed.autoImportEligible).toBe(true)
+  })
+
+  it('parses wrapped VAT schedule four item names directly', () => {
+    const records = parseVatScheduleFourRecords([
+      '1 tax device fee',
+      'maintenance 0.00 1.00 2.00 3.00 4.00',
+      '9 ignored row 0.00',
+      '6 super deduction 0.00 1.00 2.00 3.00 4.00 5.00',
+    ].join('\n'), { periodStart: '2025-12-01', periodEnd: '2025-12-31' })
+
+    expect(records).toHaveLength(2)
+    expect(records[0].payload).toMatchObject({
+      rowNo: '1',
+      itemName: 'tax device feemaintenance',
+      currentDeductibleAmount: 2,
+      actualDeductionAmount: 3,
+      endingAmount: 4,
+    })
+    expect(records[1].payload).toMatchObject({
+      rowNo: '6',
+      currentDecreaseAmount: 2,
+      currentDeductibleAmount: 3,
+      actualDeductionAmount: 4,
+      endingAmount: 5,
+    })
   })
 })

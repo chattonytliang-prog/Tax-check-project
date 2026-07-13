@@ -24,10 +24,11 @@ export function apiGet<T>(url: string) {
   return requestJson<T>(url)
 }
 
-export function apiSend<T>(url: string, method: 'POST' | 'PUT', body: unknown) {
+export function apiSend<T>(url: string, method: 'POST' | 'PUT', body: unknown, init?: RequestInit) {
   return requestJson<T>(url, {
+    ...init,
     method,
-    headers: { 'content-type': 'application/json' },
+    headers: { ...init?.headers, 'content-type': 'application/json' },
     body: JSON.stringify(body),
   })
 }

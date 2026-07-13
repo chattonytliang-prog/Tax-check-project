@@ -336,6 +336,14 @@ function containsRawToolMarkup(content) {
   return /<｜｜DSML｜｜tool_calls>|<\|\|DSML\|\|tool_calls>|<tool_call|<\/｜｜DSML｜｜invoke>|query_account_balance/i.test(String(content || ''))
 }
 
+function deterministicShortcutAnswer(client, message) {
+  const text = String(message || '').replace(/\s+/g, '')
+  if (/(?:我公司|我们公司|本公司|当前企业).{0,8}(?:叫什么|名称|名字)/.test(text)) {
+    return `当前会话绑定企业为「${client.name}」。`
+  }
+  return ''
+}
+
 async function deterministicBusinessAnswer(db, auth, client, message) {
   const text = String(message || '').replace(/\s+/g, '')
   if (/(我们公司|我公司|本公司).{0,8}(叫什么|名称|名字)/.test(text)) {
@@ -530,7 +538,7 @@ async function runConversationalAssistant({ env, db, auth, model, client, messag
     ? `${message || '请查看这些截图并结合当前企业上下文回答。'}\n\n[视觉模型 ${vision.model} 的截图识别结果]\n${vision.content}`
     : message
   const messages = [
-    { role: 'system', content: `${conversationalSystemPrompt(client, assistantContext)}\n客户长期记忆：${JSON.stringify(customerMemories)}\n只能使用本请求 tools 数组中声明的工具名。禁止输出 DSML、XML、伪工具调用或不存在的工具名；如果不能调用工具，就用中文直接说明已有事实和缺口。\nWhen the user asks what accounts exist in an account balance table, how many account categories there are, or requests those accounts in a table, call get_account_balance_accounts for the period inherited from the conversation. Present returned facts directly. Do not replace this request with a tax-archive completeness summary. If the user explicitly asks to show all accounts, output every returned account in a Markdown table instead of asking which category they want.` },
+    { role: 'system', content: `${conversationalSystemPrompt(client, assistantContext)}\n客户长期记忆：${JSON.stringify(customerMemories)}\n只能使用本请求 tools 数组中声明的工具名。禁止输出 DSML、XML、伪工具调用或不存在的工具名；如果不能调用工具，就用中文直接说明已有事实和缺口。\nUnderstand the user message as natural language first. Do not treat the entire sentence as a metric name, table row name, or literal search key. Infer intent and period, call read-only tools when data is needed, then answer naturally in Chinese. When the user asks what accounts exist in an account balance table, how many account categories there are, or requests those accounts in a table, call get_account_balance_accounts for the period inherited from the conversation. Present returned facts directly. Do not replace this request with a tax-archive completeness summary. If the user explicitly asks to show all accounts, output every returned account in a Markdown table instead of asking which category they want.` },
     ...history.slice(-30).map((item) => ({ role: item.role, content: item.content })),
     { role: 'user', content: userContent },
   ]
@@ -883,7 +891,7 @@ export async function onRequestPost({ request, env }) {
     const clientVerified = Boolean(ownedClient)
 
     if (ownedClient && !cleanImages.length) {
-      const deterministicAnswer = await deterministicBusinessAnswer(db, auth, ownedClient, cleanMessage)
+      const deterministicAnswer = deterministicShortcutAnswer(ownedClient, cleanMessage)
       if (deterministicAnswer) {
         return json({
           answer: deterministicAnswer,
@@ -1031,7 +1039,21 @@ export async function onRequestPost({ request, env }) {
       }
     }
     if (!parsed) {
-      return json({ error: 'AI assistant returned invalid JSON' }, { status: 502 })
+      const fallbackAnswer = content && !containsRawToolMarkup(content)
+        ? content.slice(0, 1200)
+        : '这次 AI 返回内容没有通过结构校验，所以我没有执行入库或修改数据。请重新发送刚才的指令，或明确说明要导入哪些资料、归属企业和期间。'
+      return json({
+        answer: fallbackAnswer,
+        draftPatch: {},
+        missingFields: [],
+        toolCalls: [],
+        suggestions: ['重新发送刚才的导入指令', '确认企业名称、所属期间和要入库的资料范围'],
+        followUps: [],
+        clientVerified,
+        model,
+        usage: data?.usage || null,
+        degraded: true,
+      })
     }
 
     return json({

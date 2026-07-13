@@ -92,4 +92,46 @@ describe('buildIntakeConfirmationQuestions', () => {
 
     expect(questions).toEqual([])
   })
+
+  it('asks for document type when classification confidence is low', () => {
+    const questions = buildIntakeConfirmationQuestions({
+      classification: {
+        ...baseClassification,
+        documentType: 'other_material',
+        confidence: 'low',
+      },
+      period: monthlyPeriod,
+    })
+
+    expect(questions[0]).toMatchObject({
+      field: 'documentType',
+      severity: 'required',
+    })
+  })
+
+  it('formats single-day periods and falls back to unknown document type labels', () => {
+    const questions = buildIntakeConfirmationQuestions({
+      classification: {
+        ...baseClassification,
+        documentType: 'custom_material' as IntakeClassification['documentType'],
+        requiresSpecializedParser: false,
+      },
+      period: {
+        periodType: 'monthly',
+        periodStart: '2026-03-31',
+        periodEnd: '2026-03-31',
+        evidence: 'single day',
+      },
+      parsedImport: {
+        mappings: [{ source: 'A', field: 'amount', label: 'amount' }],
+        unmappedHeaders: [],
+        detectedTables: [],
+        taxDataIntake: { records: [{}], warnings: [], autoImportEligible: false },
+      },
+    })
+
+    expect(questions.find((item) => item.field === 'documentType')?.question).toContain('custom_material')
+    expect(questions.find((item) => item.field === 'period')?.question).toContain('2026-03-31')
+    expect(questions.some((item) => item.field === 'parserScope')).toBe(false)
+  })
 })
