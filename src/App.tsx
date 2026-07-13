@@ -9401,9 +9401,17 @@ function AiAssistantPage({
   })()
   const currentAssistantDraft = assistantDrafts[0]
   const currentMaterialSummary = activeAssistantThread?.latestMaterialSummary
-  const currentUploadCount = currentAssistantDraft?.rawMaterials.length || 0
-  const currentQuestionCount = currentAssistantDraft?.confirmationQuestions.length || 0
-  const currentRecordCount = Object.values(currentAssistantDraft?.taxDataRecordCounts || {}).reduce((sum, value) => sum + value, 0)
+  const currentDraftRawMaterials = assistantDrafts.flatMap((draft) => draft.rawMaterials || [])
+  const currentUploadCount = new Set(currentDraftRawMaterials.map((material) => material.id || material.name)).size
+  const currentQuestionCount = assistantDrafts.reduce((sum, draft) => sum + draft.confirmationQuestions.length, 0)
+  const currentRecordCount = assistantDrafts.reduce((sum, draft) => (
+    sum + Object.values(draft.taxDataRecordCounts || {}).reduce((total, value) => total + value, 0)
+  ), 0)
+  const archivedSourceFileNames = taxDataSummary?.clientId === selectedClient.id
+    ? new Set(taxDataSummary.slots.flatMap((slot) => slot.sourceFiles.map((file) => file.file_name || file.id)).filter(Boolean))
+    : new Set<string>()
+  const archivedSourceFileCount = archivedSourceFileNames.size
+  const latestMaterialName = currentMaterialSummary?.fileName || currentDraftRawMaterials.at(-1)?.name || ''
   const currentAssistantClientName = currentAssistantDraft?.client.name && !isInvalidImportedCompanyName(currentAssistantDraft.client.name)
     ? currentAssistantDraft.client.name
     : selectedClient.name || '待确认'
@@ -11071,9 +11079,14 @@ function AiAssistantPage({
             <strong>{currentAssistantClientName}</strong>
           </div>
           <div>
-            <span>已上传资料</span>
+            <span>本轮资料</span>
             <strong>{currentUploadCount} 份</strong>
-            {currentMaterialSummary?.fileName ? <small>{currentMaterialSummary.fileName}</small> : null}
+            <small>{latestMaterialName || '当前对话待处理源文件'}</small>
+          </div>
+          <div>
+            <span>已归档源文件</span>
+            <strong>{archivedSourceFileCount} 个</strong>
+            <small>{archivedSourceFileCount ? '来自标准资料库去重统计' : '确认入库后显示'}</small>
           </div>
           <div>
             <span>待确认问题</span>
