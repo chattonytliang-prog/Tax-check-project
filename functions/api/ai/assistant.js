@@ -123,7 +123,9 @@ function standardRecordCategoryName(recordType, recordSubtype) {
 async function executeReadOnlyAgentTool(db, auth, toolCall, fallbackClientId) {
   const name = String(toolCall?.function?.name || '')
   const args = cleanToolArguments(toolCall?.function?.arguments)
-  const clientId = String(args.clientId || fallbackClientId || '').trim()
+  const requestedClientId = String(args.clientId || '').trim()
+  const serverClientId = String(fallbackClientId || '').trim()
+  const clientId = serverClientId || requestedClientId
   if (name === 'search_agent_knowledge') {
     const terms = String(args.query || '').toLowerCase().split(/\s+/).filter(Boolean)
     const matches = agentKnowledge.filter((item) => !terms.length || terms.some((term) => `${item.title}${item.content}`.toLowerCase().includes(term)))
@@ -176,12 +178,9 @@ async function executeReadOnlyAgentTool(db, auth, toolCall, fallbackClientId) {
        WHERE owner_user_id = ? AND client_id = ? AND period_end >= ? AND period_start <= ?
        ORDER BY account_code, account_name LIMIT 500`,
     ).bind(auth.user.id, clientId, start, end).all()
-    const categoryName = (code) => ({
-      1: '资产类', 2: '负债类', 3: '共同类', 4: '所有者权益类', 5: '成本类', 6: '损益类',
-    }[String(code || '').trim().charAt(0)] || '其他类')
     const includeBalances = args.includeBalances === true
     const accounts = (result.results || []).map((row) => ({
-      category: categoryName(row.account_code),
+      category: accountCategoryName(row.account_code),
       accountCode: row.account_code,
       accountName: row.account_name,
       ...(includeBalances ? {
@@ -342,6 +341,61 @@ function deterministicShortcutAnswer(client, message) {
     return `当前会话绑定企业为「${client.name}」。`
   }
   return ''
+}
+
+function accountCategoryName(code) {
+  return ({
+    1: '资产类',
+    2: '负债类',
+    3: '共同类',
+    4: '所有者权益类',
+    5: '成本类',
+    6: '损益类',
+  }[String(code || '').trim().charAt(0)] || '其他类')
+}
+
+function isAccountBalanceListQuestion(message, history = []) {
+  const recent = history.slice(-6).map((item) => item.content || '').join('\n')
+  const text = `${recent}\n${message || ''}`.replace(/\s+/g, '')
+  const current = String(message || '').replace(/\s+/g, '')
+  return (
+    /科目余额表/.test(text)
+    && /(列出|列出来|展示|显示|看看|看一下|全部|明细|清单|有哪些|科目)/.test(current)
+  )
+}
+
+async function deterministicAccountBalanceListAnswer(db, auth, client, message, history = []) {
+  if (!isAccountBalanceListQuestion(message, history)) return ''
+  const contextText = `${message || ''}\n${history.slice(-8).map((item) => item.content || '').join('\n')}`
+  let period = deterministicQuestionPeriod(contextText)
+  if (!period) {
+    const latest = await db.prepare(
+      `SELECT period_start, period_end
+       FROM tax_data_account_balances
+       WHERE owner_user_id = ? AND client_id = ?
+       ORDER BY period_end DESC, period_start DESC LIMIT 1`,
+    ).bind(auth.user.id, client.id).first()
+    if (!latest?.period_start || !latest?.period_end) return ''
+    period = { label: `${String(latest.period_start).slice(0, 7)}期间`, start: latest.period_start, end: latest.period_end }
+  }
+  const result = await db.prepare(
+    `SELECT account_code, account_name
+     FROM tax_data_account_balances
+     WHERE owner_user_id = ? AND client_id = ? AND period_end >= ? AND period_start <= ?
+     ORDER BY account_code, account_name LIMIT 500`,
+  ).bind(auth.user.id, client.id, period.start, period.end).all()
+  const accounts = result.results || []
+  if (!accounts.length) return `${client.name}${period.label}没有查到科目余额表明细。`
+  const counts = accounts.reduce((acc, row) => {
+    const category = accountCategoryName(row.account_code)
+    acc[category] = (acc[category] || 0) + 1
+    return acc
+  }, {})
+  const summary = Object.entries(counts).map(([category, count]) => `${category}${count}个`).join('，')
+  const rows = accounts.map((row, index) => (
+    `| ${index + 1} | ${accountCategoryName(row.account_code)} | ${row.account_code || ''} | ${row.account_name || ''} |`
+  )).join('\n')
+  return `${client.name}${period.label}科目余额表共 ${accounts.length} 个科目，${summary}。\n\n| 序号 | 类别 | 科目编码 | 科目名称 |\n|---:|---|---|---|\n${rows}`
 }
 
 async function deterministicBusinessAnswer(db, auth, client, message) {
@@ -904,6 +958,20 @@ export async function onRequestPost({ request, env }) {
     const clientVerified = Boolean(ownedClient)
 
     if (ownedClient && !cleanImages.length) {
+      const deterministicAccountList = await deterministicAccountBalanceListAnswer(db, auth, ownedClient, cleanMessage, cleanHistory)
+      if (deterministicAccountList) {
+        return json({
+          answer: deterministicAccountList,
+          draftPatch: {},
+          missingFields: [],
+          toolCalls: [],
+          suggestions: [],
+          followUps: [],
+          clientVerified: true,
+          model: 'deterministic-account-balance-query',
+          usage: null,
+        })
+      }
       const deterministicAnswer = deterministicShortcutAnswer(ownedClient, cleanMessage)
       if (deterministicAnswer) {
         return json({
