@@ -105,6 +105,48 @@ function cleanToolArguments(value) {
   try { return JSON.parse(value) } catch { return {} }
 }
 
+function normalizeClientNameForMatch(value) {
+  return String(value || '').replace(/\s+/g, '').replace(/[「」《》（）()]/g, '').trim()
+}
+
+async function readableClientById(db, auth, clientId) {
+  const id = String(clientId || '').trim()
+  if (!id) return null
+  const owned = await db.prepare('SELECT id, name FROM clients WHERE id = ? AND owner_user_id = ?').bind(id, auth.user.id).first()
+  if (owned) return owned
+  const dataRef = await db.prepare(
+    `SELECT client_id, MAX(client_name) AS client_name FROM (
+       SELECT client_id, '' AS client_name FROM tax_data_account_balances WHERE owner_user_id = ? AND client_id = ?
+       UNION ALL
+       SELECT client_id, '' AS client_name FROM tax_data_source_files WHERE owner_user_id = ? AND client_id = ?
+       UNION ALL
+       SELECT client_id, client_name FROM tax_data_import_batches WHERE owner_user_id = ? AND client_id = ?
+     ) WHERE client_id IS NOT NULL AND client_id != '' GROUP BY client_id LIMIT 1`,
+  ).bind(auth.user.id, id, auth.user.id, id, auth.user.id, id).first()
+  return dataRef?.client_id ? { id: dataRef.client_id, name: dataRef.client_name || id } : null
+}
+
+async function resolveReadableClient(db, auth, clientLike) {
+  const byId = await readableClientById(db, auth, clientLike?.id)
+  if (byId) return byId
+  const wanted = normalizeClientNameForMatch(clientLike?.name)
+  if (!wanted) return null
+  const clients = await db.prepare(
+    'SELECT id, name FROM clients WHERE owner_user_id = ? ORDER BY updated_at DESC LIMIT 200',
+  ).bind(auth.user.id).all()
+  const clientMatch = (clients.results || []).find((row) => normalizeClientNameForMatch(row.name) === wanted)
+  if (clientMatch) return clientMatch
+  const batches = await db.prepare(
+    `SELECT client_id, client_name
+     FROM tax_data_import_batches
+     WHERE owner_user_id = ? AND client_id IS NOT NULL AND client_id != ''
+     ORDER BY updated_at DESC LIMIT 200`,
+  ).bind(auth.user.id).all()
+  const batchMatch = (batches.results || []).find((row) => normalizeClientNameForMatch(row.client_name) === wanted)
+  if (batchMatch) return { id: batchMatch.client_id, name: batchMatch.client_name || clientLike.name }
+  return null
+}
+
 function standardRecordCategoryName(recordType, recordSubtype) {
   if (recordType === 'financial_statement' && recordSubtype === 'balance_sheet') return '资产负债表'
   if (recordType === 'financial_statement' && recordSubtype === 'income_statement') return '利润表'
@@ -132,7 +174,7 @@ async function executeReadOnlyAgentTool(db, auth, toolCall, fallbackClientId) {
     return { entries: (matches.length ? matches : agentKnowledge).slice(0, 6) }
   }
   if (!clientId) return { error: 'clientId is required' }
-  const owned = await db.prepare('SELECT id, name FROM clients WHERE id = ? AND owner_user_id = ?').bind(clientId, auth.user.id).first()
+  const owned = await readableClientById(db, auth, clientId)
   if (!owned) return { error: 'client not found or not authorized' }
   if (name === 'get_business_metric') {
     const metric = String(args.metric || '').trim()
@@ -945,16 +987,7 @@ export async function onRequestPost({ request, env }) {
     if (!cleanMessage) return badRequest('Message is required')
     if (!client?.id || !client?.name) return badRequest('Client id and name are required')
 
-    let ownedClient = await db
-      .prepare('SELECT id, name FROM clients WHERE id = ? AND owner_user_id = ?')
-      .bind(client.id, auth.user.id)
-      .first()
-    if (!ownedClient && client.name) {
-      ownedClient = await db
-        .prepare('SELECT id, name FROM clients WHERE name = ? AND owner_user_id = ? ORDER BY created_at DESC LIMIT 1')
-        .bind(client.name, auth.user.id)
-        .first()
-    }
+    const ownedClient = await resolveReadableClient(db, auth, client)
     const clientVerified = Boolean(ownedClient)
 
     if (ownedClient && !cleanImages.length) {
