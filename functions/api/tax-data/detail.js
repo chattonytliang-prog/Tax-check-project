@@ -30,47 +30,72 @@ function recordFilter(slotId) {
   return { sql: ' AND record_type = ?', params: [type] }
 }
 
-async function typedRecords(db, ownerUserId, clientId, sourceFileIds, slotId) {
+function dateParam(value) {
+  const text = String(value || '').trim()
+  return /^\d{4}-\d{2}(-\d{2})?$/.test(text) ? text : ''
+}
+
+function periodClause(startExpr, endExpr, periodStart, periodEnd) {
+  if (!periodStart || !periodEnd) return { sql: '', params: [] }
+  return {
+    sql: ` AND COALESCE(${endExpr}, ${startExpr}, '') >= ? AND COALESCE(${startExpr}, ${endExpr}, '') <= ?`,
+    params: [periodStart, periodEnd],
+  }
+}
+
+async function typedRecords(db, ownerUserId, clientId, sourceFileIds, slotId, periodStart = '', periodEnd = '') {
   const placeholders = sourceFileIds.map(() => '?').join(',')
   const base = [ownerUserId, clientId, ...sourceFileIds]
   let sql = ''
   if (slotId === 'vat-return-main' || slotId === 'vat-schedule-4') {
+    const period = periodClause('r.period_start', 'r.period_end', periodStart, periodEnd)
     sql = `SELECT l.id, r.source_file_id, r.return_type AS record_subtype, r.period_start, r.period_end,
                   l.row_no, l.item_name, l.current_amount, l.cumulative_amount, l.current_tax, l.cumulative_tax
            FROM tax_data_vat_returns r JOIN tax_data_vat_return_lines l ON l.vat_return_id = r.id
-           WHERE r.owner_user_id = ? AND r.client_id = ? AND r.source_file_id IN (${placeholders}) ORDER BY l.row_no LIMIT 500`
+           WHERE r.owner_user_id = ? AND r.client_id = ? AND r.source_file_id IN (${placeholders})${period.sql} ORDER BY l.row_no LIMIT 500`
+    base.push(...period.params)
   } else if (slotId.startsWith('financial-')) {
     const statementType = slotId === 'financial-balance-sheet' ? 'balance_sheet' : slotId === 'financial-cash-flow' ? 'cash_flow_statement' : 'income_statement'
+    const period = periodClause('s.period_start', 's.period_end', periodStart, periodEnd)
     sql = `SELECT l.id, s.source_file_id, s.statement_type AS record_subtype, s.period_start, s.period_end,
                   l.line_code, l.line_name, l.row_no, l.current_amount, l.cumulative_amount, l.beginning_amount, l.ending_amount
            FROM tax_data_financial_statements s JOIN tax_data_financial_statement_lines l ON l.statement_id = s.id
-           WHERE s.owner_user_id = ? AND s.client_id = ? AND s.source_file_id IN (${placeholders}) AND s.statement_type = ? ORDER BY l.row_no LIMIT 500`
-    base.push(statementType)
+           WHERE s.owner_user_id = ? AND s.client_id = ? AND s.source_file_id IN (${placeholders}) AND s.statement_type = ?${period.sql} ORDER BY l.row_no LIMIT 500`
+    base.push(statementType, ...period.params)
   } else if (slotId === 'account-balance') {
+    const period = periodClause('period_start', 'period_end', periodStart, periodEnd)
     sql = `SELECT id, source_file_id, period_start, period_end, account_code, account_name, opening_debit, opening_credit,
                   current_debit, current_credit, ytd_debit, ytd_credit, ending_debit, ending_credit
-           FROM tax_data_account_balances WHERE owner_user_id = ? AND client_id = ? AND source_file_id IN (${placeholders}) ORDER BY account_code LIMIT 500`
+           FROM tax_data_account_balances WHERE owner_user_id = ? AND client_id = ? AND source_file_id IN (${placeholders})${period.sql} ORDER BY account_code LIMIT 500`
+    base.push(...period.params)
   } else if (slotId === 'ledger') {
+    const period = periodClause('entry_date', 'entry_date', periodStart, periodEnd)
     sql = `SELECT id, source_file_id, entry_date AS period_start, entry_date AS period_end, voucher_no, account_code, account_name,
                   summary, debit_amount, credit_amount, direction, balance_amount
-           FROM tax_data_ledger_entries WHERE owner_user_id = ? AND client_id = ? AND source_file_id IN (${placeholders}) ORDER BY entry_date, id LIMIT 500`
+           FROM tax_data_ledger_entries WHERE owner_user_id = ? AND client_id = ? AND source_file_id IN (${placeholders})${period.sql} ORDER BY entry_date, id LIMIT 500`
+    base.push(...period.params)
   } else if (slotId === 'invoice-output' || slotId === 'invoice-input') {
     const direction = slotId === 'invoice-output' ? 'output' : 'input'
+    const period = periodClause('invoice_date', 'invoice_date', periodStart, periodEnd)
     sql = `SELECT id, source_file_id, invoice_date AS period_start, invoice_date AS period_end, invoice_no, invoice_code,
                   counterparty_credit_code, counterparty_name, goods_name, amount, tax_amount, effective_deduction_tax, invoice_status
-           FROM tax_data_invoice_lines WHERE owner_user_id = ? AND client_id = ? AND source_file_id IN (${placeholders}) AND invoice_direction = ? ORDER BY invoice_date, id LIMIT 500`
-    base.push(direction)
+           FROM tax_data_invoice_lines WHERE owner_user_id = ? AND client_id = ? AND source_file_id IN (${placeholders}) AND invoice_direction = ?${period.sql} ORDER BY invoice_date, id LIMIT 500`
+    base.push(direction, ...period.params)
   } else if (slotId === 'payroll') {
+    const period = periodClause('r.period_start', 'r.period_end', periodStart, periodEnd)
     sql = `SELECT l.id, r.source_file_id, r.period_start, r.period_end, l.employee_name, l.id_type, l.id_number_masked,
                   l.gross_pay, l.social_security, l.medical_insurance, l.unemployment_insurance, l.housing_fund,
                   l.taxable_income, l.tax_rate, l.tax_withheld
            FROM tax_data_payroll_runs r JOIN tax_data_payroll_lines l ON l.payroll_run_id = r.id
-           WHERE r.owner_user_id = ? AND r.client_id = ? AND r.source_file_id IN (${placeholders}) ORDER BY l.id LIMIT 500`
+           WHERE r.owner_user_id = ? AND r.client_id = ? AND r.source_file_id IN (${placeholders})${period.sql} ORDER BY l.id LIMIT 500`
+    base.push(...period.params)
   } else if (slotId === 'iit-withholding') {
+    const period = periodClause('r.period_start', 'r.period_end', periodStart, periodEnd)
     sql = `SELECT l.id, r.source_file_id, r.period_start, r.period_end, l.person_name, l.id_type, l.id_number_masked,
                   l.income_item, l.current_income, l.cumulative_income, l.cumulative_deduction, l.taxable_income, l.tax_rate, l.tax_withheld
            FROM tax_data_iit_returns r JOIN tax_data_iit_return_lines l ON l.iit_return_id = r.id
-           WHERE r.owner_user_id = ? AND r.client_id = ? AND r.source_file_id IN (${placeholders}) ORDER BY l.id LIMIT 500`
+           WHERE r.owner_user_id = ? AND r.client_id = ? AND r.source_file_id IN (${placeholders})${period.sql} ORDER BY l.id LIMIT 500`
+    base.push(...period.params)
   }
   if (!sql) return []
   const rows = await all(db, sql, ...base)
@@ -89,6 +114,8 @@ export async function onRequestGet({ request, env }) {
     const url = new URL(request.url)
     const clientId = String(url.searchParams.get('clientId') || '').trim()
     const slotId = String(url.searchParams.get('slotId') || '').trim()
+    const periodStart = dateParam(url.searchParams.get('periodStart'))
+    const periodEnd = dateParam(url.searchParams.get('periodEnd'))
     const sourceFileIds = String(url.searchParams.get('sourceFileIds') || '')
       .split(',').map((item) => item.trim()).filter(Boolean).slice(0, 50)
     if (!clientId || !sourceFileIds.length) return badRequest('clientId and sourceFileIds are required')
@@ -108,19 +135,20 @@ export async function onRequestGet({ request, env }) {
 
     const allowedPlaceholders = allowedIds.map(() => '?').join(',')
     const filter = recordFilter(slotId)
+    const period = periodClause('period_start', 'period_end', periodStart, periodEnd)
     const recordsQuery = all(
       db, `SELECT id, source_file_id, record_type, record_subtype, period_start, period_end,
               record_json, confidence, created_at
        FROM tax_data_standard_records
-       WHERE owner_user_id = ? AND client_id = ? AND source_file_id IN (${allowedPlaceholders})${filter.sql}
+       WHERE owner_user_id = ? AND client_id = ? AND source_file_id IN (${allowedPlaceholders})${filter.sql}${period.sql}
        ORDER BY record_type, record_subtype, id
        LIMIT 500`,
-      auth.user.id, clientId, ...allowedIds, ...filter.params,
+      auth.user.id, clientId, ...allowedIds, ...filter.params, ...period.params,
     )
     const countQuery = all(
       db, `SELECT COUNT(*) AS count FROM tax_data_standard_records
-       WHERE owner_user_id = ? AND client_id = ? AND source_file_id IN (${allowedPlaceholders})${filter.sql}`,
-      auth.user.id, clientId, ...allowedIds, ...filter.params,
+       WHERE owner_user_id = ? AND client_id = ? AND source_file_id IN (${allowedPlaceholders})${filter.sql}${period.sql}`,
+      auth.user.id, clientId, ...allowedIds, ...filter.params, ...period.params,
     )
     const evidenceQuery = all(
       db, `SELECT source_file_id, target_id, target_field, raw_value, normalized_value,
@@ -135,7 +163,7 @@ export async function onRequestGet({ request, env }) {
     let records = queriedRecords
     const standardRecordCount = Number(countRows[0]?.count) || 0
     records = records.map((record) => ({ ...record, data: parseJson(record.record_json), record_json: undefined }))
-    if (!records.length) records = await typedRecords(db, auth.user.id, clientId, allowedIds, slotId)
+    if (!records.length) records = await typedRecords(db, auth.user.id, clientId, allowedIds, slotId, periodStart, periodEnd)
     const recordIds = new Set(records.map((record) => record.id))
     const relevantEvidence = evidence.filter((item) => !item.target_id || !recordIds.size || recordIds.has(item.target_id))
 

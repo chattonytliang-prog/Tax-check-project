@@ -4564,7 +4564,7 @@ function App() {
     }
     if (!slot.sourceFiles.length) return
     const sourceFileIds = slot.sourceFiles.map((file) => file.id).join(',')
-    const cacheKey = `${selectedClient.id}:${slot.slotId}:${sourceFileIds}`
+    const cacheKey = `${selectedClient.id}:${slot.slotId}:${slot.periodStart}:${slot.periodEnd}:${sourceFileIds}`
     setTaxDataDetailSlot(slot)
     setTaxDataDetailError('')
     const cached = taxDataDetailCache.current.get(cacheKey)
@@ -4576,7 +4576,14 @@ function App() {
     setTaxDataDetail(null)
     setTaxDataDetailLoading(true)
     try {
-      const detail = await apiGet<TaxDataDetail>(`/api/tax-data/detail?clientId=${encodeURIComponent(selectedClient.id)}&slotId=${encodeURIComponent(slot.slotId)}&sourceFileIds=${encodeURIComponent(sourceFileIds)}`)
+      const params = new URLSearchParams({
+        clientId: selectedClient.id,
+        slotId: slot.slotId,
+        sourceFileIds,
+        periodStart: slot.periodStart || '',
+        periodEnd: slot.periodEnd || '',
+      })
+      const detail = await apiGet<TaxDataDetail>(`/api/tax-data/detail?${params.toString()}`)
       taxDataDetailCache.current.set(cacheKey, detail)
       setTaxDataDetail(detail)
     } catch (error) {
