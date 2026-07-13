@@ -39,6 +39,11 @@ export type StandardTaxConflict = {
 }
 
 export type ParsedTaxDataIntake = {
+  profilePatch?: {
+    name?: string
+    creditCode?: string
+    taxpayerType?: string
+  }
   documentTypes: IntakeDocumentType[]
   records: StandardTaxRecord[]
   evidenceFields: StandardTaxEvidence[]
@@ -59,6 +64,54 @@ function clean(value: unknown) {
 
 function normalized(value: unknown) {
   return clean(value).replace(/[\s：:（）()_/-]/g, '')
+}
+
+function normalizeCreditCode(value: unknown) {
+  const match = clean(value).toUpperCase().match(/[0-9A-Z]{15,20}/)
+  return match?.[0] || ''
+}
+
+function isLikelyCompanyName(value: string) {
+  return /公司|企业|厂|店|中心|事务所|合作社/.test(value) && !/名称|项目|科目|销售方|购买方|扣缴|纳税人/.test(value)
+}
+
+function mergeProfilePatch(result: ParsedTaxDataIntake, patch: ParsedTaxDataIntake['profilePatch']) {
+  if (!patch) return
+  result.profilePatch = {
+    ...result.profilePatch,
+    ...Object.fromEntries(Object.entries(patch).filter(([, value]) => clean(value))),
+  }
+}
+
+function extractProfilePatchFromText(text: string): ParsedTaxDataIntake['profilePatch'] {
+  const patch: ParsedTaxDataIntake['profilePatch'] = {}
+  const creditCode = normalizeCreditCode(text.match(/(?:统一社会信用代码|纳税人识别号|税号)[^0-9A-Z]{0,30}([0-9A-Z]{15,20})/i)?.[1])
+  if (creditCode) patch.creditCode = creditCode
+  const nameMatch = text.match(/(?:纳税人名称|扣缴义务人名称|编制单位|核算单位|单位)[:：\s]*([^|。\n\r]{4,80})/)
+  const name = clean(nameMatch?.[1]).replace(/金额单位.*$/, '').replace(/单位[:：]?.*$/, '').trim()
+  if (isLikelyCompanyName(name)) patch.name = name
+  if (/一般纳税人适用|一般纳税人/.test(text)) patch.taxpayerType = '一般纳税人'
+  if (/小规模纳税人/.test(text)) patch.taxpayerType = '小规模纳税人'
+  return patch
+}
+
+function extractProfilePatchFromRows(fileName: string, sheet: IntakeSheet): ParsedTaxDataIntake['profilePatch'] {
+  const text = `${fileName}\n${sheet.name}\n${sheet.rows.slice(0, 25).map((row) => row.join(' | ')).join('\n')}`
+  const patch = extractProfilePatchFromText(text) || {}
+  for (const row of sheet.rows.slice(0, 15)) {
+    for (let index = 0; index < row.length; index += 1) {
+      const cell = clean(row[index])
+      const next = clean(row[index + 1])
+      if (!patch.creditCode && /^(?:统一社会信用代码|纳税人识别号|税号)$/.test(cell)) {
+        const code = normalizeCreditCode(next)
+        if (code) patch.creditCode = code
+      }
+      if (!patch.name && /^(?:纳税人名称|扣缴义务人名称|编制单位|核算单位|单位)$/.test(cell)) {
+        if (isLikelyCompanyName(next)) patch.name = next
+      }
+    }
+  }
+  return patch
 }
 
 function amount(value: unknown) {
@@ -585,7 +638,7 @@ function classifySheet(fileName: string, sheet: IntakeSheet): IntakeDocumentType
 }
 
 function emptyResult(): ParsedTaxDataIntake {
-  return { documentTypes: [], records: [], evidenceFields: [], conflicts: [], warnings: [], recordCounts: {}, templateMatches: [], autoImportEligible: false }
+  return { profilePatch: {}, documentTypes: [], records: [], evidenceFields: [], conflicts: [], warnings: [], recordCounts: {}, templateMatches: [], autoImportEligible: false }
 }
 
 function addTemplateConflict(result: ParsedTaxDataIntake, match: TemplateMatch, sourceName: string) {
@@ -662,6 +715,7 @@ export function parseTaxDataWorkbook(fileName: string, sheets: IntakeSheet[]): P
   const result = emptyResult()
   sheets.forEach((sheet) => {
     if (!sheet.rows.length) return
+    mergeProfilePatch(result, extractProfilePatchFromRows(fileName, sheet))
     const documentType = classifySheet(fileName, sheet)
     if (documentType === 'other_material') return
     const period = detectTaxDataPeriod(`${fileName} ${sheet.rows.slice(0, 6).flat().join(' ')}`)
@@ -796,6 +850,7 @@ export function parseVatScheduleFourRecords(text: string, period: Period = {}) {
 export function parseTaxDataPdfText(fileName: string, pages: string[]): ParsedTaxDataIntake {
   const result = emptyResult()
   const text = pages.join('\n')
+  mergeProfilePatch(result, extractProfilePatchFromText(`${fileName}\n${text.slice(0, 3000)}`))
   const sourceText = `${fileName} ${text}`
   if (/增值税.*申报表/.test(sourceText)) {
     result.documentTypes = [/附列资料|附表|税额抵减/.test(sourceText) ? 'vat_return_schedule' : 'vat_return']

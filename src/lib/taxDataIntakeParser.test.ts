@@ -77,6 +77,23 @@ describe('tax data intake parser', () => {
     })
   })
 
+  it('extracts client profile facts from tax source headers', () => {
+    const parsed = parseTaxDataWorkbook('\u5317\u4eac\u6b63\u6cf0\u6d66\u7535\u6c14\u79d1\u6280\u6709\u9650\u516c\u53f8_\u7efc\u5408\u6240\u5f97\u7533\u62a5_202512.xls', [{
+      name: '\u4e2a\u4eba\u6240\u5f97\u7a0e\u6263\u7f34\u7533\u62a5\u8868',
+      rows: [
+        ['\u6263\u7f34\u4e49\u52a1\u4eba\u540d\u79f0\uff1a\u5317\u4eac\u6b63\u6cf0\u6d66\u7535\u6c14\u79d1\u6280\u6709\u9650\u516c\u53f8'],
+        ['\u6263\u7f34\u4e49\u52a1\u4eba\u7eb3\u7a0e\u4eba\u8bc6\u522b\u53f7\uff08\u7edf\u4e00\u793e\u4f1a\u4fe1\u7528\u4ee3\u7801\uff09\uff1a91110112553089252B'],
+        ['\u5e8f\u53f7', '\u59d3\u540d', '\u8eab\u4efd\u8bc1\u4ef6\u7c7b\u578b', '\u8eab\u4efd\u8bc1\u4ef6\u53f7\u7801', '\u6240\u5f97\u9879\u76ee', '\u7d2f\u8ba1\u6536\u5165\u989d', '\u7d2f\u8ba1\u51cf\u9664\u8d39\u7528', '\u5e94\u7eb3\u7a0e\u6240\u5f97\u989d', '\u7a0e\u7387', '\u5e94\u7eb3\u7a0e\u989d'],
+        ['1', '\u5f20\u4e09', '\u5c45\u6c11\u8eab\u4efd\u8bc1', '110101199001011234', '\u5de5\u8d44\u85aa\u91d1', '60000', '60000', '0', '0.03', '0'],
+      ],
+    }])
+
+    expect(parsed.profilePatch).toMatchObject({
+      name: '\u5317\u4eac\u6b63\u6cf0\u6d66\u7535\u6c14\u79d1\u6280\u6709\u9650\u516c\u53f8',
+      creditCode: '91110112553089252B',
+    })
+  })
+
   it('parses VAT PDF text into evidence-backed lines', () => {
     const parsed = parseTaxDataPdfText('增值税申报表(2025-12-01-2025-12-31).pdf', [
       '增值税及附加税费申报表\n税款所属时间：自2025年12月1日至2025年12月31日\n销项税额 11 1,358,850.00 3,830,338.25\n进项税额 12 1,255,663.11 3,550,395.92',

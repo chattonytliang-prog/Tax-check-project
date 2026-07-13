@@ -9846,6 +9846,7 @@ function AiAssistantPage({
   const addAssistantDraftFromParsedImport = (parsedImport: ParsedClientImport, fileName?: string, rawMaterial?: AssistantRawMaterial, preferredClient?: Client) => {
     const patchData = {
       ...(fileName ? inferClientPatchFromFileName(fileName) : {}),
+      ...coerceImportedClientPatch(parsedImport.taxDataIntake?.profilePatch || {}),
       ...coerceImportedClientPatch(parsedImport.patch),
     }
     const labels = Object.keys(patchData).map(fieldLabel)
@@ -10263,6 +10264,7 @@ function AiAssistantPage({
         unmappedHeaders: parsedImport.unmappedHeaders.slice(0, 40),
         patchPreview: {
           ...inferClientPatchFromFileName(file.name),
+          ...coerceImportedClientPatch(parsedImport.taxDataIntake?.profilePatch || {}),
           ...coerceImportedClientPatch(parsedImport.patch),
         },
       }
