@@ -254,9 +254,16 @@ function parsePayroll(sheet: IntakeSheet, period: Period) {
   const records: StandardTaxRecord[] = []
   headerRows.forEach(({ row: headers, index: header }, blockIndex) => {
     const idx = {
+      sourceSequenceNo: headerIndex(headers, [/^\u5e8f\u53f7$/]),
       employeeName: headerIndex(headers, [/姓名/]), idType: headerIndex(headers, [/身份证件类型|证件类型/]), idNumber: headerIndex(headers, [/身份证件号码|证件号码/]),
       grossPay: headerIndex(headers, [/^工资$|应发工资|收入额/]), pension: headerIndex(headers, [/养老保险/]), medicalInsurance: headerIndex(headers, [/医疗保险/]),
       unemploymentInsurance: headerIndex(headers, [/失业保险/]), housingFund: headerIndex(headers, [/住房公积金|住房基金/]), taxableIncome: headerIndex(headers, [/应纳税所得额/]),
+      cumulativeIncome: headerIndex(headers, [/\u7d2f\u8ba1\u6536\u5165\u989d/]),
+      cumulativeDeduction: headerIndex(headers, [/\u7d2f\u8ba1\u6263\u9664|\u7d2f\u8ba1\u51cf\u9664/]),
+      taxPayable: headerIndex(headers, [/\u5e94\u7eb3\u7a0e\u989d/]),
+      paidTax: headerIndex(headers, [/\u5df2\u7f34\u7a0e\u989d|\u5df2\u6263\u7f34\u7a0e\u989d/]),
+      taxDueRefund: headerIndex(headers, [/\u5e94\u8865.?\u9000\u7a0e\u989d/]),
+      netPay: headerIndex(headers, [/\u5b9e\u9645\u53d1\u653e\u91d1\u989d|\u5b9e\u53d1\u5de5\u8d44/]),
       taxRate: headerIndex(headers, [/税率|预扣率/]), taxWithheld: headerIndex(headers, [/应补退税额|应纳税额|已扣缴税额/]),
     }
     const blockStart = header + 1
@@ -272,11 +279,18 @@ function parsePayroll(sheet: IntakeSheet, period: Period) {
       const pension = amount(dataRow[idx.pension])
       const medical = amount(dataRow[idx.medicalInsurance])
       const unemployment = amount(dataRow[idx.unemploymentInsurance])
+      const sourceSequenceNo = clean(dataRow[idx.sourceSequenceNo >= 0 ? idx.sourceSequenceNo : 0]) || String(offset + 1)
+      const cumulativeIncome = amount(dataRow[idx.cumulativeIncome >= 0 ? idx.cumulativeIncome : 8])
+      const cumulativeDeduction = amount(dataRow[idx.cumulativeDeduction >= 0 ? idx.cumulativeDeduction : 9])
+      const taxPayable = amount(dataRow[idx.taxPayable >= 0 ? idx.taxPayable : 12])
+      const paidTax = amount(dataRow[idx.paidTax >= 0 ? idx.paidTax : 13])
+      const taxDueRefund = amount(dataRow[idx.taxDueRefund >= 0 ? idx.taxDueRefund : 14])
+      const netPay = amount(dataRow[idx.netPay >= 0 ? idx.netPay : 15])
       records.push(makeRecord('payroll', 'payroll_line', {
-        employeeName, idType: clean(dataRow[idx.idType]), idNumberMasked: maskId(idNumber), grossPay: amount(dataRow[idx.grossPay]),
+        sourceSequenceNo, employeeName, idType: clean(dataRow[idx.idType]), idNumber, idNumberMasked: maskId(idNumber), grossPay: amount(dataRow[idx.grossPay]),
         socialSecurity: [pension, medical, unemployment].reduce<number>((sum, value) => sum + (value || 0), 0), pensionInsurance: pension,
-        medicalInsurance: medical, unemploymentInsurance: unemployment, housingFund: amount(dataRow[idx.housingFund]), taxableIncome: amount(dataRow[idx.taxableIncome]),
-        taxRate: amount(dataRow[idx.taxRate]), taxWithheld: amount(dataRow[idx.taxWithheld]), sourceRowNo: blockStart + offset + 1,
+        medicalInsurance: medical, unemploymentInsurance: unemployment, housingFund: amount(dataRow[idx.housingFund]), cumulativeIncome, cumulativeDeduction, taxableIncome: amount(dataRow[idx.taxableIncome]),
+        taxRate: amount(dataRow[idx.taxRate]), taxPayable, paidTax, taxDueRefund, taxWithheld: taxDueRefund ?? taxPayable ?? paidTax ?? amount(dataRow[idx.taxWithheld]), netPay, sourceRowNo: blockStart + offset + 1,
       }, effectivePeriod))
     })
   })

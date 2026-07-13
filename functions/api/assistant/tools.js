@@ -588,15 +588,16 @@ async function materializeStandardRecord(db, auth, batchId, record, defaultClien
     ).bind(parentId, auth.user.id, clientId, batchId, sourceFileId, periodStart, periodEnd).run()
     await db.prepare(
       `INSERT OR REPLACE INTO tax_data_payroll_lines (
-        id, owner_user_id, payroll_run_id, employee_name, id_type, id_number_masked, gross_pay,
-        social_security, medical_insurance, unemployment_insurance, housing_fund, taxable_income,
-        tax_rate, tax_withheld, raw_json, evidence_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, owner_user_id, payroll_run_id, source_sequence_no, employee_name, id_type, id_number, id_number_masked, gross_pay,
+        social_security, medical_insurance, unemployment_insurance, housing_fund, cumulative_income, cumulative_deduction, taxable_income,
+        tax_rate, tax_payable, paid_tax, tax_due_refund, tax_withheld, net_pay, raw_json, evidence_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
-      id, auth.user.id, parentId, normalizeString(payload.employeeName, 120), normalizeString(payload.idType, 80),
-      normalizeString(payload.idNumberMasked, 80), payload.grossPay ?? null, payload.socialSecurity ?? null,
+      id, auth.user.id, parentId, normalizeString(payload.sourceSequenceNo, 40), normalizeString(payload.employeeName, 120), normalizeString(payload.idType, 80),
+      normalizeString(payload.idNumber, 80), normalizeString(payload.idNumberMasked, 80), payload.grossPay ?? null, payload.socialSecurity ?? null,
       payload.medicalInsurance ?? null, payload.unemploymentInsurance ?? null, payload.housingFund ?? null,
-      payload.taxableIncome ?? null, payload.taxRate ?? null, payload.taxWithheld ?? null,
+      payload.cumulativeIncome ?? null, payload.cumulativeDeduction ?? null, payload.taxableIncome ?? null,
+      payload.taxRate ?? null, payload.taxPayable ?? null, payload.paidTax ?? null, payload.taxDueRefund ?? null, payload.taxWithheld ?? null, payload.netPay ?? null,
       rawJson, JSON.stringify({ standardRecordId: id }),
     ).run()
     return true

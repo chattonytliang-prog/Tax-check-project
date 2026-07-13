@@ -257,17 +257,25 @@ export const taxDataIntakeMigration = {
       id TEXT PRIMARY KEY,
       owner_user_id TEXT NOT NULL,
       payroll_run_id TEXT NOT NULL,
+      source_sequence_no TEXT,
       employee_name TEXT,
       id_type TEXT,
+      id_number TEXT,
       id_number_masked TEXT,
       gross_pay REAL,
       social_security REAL,
       medical_insurance REAL,
       unemployment_insurance REAL,
       housing_fund REAL,
+      cumulative_income REAL,
+      cumulative_deduction REAL,
       taxable_income REAL,
       tax_rate REAL,
+      tax_payable REAL,
+      paid_tax REAL,
+      tax_due_refund REAL,
       tax_withheld REAL,
+      net_pay REAL,
       raw_json TEXT NOT NULL DEFAULT '{}',
       evidence_json TEXT NOT NULL DEFAULT '{}',
       FOREIGN KEY (payroll_run_id) REFERENCES tax_data_payroll_runs(id) ON DELETE CASCADE
@@ -374,5 +382,22 @@ export const taxDataIntakeMigration = {
 export async function ensureTaxDataIntakeTables(db) {
   for (const statement of taxDataIntakeMigration.statements) {
     await db.prepare(statement).run()
+  }
+  const compatibleAlterStatements = [
+    `ALTER TABLE tax_data_payroll_lines ADD COLUMN source_sequence_no TEXT`,
+    `ALTER TABLE tax_data_payroll_lines ADD COLUMN id_number TEXT`,
+    `ALTER TABLE tax_data_payroll_lines ADD COLUMN cumulative_income REAL`,
+    `ALTER TABLE tax_data_payroll_lines ADD COLUMN cumulative_deduction REAL`,
+    `ALTER TABLE tax_data_payroll_lines ADD COLUMN tax_payable REAL`,
+    `ALTER TABLE tax_data_payroll_lines ADD COLUMN paid_tax REAL`,
+    `ALTER TABLE tax_data_payroll_lines ADD COLUMN tax_due_refund REAL`,
+    `ALTER TABLE tax_data_payroll_lines ADD COLUMN net_pay REAL`,
+  ]
+  for (const statement of compatibleAlterStatements) {
+    try {
+      await db.prepare(statement).run()
+    } catch (error) {
+      if (!/duplicate column name/i.test(String(error))) throw error
+    }
   }
 }

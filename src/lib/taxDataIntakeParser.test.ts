@@ -30,7 +30,7 @@ describe('tax data intake parser', () => {
     expect(parsed.records.find((record) => record.recordType === 'ledger')?.periodStart).toBe('2025-01-01')
   })
 
-  it('parses statements, payroll, IIT and invoices without retaining raw ID numbers', () => {
+  it('parses statements, payroll, IIT and invoices with standardized identity fields', () => {
     const parsed = parseTaxDataWorkbook('资料_202512.xlsx', [
       { name: '利润表', rows: [['利润表'], ['2025年12月'], ['项目', '行次', '本年累计金额', '本期金额'], ['营业收入', '1', '100', '20']] },
       { name: '工资表', rows: [['工资表'], ['姓名', '身份证件类型', '身份证件号码', '工资', '基本养老保险费', '基本医疗保险费', '失业保险费', '应纳税所得额', '税率', '应纳税额'], ['张三', '身份证', '110101199001011234', '5000', '400', '100', '20', '1000', '0.03', '30']] },
@@ -39,10 +39,12 @@ describe('tax data intake parser', () => {
     ])
 
     expect(parsed.recordCounts).toMatchObject({ financial_statement: 1, payroll: 1, iit_withholding: 1, invoice_list: 1 })
-    const serialized = JSON.stringify(parsed)
-    expect(serialized).not.toContain('110101199001011234')
-    expect(serialized).not.toContain('110101199002021234')
-    expect(serialized).toContain('1101**********1234')
+    const payroll = parsed.records.find((record) => record.recordType === 'payroll')
+    expect(payroll?.payload).toMatchObject({ idNumber: '110101199001011234', idNumberMasked: '1101**********1234' })
+    const evidenceSerialized = JSON.stringify(parsed.evidenceFields)
+    expect(evidenceSerialized).not.toContain('110101199001011234')
+    expect(evidenceSerialized).not.toContain('110101199002021234')
+    expect(evidenceSerialized).toContain('1101**********1234')
   })
 
   it('parses VAT PDF text into evidence-backed lines', () => {

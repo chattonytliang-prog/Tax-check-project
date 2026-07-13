@@ -760,14 +760,14 @@ function TaxDataRecordView({ slot, detail }: { slot: TaxDataSlot; detail: TaxDat
   const configurations: Record<string, Array<[string, string[]]>> = {
     'account-balance': [['科目编码', ['account_code', 'accountCode']], ['科目名称', ['account_name', 'accountName']], ['期初借方', ['opening_debit', 'openingDebit']], ['期初贷方', ['opening_credit', 'openingCredit']], ['本期借方', ['current_debit', 'currentDebit']], ['本期贷方', ['current_credit', 'currentCredit']], ['期末借方', ['ending_debit', 'endingDebit']], ['期末贷方', ['ending_credit', 'endingCredit']]],
     ledger: [['日期', ['entry_date', 'entryDate']], ['凭证号', ['voucher_no', 'voucherNo']], ['科目', ['account_name', 'accountName']], ['摘要', ['summary']], ['借方金额', ['debit_amount', 'debitAmount']], ['贷方金额', ['credit_amount', 'creditAmount']], ['余额', ['balance_amount', 'balanceAmount']]],
-    payroll: [['员工', ['employee_name', 'employeeName']], ['应发工资', ['gross_pay', 'grossPay']], ['社保', ['social_security', 'socialSecurity']], ['公积金', ['housing_fund', 'housingFund']], ['应纳税所得额', ['taxable_income', 'taxableIncome']], ['代扣个税', ['tax_withheld', 'taxWithheld']]],
+    payroll: [['序号', ['source_sequence_no', 'sourceSequenceNo', 'source_row_no', 'sourceRowNo']], ['姓名', ['employee_name', 'employeeName']], ['身份证件类型', ['id_type', 'idType']], ['身份证件号码', ['id_number', 'idNumber', 'id_number_masked', 'idNumberMasked']], ['工资', ['gross_pay', 'grossPay']], ['基本养老保险费', ['pension_insurance', 'pensionInsurance']], ['基本医疗保险费', ['medical_insurance', 'medicalInsurance']], ['失业保险费', ['unemployment_insurance', 'unemploymentInsurance']], ['累计收入额', ['cumulative_income', 'cumulativeIncome']], ['累计扣除', ['cumulative_deduction', 'cumulativeDeduction']], ['应纳税所得额', ['taxable_income', 'taxableIncome']], ['税率', ['tax_rate', 'taxRate']], ['应纳税额', ['tax_payable', 'taxPayable']], ['已缴税额', ['paid_tax', 'paidTax']], ['应补/退税额', ['tax_due_refund', 'taxDueRefund', 'tax_withheld', 'taxWithheld']], ['实际发放金额', ['net_pay', 'netPay']]],
     'iit-withholding': [['人员', ['person_name', 'personName']], ['所得项目', ['income_item', 'incomeItem']], ['本期收入', ['current_income', 'currentIncome']], ['累计收入', ['cumulative_income', 'cumulativeIncome']], ['应纳税所得额', ['taxable_income', 'taxableIncome']], ['已扣缴税额', ['tax_withheld', 'taxWithheld']]],
     'invoice-output': [['开票日期', ['invoice_date', 'invoiceDate']], ['发票号码', ['invoice_no', 'invoiceNo']], ['购方名称', ['counterparty_name', 'counterpartyName']], ['商品或服务', ['goods_name', 'goodsName']], ['金额', ['amount']], ['税额', ['tax_amount', 'taxAmount']], ['状态', ['invoice_status', 'invoiceStatus']]],
     'invoice-input': [['开票日期', ['invoice_date', 'invoiceDate']], ['发票号码', ['invoice_no', 'invoiceNo']], ['销方名称', ['counterparty_name', 'counterpartyName']], ['商品或服务', ['goods_name', 'goodsName']], ['金额', ['amount']], ['税额', ['tax_amount', 'taxAmount']], ['状态', ['invoice_status', 'invoiceStatus']]],
   }
   const columns = configurations[slot.slotId]
   if (!columns) return <p className="tax-data-detail-status">该类资料已完成归档，当前没有可视化明细模板。</p>
-  const amountLabels = /金额|余额|工资|社保|公积金|所得额|税额/
+  const amountLabels = /金额|余额|工资|社保|公积金|所得额|税额|保险费|收入额|扣除/
   return <div className="tax-data-table-wrap">
     <table className="tax-data-detail-table business-table">
       <thead><tr>{columns.map(([label]) => <th key={label}>{label}</th>)}</tr></thead>

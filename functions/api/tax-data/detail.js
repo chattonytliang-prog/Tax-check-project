@@ -1,5 +1,6 @@
 import { badRequest, json, requireDb, serverError } from '../_utils.js'
 import { requireUser } from '../auth/_auth.js'
+import { ensureTaxDataIntakeTables } from '../_tax_data_schema.js'
 
 async function all(db, sql, ...params) {
   const result = await db.prepare(sql).bind(...params).all()
@@ -83,9 +84,9 @@ async function typedRecords(db, ownerUserId, clientId, sourceFileIds, slotId, pe
     base.push(direction, ...period.params)
   } else if (slotId === 'payroll') {
     const period = periodClause('r.period_start', 'r.period_end', periodStart, periodEnd)
-    sql = `SELECT l.id, r.source_file_id, r.period_start, r.period_end, l.employee_name, l.id_type, l.id_number_masked,
+    sql = `SELECT l.id, r.source_file_id, r.period_start, r.period_end, l.source_sequence_no, l.employee_name, l.id_type, l.id_number, l.id_number_masked,
                   l.gross_pay, l.social_security, l.medical_insurance, l.unemployment_insurance, l.housing_fund,
-                  l.taxable_income, l.tax_rate, l.tax_withheld
+                  l.cumulative_income, l.cumulative_deduction, l.taxable_income, l.tax_rate, l.tax_payable, l.paid_tax, l.tax_due_refund, l.tax_withheld, l.net_pay
            FROM tax_data_payroll_runs r JOIN tax_data_payroll_lines l ON l.payroll_run_id = r.id
            WHERE r.owner_user_id = ? AND r.client_id = ? AND r.source_file_id IN (${placeholders})${period.sql} ORDER BY l.id LIMIT 500`
     base.push(...period.params)
@@ -110,6 +111,7 @@ export async function onRequestGet({ request, env }) {
     const db = requireDb(env)
     const auth = await requireUser(request, db)
     if (auth.response) return auth.response
+    await ensureTaxDataIntakeTables(db)
 
     const url = new URL(request.url)
     const clientId = String(url.searchParams.get('clientId') || '').trim()
