@@ -2440,6 +2440,80 @@ th {
   white-space: normal;
 }
 
+.payroll-standard-sheet {
+  background: #fff;
+  border: 1px solid #9fb5bb;
+  color: #000;
+}
+
+.payroll-standard-sheet header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
+  gap: 12px;
+  padding: 6px 8px 4px;
+  font-size: 13px;
+}
+
+.payroll-standard-sheet header strong {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.payroll-standard-sheet header span {
+  text-align: right;
+}
+
+.payroll-standard-wrap {
+  max-height: 64vh;
+}
+
+.payroll-standard-table {
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.payroll-standard-table th,
+.payroll-standard-table td {
+  border: 1px solid #111;
+  padding: 4px 7px;
+  white-space: nowrap;
+  color: #000;
+}
+
+.payroll-standard-table th {
+  background: #b8cce4;
+  text-align: center;
+  font-weight: 700;
+}
+
+.payroll-standard-table td:nth-child(1),
+.payroll-standard-table td:nth-child(2),
+.payroll-standard-table td:nth-child(3) {
+  text-align: center;
+}
+
+.payroll-standard-table td:nth-child(4) {
+  min-width: 142px;
+}
+
+.payroll-standard-table .payroll-highlight {
+  background: #fff200;
+}
+
+.payroll-standard-table .payroll-total-row td {
+  font-weight: 800;
+  border-top-width: 2px;
+  background: #fff;
+}
+
+.payroll-standard-table .payroll-total-row .payroll-highlight {
+  background: #fff200;
+}
+
 .raw-workbook-toolbar {
   display: flex;
   align-items: end;

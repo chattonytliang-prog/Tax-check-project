@@ -663,6 +663,68 @@ function statementAmount(record: TaxDataDetail['records'][number] | undefined, t
   return taxDataAmount(recordValue(record.data, ...keys))
 }
 
+const payrollStandardColumns: Array<{ label: string; keys: string[]; amount?: boolean; highlight?: boolean }> = [
+  { label: '序号', keys: ['source_sequence_no', 'sourceSequenceNo', 'source_row_no', 'sourceRowNo'] },
+  { label: '姓名', keys: ['employee_name', 'employeeName'] },
+  { label: '身份证件类型', keys: ['id_type', 'idType'] },
+  { label: '身份证件号码', keys: ['id_number', 'idNumber', 'id_number_masked', 'idNumberMasked'] },
+  { label: '工资', keys: ['gross_pay', 'grossPay'], amount: true },
+  { label: '基本养老保险费', keys: ['pension_insurance', 'pensionInsurance'], amount: true },
+  { label: '基本医疗保险费', keys: ['medical_insurance', 'medicalInsurance'], amount: true },
+  { label: '失业保险费', keys: ['unemployment_insurance', 'unemploymentInsurance'], amount: true },
+  { label: '累计收入额', keys: ['cumulative_income', 'cumulativeIncome'], amount: true },
+  { label: '累计扣除', keys: ['cumulative_deduction', 'cumulativeDeduction'], amount: true },
+  { label: '应纳税所得额', keys: ['taxable_income', 'taxableIncome'], amount: true },
+  { label: '税率', keys: ['tax_rate', 'taxRate'], amount: true },
+  { label: '应纳税额', keys: ['tax_payable', 'taxPayable'], amount: true },
+  { label: '已缴税额', keys: ['paid_tax', 'paidTax'], amount: true },
+  { label: '应补/退税额', keys: ['tax_due_refund', 'taxDueRefund', 'tax_withheld', 'taxWithheld'], amount: true },
+  { label: '实际发放金额', keys: ['net_pay', 'netPay'], amount: true, highlight: true },
+]
+
+function payrollSequence(record: TaxDataDetail['records'][number], fallback: number) {
+  const value = recordValue(record.data, 'source_sequence_no', 'sourceSequenceNo', 'source_row_no', 'sourceRowNo')
+  const numeric = Number(String(value ?? '').replace(/[^\d.-]/g, ''))
+  return Number.isFinite(numeric) ? numeric : fallback + 1
+}
+
+function PayrollStandardSheet({ slot, detail }: { slot: TaxDataSlot; detail: TaxDataDetail }) {
+  const records = [...detail.records].sort((a, b) => payrollSequence(a, 0) - payrollSequence(b, 0))
+  const company = readableImportedText(detail.sources[0]?.file_name.replace(/20\d{2}.*$/, ''), '当前企业')
+  const totals = payrollStandardColumns.map((column) => {
+    if (!column.amount || column.label === '税率') return null
+    return records.reduce((sum, record) => {
+      const value = Number(String(recordValue(record.data, ...column.keys) ?? '').replace(/,/g, ''))
+      return Number.isFinite(value) ? sum + value : sum
+    }, 0)
+  })
+  return <section className="payroll-standard-sheet">
+    <header>
+      <div>单位：{company}</div>
+      <strong>工资表</strong>
+      <span>{slot.periodLabel}</span>
+    </header>
+    <div className="tax-data-table-wrap payroll-standard-wrap">
+      <table className="tax-data-detail-table payroll-standard-table">
+        <thead><tr>{payrollStandardColumns.map((column) => <th key={column.label} className={column.highlight ? 'payroll-highlight' : ''}>{column.label}</th>)}</tr></thead>
+        <tbody>
+          {records.map((record, index) => <tr key={record.id}>{payrollStandardColumns.map((column) => {
+            const value = column.label === '序号' ? payrollSequence(record, index) : recordValue(record.data, ...column.keys)
+            return <td key={column.label} className={`${column.amount ? 'amount-cell' : ''} ${column.highlight ? 'payroll-highlight' : ''}`}>{column.amount ? taxDataAmount(value) : displayTaxDataValue(value)}</td>
+          })}</tr>)}
+          <tr className="payroll-total-row">{payrollStandardColumns.map((column, index) => {
+            if (index === 0) return <td key={column.label} colSpan={4}>合计</td>
+            if (index < 4) return null
+            const total = totals[index]
+            return <td key={column.label} className={`amount-cell ${column.highlight ? 'payroll-highlight' : ''}`}>{total === null ? '' : taxDataAmount(total)}</td>
+          })}</tr>
+        </tbody>
+      </table>
+    </div>
+    {detail.truncated ? <p className="section-helper">当前展示前 500 条，完整记录仍保存在系统中。</p> : null}
+  </section>
+}
+
 function statementLineClass(line: StandardStatementLine) {
   const name = line.name || ''
   if (/^[一二三四五]、|合计|净额|利润总额|净利润|营业利润|期末现金余额|现金净增加额/.test(name)) return 'statement-total-row'
@@ -674,6 +736,7 @@ function TaxDataRecordView({ slot, detail }: { slot: TaxDataSlot; detail: TaxDat
   const records = detail.records
   const isFinancialStatement = slot.slotId.startsWith('financial-')
   if (!records.length && !isFinancialStatement) return <p className="tax-data-detail-status">该归档已有汇总记录，但没有可展示的标准明细。</p>
+  if (slot.slotId === 'payroll') return <PayrollStandardSheet slot={slot} detail={detail} />
 
   if (slot.slotId === 'vat-return-main') {
     const recordsByRow = new Map(records.map((record) => [String(recordValue(record.data, 'row_no', 'rowNo')).match(/^\d+/)?.[0] || '', record]))
