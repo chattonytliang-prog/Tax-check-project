@@ -72,6 +72,10 @@ async function typedRecords(db, ownerUserId, clientId, sourceFileIds, slotId, pe
   } else if (slotId === 'ledger') {
     const period = periodClause('entry_date', 'entry_date', periodStart, periodEnd)
     sql = `SELECT id, source_file_id, entry_date AS period_start, entry_date AS period_end, voucher_no, account_code, account_name,
+                  COALESCE(json_extract(raw_json, '$.parentAccountCode'), CASE WHEN length(account_code) > 4 THEN substr(account_code, 1, 4) ELSE account_code END) AS parent_account_code,
+                  COALESCE(json_extract(raw_json, '$.parentAccountName'), CASE WHEN instr(account_name, '-') > 0 THEN substr(account_name, 1, instr(account_name, '-') - 1) ELSE account_name END) AS parent_account_name,
+                  COALESCE(json_extract(raw_json, '$.auxiliaryName'), CASE WHEN instr(account_name, '-') > 0 THEN substr(account_name, instr(account_name, '-') + 1) ELSE '' END) AS auxiliary_name,
+                  json_extract(raw_json, '$.sourceSheetName') AS source_sheet_name,
                   summary, debit_amount, credit_amount, direction, balance_amount
            FROM tax_data_ledger_entries WHERE owner_user_id = ? AND client_id = ? AND source_file_id IN (${placeholders})${period.sql} ORDER BY entry_date, id LIMIT 500`
     base.push(...period.params)

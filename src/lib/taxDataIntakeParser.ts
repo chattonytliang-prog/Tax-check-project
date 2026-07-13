@@ -220,10 +220,26 @@ function parseAccountBalance(sheet: IntakeSheet, period: Period) {
   return records
 }
 
+function ledgerAccountContext(sheetName: string) {
+  const match = clean(sheetName).match(/^(\d{3,})\s+(.+)$/)
+  return {
+    parentAccountCode: match?.[1] || '',
+    parentAccountName: match?.[2]?.trim() || '',
+  }
+}
+
+function ledgerAuxiliaryName(accountName: string, parentAccountName: string) {
+  const value = clean(accountName)
+  if (!value || !parentAccountName) return ''
+  const escapedParent = parentAccountName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return clean(value.replace(new RegExp(`^${escapedParent}\\s*[-_—－:]\\s*`), ''))
+}
+
 function parseLedger(sheet: IntakeSheet, period: Period) {
   const header = findHeaderRow(sheet.rows, [/日期/, /凭证字号|凭证号/, /摘要/, /借方/, /贷方/], 8)
   if (header < 0) return []
   const headers = sheet.rows[header]
+  const accountContext = ledgerAccountContext(sheet.name)
   const index = {
     date: headerIndex(headers, [/日期/]), voucherNo: headerIndex(headers, [/凭证字号|凭证号/]),
     accountCode: headerIndex(headers, [/科目编码/]), accountName: headerIndex(headers, [/科目名称/]), summary: headerIndex(headers, [/摘要/]),
@@ -236,7 +252,12 @@ function parseLedger(sheet: IntakeSheet, period: Period) {
     const summary = clean(row[index.summary])
     if (!entryDate || !accountCode || !accountName || /^(期初余额|本期合计|本年累计)$/.test(summary)) return []
     return [makeRecord('ledger', 'ledger_entry', {
-      entryDate, voucherNo: clean(row[index.voucherNo]), accountCode, accountName, summary,
+      entryDate, voucherNo: clean(row[index.voucherNo]), accountCode, accountName,
+      parentAccountCode: accountContext.parentAccountCode,
+      parentAccountName: accountContext.parentAccountName,
+      auxiliaryName: ledgerAuxiliaryName(accountName, accountContext.parentAccountName),
+      sourceSheetName: sheet.name,
+      summary,
       debitAmount: amount(row[index.debitAmount]), creditAmount: amount(row[index.creditAmount]),
       direction: clean(row[index.direction]), balanceAmount: amount(row[index.balanceAmount]), sourceRowNo: header + offset + 2,
     }, period)]
@@ -401,6 +422,7 @@ function parseLedgerCn(sheet: IntakeSheet, period: Period) {
   const header = findHeaderRow(sheet.rows, [/日期/, /凭证字号|凭证号/, /摘要/, /借方/, /贷方/], 8)
   if (header < 0) return []
   const headers = sheet.rows[header]
+  const accountContext = ledgerAccountContext(sheet.name)
   const index = {
     date: headerIndex(headers, [/日期/]), voucherNo: headerIndex(headers, [/凭证字号|凭证号/]),
     accountCode: headerIndex(headers, [/科目编码/]), accountName: headerIndex(headers, [/科目名称/]), summary: headerIndex(headers, [/摘要/]),
@@ -413,7 +435,12 @@ function parseLedgerCn(sheet: IntakeSheet, period: Period) {
     const summary = clean(row[index.summary])
     if (!entryDate || !accountCode || !accountName || /^(期初余额|本期合计|本年累计)$/.test(summary)) return []
     return [makeRecord('ledger', 'ledger_entry', {
-      entryDate, voucherNo: clean(row[index.voucherNo]), accountCode, accountName, summary,
+      entryDate, voucherNo: clean(row[index.voucherNo]), accountCode, accountName,
+      parentAccountCode: accountContext.parentAccountCode,
+      parentAccountName: accountContext.parentAccountName,
+      auxiliaryName: ledgerAuxiliaryName(accountName, accountContext.parentAccountName),
+      sourceSheetName: sheet.name,
+      summary,
       debitAmount: amount(row[index.debitAmount]), creditAmount: amount(row[index.creditAmount]),
       direction: clean(row[index.direction]), balanceAmount: amount(row[index.balanceAmount]), sourceRowNo: header + offset + 2,
     }, period)]

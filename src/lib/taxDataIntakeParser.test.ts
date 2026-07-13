@@ -56,6 +56,27 @@ describe('tax data intake parser', () => {
     expect(evidenceSerialized).toContain('1101**********1234')
   })
 
+  it('keeps ledger parent account separate from auxiliary customer or vendor names', () => {
+    const parsed = parseTaxDataWorkbook('\u660e\u7ec6\u8d26_202501-202512.xls', [{
+      name: '1122 \u5e94\u6536\u8d26\u6b3e',
+      rows: [
+        ['\u660e\u7ec6\u8d26'],
+        ['\u65e5\u671f', '\u51ed\u8bc1\u5b57\u53f7', '\u79d1\u76ee\u7f16\u7801', '\u79d1\u76ee\u540d\u79f0', '\u6458\u8981', '\u501f\u65b9', '\u8d37\u65b9', '\u65b9\u5411', '\u4f59\u989d'],
+        ['2025-01-31', '\u8bb0-10', '1122078', '\u5e94\u6536\u8d26\u6b3e-\u5317\u4eacA\u516c\u53f8', '\u672c\u6708\u6536\u5165/\u5317\u4eacA\u516c\u53f8', '100', '', '\u501f', '100'],
+      ],
+    }])
+
+    expect(parsed.recordCounts).toMatchObject({ ledger: 1 })
+    expect(parsed.records[0].payload).toMatchObject({
+      accountCode: '1122078',
+      accountName: '\u5e94\u6536\u8d26\u6b3e-\u5317\u4eacA\u516c\u53f8',
+      parentAccountCode: '1122',
+      parentAccountName: '\u5e94\u6536\u8d26\u6b3e',
+      auxiliaryName: '\u5317\u4eacA\u516c\u53f8',
+      sourceSheetName: '1122 \u5e94\u6536\u8d26\u6b3e',
+    })
+  })
+
   it('parses VAT PDF text into evidence-backed lines', () => {
     const parsed = parseTaxDataPdfText('增值税申报表(2025-12-01-2025-12-31).pdf', [
       '增值税及附加税费申报表\n税款所属时间：自2025年12月1日至2025年12月31日\n销项税额 11 1,358,850.00 3,830,338.25\n进项税额 12 1,255,663.11 3,550,395.92',
