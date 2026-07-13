@@ -443,6 +443,13 @@ function isBusinessWriteRequest(message) {
   return /(录入|导入|入库|保存|创建|新建|修改|更正|更新|删除|替换|调整).{0,16}(数据|资料|档案|企业|期间|记录|报告)?/.test(String(message || '').replace(/\s+/g, ''))
 }
 
+function isReadOnlyBusinessQuestion(message) {
+  const text = String(message || '').replace(/\s+/g, '')
+  if (!text) return false
+  if (/(确认|帮我|直接|全部|这批|这些).{0,8}(录入|导入|入库|保存|建档|收录)/.test(text)) return false
+  return /(列出|列出来|展示|显示|看看|看一下|有哪些|有几个|多少|明细|清单|分别是|构成|分类|分布|余额|金额|科目|资料|文件|报表|风险|缺什么|缺哪些)/.test(text)
+}
+
 function conversationalSystemPrompt(client, assistantContext) {
   return `你是嵌入税务合规软件的中文 AI 助手。请像正常专业助手一样自然、直接地对话。
 当前会话只对应一家企业：${client.name}（clientId: ${client.id}）。“我公司/我们公司”均指该企业。
@@ -884,10 +891,16 @@ export async function onRequestPost({ request, env }) {
     if (!cleanMessage) return badRequest('Message is required')
     if (!client?.id || !client?.name) return badRequest('Client id and name are required')
 
-    const ownedClient = await db
+    let ownedClient = await db
       .prepare('SELECT id, name FROM clients WHERE id = ? AND owner_user_id = ?')
       .bind(client.id, auth.user.id)
       .first()
+    if (!ownedClient && client.name) {
+      ownedClient = await db
+        .prepare('SELECT id, name FROM clients WHERE name = ? AND owner_user_id = ? ORDER BY created_at DESC LIMIT 1')
+        .bind(client.name, auth.user.id)
+        .first()
+    }
     const clientVerified = Boolean(ownedClient)
 
     if (ownedClient && !cleanImages.length) {
@@ -909,15 +922,17 @@ export async function onRequestPost({ request, env }) {
 
     const model = env.DEEPSEEK_MODEL || DEFAULT_MODEL
     const reasoning = reasoningConfig(cleanMessage)
-    if (ownedClient && !isBusinessWriteRequest(cleanMessage)) {
+    const isReadOnlyQuestion = isReadOnlyBusinessQuestion(cleanMessage)
+    if ((ownedClient && !isBusinessWriteRequest(cleanMessage)) || isReadOnlyQuestion) {
+      const conversationClient = ownedClient || client
       const conversational = await runConversationalAssistant({
-        env, db, auth, model, client: ownedClient, message: cleanMessage,
+        env, db, auth, model, client: conversationClient, message: cleanMessage,
         history: cleanHistory, assistantContext: cleanAssistantContext, reasoning, images: cleanImages,
       })
       return json({
         answer: conversational.answer,
         draftPatch: {}, missingFields: [], toolCalls: [], suggestions: [], followUps: [],
-        clientVerified: true, model, usage: conversational.usage,
+        clientVerified, model, usage: conversational.usage,
       })
     }
     const messages = [
