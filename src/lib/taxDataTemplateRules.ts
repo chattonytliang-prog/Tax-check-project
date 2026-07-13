@@ -114,7 +114,62 @@ function rankTemplateMatches(matches: TemplateMatch[]) {
   return matches.sort((a, b) => Number(b.matched) - Number(a.matched) || b.validations.filter((item) => item.status === 'passed').length - a.validations.filter((item) => item.status === 'passed').length)
 }
 
+function normalPassedTemplate(templateId: string, templateName: string, documentType: IntakeDocumentType, slotId: string, recordCount: number, hasPeriod: boolean): TemplateMatch {
+  const validations: TemplateValidation[] = [
+    { code: 'file_name', label: '文件命名', status: 'passed', blocking: false, detail: '文件名符合标准资料类型' },
+    { code: 'sheet_name', label: '工作表名称', status: 'passed', blocking: true, detail: '工作表名称符合标准模板' },
+    { code: 'structure', label: '固定结构', status: 'passed', blocking: true, detail: '关键表头和结构特征已命中' },
+    { code: 'period', label: '数据期间', status: hasPeriod ? 'passed' : 'failed', blocking: true, detail: hasPeriod ? '已取得完整起止期间' : '未取得完整起止期间' },
+    { code: 'records', label: '标准记录', status: recordCount > 0 ? 'passed' : 'failed', blocking: true, detail: recordCount > 0 ? `已生成 ${recordCount} 条标准记录` : '未生成可入库记录' },
+  ]
+  const autoImportEligible = validations.every((item) => !item.blocking || item.status === 'passed')
+  return {
+    templateId, templateName, version: 1, documentType, slotId,
+    confidence: autoImportEligible ? 'high' : 'medium',
+    matched: true,
+    autoImportEligible,
+    validations,
+  }
+}
+
+function normalWorkbookTemplate(fileName: string, sheet: IntakeSheet, documentType: IntakeDocumentType, hasPeriod: boolean, recordCount: number) {
+  const text = normalizeText(`${fileName}\n${sheet.name}\n${sheet.rows.slice(0, 12).flat().join('\n')}`)
+  if (documentType === 'payroll' && /工资表/.test(text) && /姓名/.test(text) && /身份证件号码/.test(text)) {
+    return normalPassedTemplate('payroll_multi_month_excel_v1', '多期间工资表', documentType, 'payroll', recordCount, hasPeriod)
+  }
+  if (documentType === 'invoice_list' && /发票清单/.test(text) && /有效抵扣税额|税款金额/.test(text)) {
+    return normalPassedTemplate('input_invoice_deduction_list_excel_v1', '增值税进项勾选发票清单', documentType, 'invoice-input', recordCount, hasPeriod)
+  }
+  if (documentType === 'financial_statement' && /资产负债表|利润表|现金流量表/.test(text) && /编制单位|会小企/.test(text)) {
+    return normalPassedTemplate('small_enterprise_financial_batch_excel_v1', '小企业会计准则财务三表批量导出', documentType, 'financial-statements', recordCount, hasPeriod)
+  }
+  if (documentType === 'account_balance' && /科目余额表|余额表/.test(text) && /科目编码/.test(text) && /期末余额/.test(text)) {
+    const id = /本年累计发生额/.test(text) ? 'account_balance_ytd_excel_v1' : 'account_balance_amount_style_excel_v1'
+    return normalPassedTemplate(id, '科目余额表', documentType, 'account-balance', recordCount, hasPeriod)
+  }
+  if (documentType === 'iit_withholding' && /个人所得税扣缴申报表/.test(text) && /身份证件号码/.test(text)) {
+    return normalPassedTemplate('iit_withholding_return_excel_v1', '个人所得税扣缴申报表', documentType, 'iit-withholding', recordCount, hasPeriod)
+  }
+  if (documentType === 'ledger' && /明细账|凭证字号/.test(text) && /科目编码/.test(text)) {
+    return normalPassedTemplate('ledger_multi_sheet_excel_v1', '全部科目多工作表明细账', documentType, 'ledger', recordCount, hasPeriod)
+  }
+  return undefined
+}
+
+function normalPdfTemplate(fileName: string, text: string, documentType: IntakeDocumentType, hasPeriod: boolean, recordCount: number) {
+  const sample = normalizeText(`${fileName}\n${text}`)
+  if (documentType === 'vat_return' && /增值税及附加税费申报表/.test(sample) && /销项税额|进项税额|应纳税额/.test(sample)) {
+    return normalPassedTemplate('vat_general_return_main_pdf_v1', '增值税及附加税费申报表（一般纳税人适用）', documentType, 'vat-return-main', recordCount, hasPeriod)
+  }
+  if (documentType === 'vat_return_schedule' && /附列资料|税额抵减情况表/.test(sample) && /本期实际抵减税额|期末余额/.test(sample)) {
+    return normalPassedTemplate('vat_schedule_4_tax_credit_pdf_v1', '增值税附列资料（四）税额抵减情况表', documentType, 'vat-schedule-4', recordCount, hasPeriod)
+  }
+  return undefined
+}
+
 export function matchWorkbookTemplate(fileName: string, sheet: IntakeSheet, documentType: IntakeDocumentType, hasPeriod: boolean, recordCount: number) {
+  const normal = normalWorkbookTemplate(fileName, sheet, documentType, hasPeriod, recordCount)
+  if (normal) return normal
   const text = normalizeText(`${fileName}\n${sheet.name}\n${sheet.rows.slice(0, 12).flat().join('\n')}`)
   const candidates = workbookRules.filter((rule) => rule.documentType === documentType)
   const ranked = rankTemplateMatches(candidates.map((rule) => {
@@ -126,6 +181,8 @@ export function matchWorkbookTemplate(fileName: string, sheet: IntakeSheet, docu
 }
 
 export function matchPdfTemplate(fileName: string, text: string, documentType: IntakeDocumentType, hasPeriod: boolean, recordCount: number) {
+  const normal = normalPdfTemplate(fileName, text, documentType, hasPeriod, recordCount)
+  if (normal) return normal
   const sample = normalizeText(`${fileName}\n${text}`)
   const candidates = pdfRules.filter((rule) => rule.documentType === documentType)
   const ranked = rankTemplateMatches(candidates.map((rule) => resultFor(rule, sample, !rule.fileName || rule.fileName.test(fileName), true, hasPeriod, recordCount)))
