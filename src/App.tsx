@@ -5791,23 +5791,6 @@ function App() {
     }
   }
 
-  const loadRiskDemoCases = () => {
-    const existingByCreditCode = new Map(clients.map((client) => [client.creditCode, client]))
-    const demoCases = createDemoClients().map((client) => {
-      const existingClient = existingByCreditCode.get(client.creditCode)
-      return deriveClientMetrics(existingClient ? { ...client, id: existingClient.id } : client)
-    })
-
-    setClients((current) => [
-      ...demoCases,
-      ...current.filter((client) => !demoCaseCreditCodes.has(client.creditCode)),
-    ])
-    setSelectedClientId(demoCases[0].id)
-    setSelectedPeriodEntryIds(demoCases[0].periodEntries[0] ? [demoCases[0].periodEntries[0].id] : [])
-    setPage('clients')
-    window.alert('已临时载入低风险、中风险、高风险 3 个测试案例，每个案例包含 2024-01 至 2025-12 共 24 期月度数据。测试案例不会保存到正式企业档案，刷新后会隐藏。')
-  }
-
   const editPeriodEntry = (entry: ClientPeriodEntry) => {
     setEditingClient(hydratePeriodDraft(entry))
     setPage('form')
@@ -6704,12 +6687,6 @@ function App() {
                 >
                   <FileText /> {taxDataDirectImporting ? '规则导入中' : '标准资料导入'}
                 </button>
-                <div className="demo-import-action">
-                  <button type="button" className="secondary-button" onClick={loadRiskDemoCases}>
-                    <ClipboardList /> 载入测试案例
-                  </button>
-                  <small>演示数据，仅用于试算流程验证；点击后临时显示，刷新后隐藏。</small>
-                </div>
                 <button
                   className="primary-button"
                   onClick={() => {
