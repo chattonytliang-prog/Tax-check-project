@@ -6619,7 +6619,7 @@ function App() {
                         : `${displayedTaxDataStats.collectedCategoryCount}/${displayedTaxDataStats.totalCategoryCount || 18}`}</strong>
                     </div>
                     <div>
-                      <span>来源文件</span>
+                      <span>已入库源文件</span>
                       <strong>{displayedTaxDataStats.sourceFileCount} 个</strong>
                     </div>
                     <div>

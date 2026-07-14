@@ -8,12 +8,15 @@ describe('hasDirectIntakeAuthorization', () => {
     '都收录进去，收完再告诉我',
     '确认导入',
     '按这个保存',
+    '你能帮我识别并上传这两个表吗',
+    '解析后归档这几个资料',
   ])('recognizes natural-language write authorization: %s', (message) => {
     expect(hasDirectIntakeAuthorization(message)).toBe(true)
   })
 
   it.each([
     '先别导入，我还没传完',
+    '先别上传，我还没传完',
     '不要收录，只帮我看看',
     '这些文件是什么资料',
     '怎么导入？',
