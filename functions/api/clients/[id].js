@@ -1,5 +1,6 @@
-import { json, nowIso, readJson, requireDb, serverError } from '../_utils.js'
+import { badRequest, json, nowIso, readJson, requireDb, serverError } from '../_utils.js'
 import { requireUser } from '../auth/_auth.js'
+import { isInvalidClientName } from '../_client_validation.js'
 
 export async function onRequestGet({ request, env, params }) {
   try {
@@ -29,6 +30,9 @@ export async function onRequestPut({ request, env, params }) {
     if (auth.response) return auth.response
 
     const client = await readJson(request)
+    if (isInvalidClientName(client.name)) {
+      return badRequest('Invalid client name')
+    }
     const now = nowIso()
     const payload = JSON.stringify({ ...client, id: params.id })
     await db

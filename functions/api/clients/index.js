@@ -1,5 +1,6 @@
 import { badRequest, json, nowIso, readJson, requireDb, serverError } from '../_utils.js'
 import { requireUser } from '../auth/_auth.js'
+import { isInvalidClientName } from '../_client_validation.js'
 
 export async function onRequestGet({ request, env }) {
   try {
@@ -27,6 +28,9 @@ export async function onRequestPost({ request, env }) {
     const client = await readJson(request)
     if (!client.id || !client.name) {
       return badRequest('Client id and name are required')
+    }
+    if (isInvalidClientName(client.name)) {
+      return badRequest('Invalid client name')
     }
 
     const now = nowIso()
