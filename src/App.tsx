@@ -5553,8 +5553,31 @@ function App() {
     return parseClientImportText(decodeClientImportText(buffer))
   }
 
-  const resolveClientForTaxDataDirectImport = async (baseClient: Client, parsedImport: ParsedClientImport) => {
-    const profilePatch = coerceImportedClientPatch(parsedImport.taxDataIntake?.profilePatch || {})
+  const resolveClientForTaxDataDirectImport = async (baseClient: Client | null, parsedImport: ParsedClientImport, fileName: string) => {
+    const profilePatch = coerceImportedClientPatch({
+      ...inferClientPatchFromFileName(fileName),
+      ...(parsedImport.patch || {}),
+      ...(parsedImport.taxDataIntake?.profilePatch || {}),
+    })
+    if (!baseClient) {
+      if (!profilePatch.name || isInvalidImportedCompanyName(profilePatch.name)) {
+        throw new Error('没有选中企业，且文件里没有识别到可建档的企业名称')
+      }
+      const records = parsedImport.taxDataIntake?.records || []
+      const periodStarts = records.map((record) => record.periodStart).filter(Boolean).sort()
+      const periodEnds = records.map((record) => record.periodEnd).filter(Boolean).sort()
+      const created = deriveClientMetrics({
+        ...blankClient,
+        ...profilePatch,
+        id: crypto.randomUUID(),
+        periodStartDate: profilePatch.periodStartDate || periodStarts[0] || blankClient.periodStartDate,
+        periodEndDate: profilePatch.periodEndDate || periodEnds.at(-1) || blankClient.periodEndDate,
+      })
+      await persistClientUpdate(created)
+      setClients((current) => current.some((client) => client.id === created.id) ? current : [created, ...current])
+      setSelectedClientId(created.id)
+      return created
+    }
     const patch: Partial<Client> = {}
     if (isInvalidImportedCompanyName(baseClient.name) && profilePatch.name && !isInvalidImportedCompanyName(profilePatch.name)) {
       patch.name = profilePatch.name
@@ -5644,22 +5667,18 @@ function App() {
   const handleTaxDataDirectImport = async (fileList: FileList | null) => {
     const files = Array.from(fileList || [])
     if (!files.length || taxDataDirectImporting) return
-    if (!selectedClient?.id) {
-      setTaxDataDirectImportMessage('请先选择企业。')
-      return
-    }
     setTaxDataDirectImporting(true)
     setTaxDataDirectImportMessage(`正在按固定模板规则解析 ${files.length} 个文件...`)
     const results: string[] = []
     let savedCount = 0
     let recordCount = 0
-    let currentClient = selectedClient
+    let currentClient: Client | null = selectedClient || null
     try {
       for (const file of files) {
         try {
           const material = await uploadTaxDataDirectMaterial(file)
           const parsedImport = await parseTaxDataDirectFile(file)
-          currentClient = await resolveClientForTaxDataDirectImport(currentClient, parsedImport)
+          currentClient = await resolveClientForTaxDataDirectImport(currentClient, parsedImport, file.name)
           const savedRecords = await saveTaxDataDirectImport(file, parsedImport, material, currentClient)
           savedCount += 1
           recordCount += savedRecords
@@ -5669,8 +5688,10 @@ function App() {
         }
       }
       taxDataDetailCache.current.clear()
-      const refreshed = await apiGet<TaxDataSummary>(`/api/tax-data/summary?clientId=${encodeURIComponent(currentClient.id)}`)
-      setTaxDataSummary(refreshed)
+      if (currentClient?.id) {
+        const refreshed = await apiGet<TaxDataSummary>(`/api/tax-data/summary?clientId=${encodeURIComponent(currentClient.id)}`)
+        setTaxDataSummary(refreshed)
+      }
       setTaxDataDirectImportMessage(`规则导入完成：已入库 ${savedCount}/${files.length} 个文件，共 ${recordCount} 条标准记录。\n${results.join('\n')}`)
     } catch (error) {
       setTaxDataDirectImportMessage(`规则导入失败：${error instanceof Error ? error.message : String(error)}`)
@@ -6667,6 +6688,22 @@ function App() {
                 <h2>企业档案与期间数据</h2>
               </div>
               <div className="header-actions">
+                <input
+                  ref={taxDataDirectImportInputRef}
+                  type="file"
+                  multiple
+                  accept=".xls,.xlsx,.pdf,.csv,.tsv,.txt,.json"
+                  className="assistant-hidden-file-input"
+                  onChange={(event) => void handleTaxDataDirectImport(event.target.files)}
+                />
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => taxDataDirectImportInputRef.current?.click()}
+                  disabled={taxDataDirectImporting}
+                >
+                  <FileText /> {taxDataDirectImporting ? '规则导入中' : '标准资料导入'}
+                </button>
                 <div className="demo-import-action">
                   <button type="button" className="secondary-button" onClick={loadRiskDemoCases}>
                     <ClipboardList /> 载入测试案例
@@ -6688,6 +6725,7 @@ function App() {
               <Search />
               <input placeholder="搜索企业名称、统一社会信用代码或集团项目" value={query} onChange={(event) => setQuery(event.target.value)} />
             </div>
+            {taxDataDirectImportMessage && !selectedClient ? <pre className="tax-data-direct-import-result">{taxDataDirectImportMessage}</pre> : null}
             {selectedClient && (
               <section className="panel archive-overview-panel">
                 <div className="panel-title">
@@ -6758,14 +6796,6 @@ function App() {
                       </>
                     ) : <p>查看企业历年已收录的资料类别；是否齐全请切换到具体月份。</p>}
                     <div className="tax-data-direct-import">
-                      <input
-                        ref={taxDataDirectImportInputRef}
-                        type="file"
-                        multiple
-                        accept=".xls,.xlsx,.pdf,.csv,.tsv,.txt,.json"
-                        className="assistant-hidden-file-input"
-                        onChange={(event) => void handleTaxDataDirectImport(event.target.files)}
-                      />
                       <button
                         type="button"
                         className="primary-button compact-button"
