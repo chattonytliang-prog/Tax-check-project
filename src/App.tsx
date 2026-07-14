@@ -4523,6 +4523,9 @@ function App() {
   const [taxDataDetail, setTaxDataDetail] = useState<TaxDataDetail | null>(null)
   const [taxDataDetailLoading, setTaxDataDetailLoading] = useState(false)
   const [taxDataDetailError, setTaxDataDetailError] = useState('')
+  const [taxDataDirectImporting, setTaxDataDirectImporting] = useState(false)
+  const [taxDataDirectImportMessage, setTaxDataDirectImportMessage] = useState('')
+  const taxDataDirectImportInputRef = useRef<HTMLInputElement>(null)
   const taxDataDetailCache = useRef(new Map<string, TaxDataDetail>())
 
   useEffect(() => {
@@ -5502,6 +5505,178 @@ function App() {
     } catch (error) {
       console.warn('Client updated locally only.', error)
       setDataStatus('fallback')
+    }
+  }
+
+  const uploadTaxDataDirectMaterial = async (file: File): Promise<AssistantRawMaterial> => {
+    const fallback: AssistantRawMaterial = {
+      id: crypto.randomUUID(),
+      name: file.name,
+      size: file.size,
+      contentType: file.type || 'application/octet-stream',
+      sourceType: '标准资料导入',
+      storageStatus: 'local_only',
+      uploadedAt: formatDate(),
+    }
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const response = await apiUpload<{ material: AssistantRawMaterial }>('/api/assistant/materials', formData)
+      return {
+        ...fallback,
+        ...response.material,
+        sourceType: '标准资料导入',
+        storageStatus: response.material.storageStatus || fallback.storageStatus,
+      }
+    } catch (error) {
+      console.warn('Tax data source material stored locally only.', error)
+      return fallback
+    }
+  }
+
+  const parseTaxDataDirectFile = async (file: File): Promise<ParsedClientImport> => {
+    if (!/\.(xlsx|xls|csv|tsv|txt|json|pdf)$/i.test(file.name)) {
+      throw new Error('仅支持 Excel、PDF、CSV、TSV、TXT、JSON')
+    }
+    const buffer = await file.arrayBuffer()
+    if (/\.(xlsx|xls)$/i.test(file.name)) return parseClientImportWorkbook(buffer, file.name)
+    if (/\.pdf$/i.test(file.name)) {
+      return {
+        patch: {},
+        mappings: [],
+        unmappedHeaders: [],
+        detectedTables: ['PDF 文本提取'],
+        detectedSourceType: 'PDF 税务资料',
+        taxDataIntake: parseTaxDataPdfText(file.name, await extractPdfTextPages(buffer)),
+      }
+    }
+    return parseClientImportText(decodeClientImportText(buffer))
+  }
+
+  const resolveClientForTaxDataDirectImport = async (baseClient: Client, parsedImport: ParsedClientImport) => {
+    const profilePatch = coerceImportedClientPatch(parsedImport.taxDataIntake?.profilePatch || {})
+    const patch: Partial<Client> = {}
+    if (isInvalidImportedCompanyName(baseClient.name) && profilePatch.name && !isInvalidImportedCompanyName(profilePatch.name)) {
+      patch.name = profilePatch.name
+    }
+    if (!baseClient.creditCode && profilePatch.creditCode) patch.creditCode = profilePatch.creditCode
+    if (!baseClient.taxpayerType && profilePatch.taxpayerType) patch.taxpayerType = profilePatch.taxpayerType
+    if (!Object.keys(patch).length) {
+      if (isInvalidImportedCompanyName(baseClient.name)) throw new Error('当前企业名称无效，且文件里没有识别到可修复的企业名称')
+      return baseClient
+    }
+    const updated = deriveClientMetrics({ ...baseClient, ...patch })
+    await persistClientUpdate(updated)
+    setSelectedClientId(updated.id)
+    return updated
+  }
+
+  const saveTaxDataDirectImport = async (file: File, parsedImport: ParsedClientImport, material: AssistantRawMaterial, client: Client) => {
+    const intake = parsedImport.taxDataIntake
+    if (!intake?.records.length) throw new Error('未解析出可入库标准记录')
+    if (!intake.autoImportEligible) {
+      const failures = intake.templateMatches
+        .flatMap((match) => match.validations.filter((validation) => validation.blocking && validation.status === 'failed').map((validation) => `${match.templateName}：${validation.label}`))
+      throw new Error(`模板校验未通过，已阻止写入。${failures.length ? failures.join('、') : '文件类型、期间或表头需要确认'}`)
+    }
+
+    const periodStarts = intake.records.map((record) => record.periodStart).filter(Boolean).sort()
+    const periodEnds = intake.records.map((record) => record.periodEnd).filter(Boolean).sort()
+    const periodStart = periodStarts[0] || client.periodStartDate
+    const periodEnd = periodEnds.at(-1) || client.periodEndDate
+    const batchId = `direct:${crypto.randomUUID()}`
+    const sourceFile = {
+      id: material.id,
+      materialId: material.id,
+      clientId: client.id,
+      fileName: material.name || file.name,
+      contentType: material.contentType || file.type || 'application/octet-stream',
+      fileSize: material.size || file.size,
+      documentType: intake.documentTypes[0] || 'other_material',
+      sourceSystem: parsedImport.detectedSourceType || '标准资料导入',
+      periodStart,
+      periodEnd,
+      parseStatus: 'parsed',
+      storageKey: material.objectKey,
+      evidence: {
+        recordCounts: intake.recordCounts,
+        warnings: intake.warnings,
+        templateMatches: intake.templateMatches,
+        autoImportEligible: intake.autoImportEligible,
+        entry: 'direct_tax_data_import',
+      },
+    }
+    const chunkSize = 80
+    const offsets = Array.from({ length: Math.ceil(intake.records.length / chunkSize) }, (_, index) => index * chunkSize)
+    for (const offset of offsets) {
+      const records = intake.records.slice(offset, offset + chunkSize).map((record) => ({ ...record, sourceFileId: material.id }))
+      const recordIds = new Set(records.map((record) => record.id))
+      const isLastChunk = offset + records.length >= intake.records.length
+      const result = await apiSend<{ results: Array<{ name: string; status: string; message: string }> }>('/api/assistant/tools', 'POST', {
+        toolCalls: [{
+          name: 'save_standardized_tax_data',
+          arguments: {
+            batchId,
+            clientId: client.id,
+            clientName: client.name,
+            clientCreditCode: client.creditCode,
+            periodStart,
+            periodEnd,
+            status: isLastChunk ? 'confirmed' : 'importing',
+            sourceFiles: [sourceFile],
+            records,
+            evidenceFields: intake.evidenceFields.filter((item) => recordIds.has(item.targetId)).map((item) => ({ ...item, sourceFileId: material.id })),
+            conflicts: offset === 0 ? intake.conflicts : [],
+            summary: { totalRecordCount: intake.records.length, recordCounts: intake.recordCounts, warnings: intake.warnings, source: 'direct_tax_data_import' },
+          },
+          reason: `标准资料导入入口按模板规则入库：${file.name}`,
+          requiresConfirmation: false,
+        }],
+        allowSave: true,
+        currentDraft: { id: batchId, client },
+      })
+      const failed = result.results.find((item) => item.status === 'failed' || item.status === 'rejected')
+      if (failed) throw new Error(failed.message)
+    }
+    return intake.records.length
+  }
+
+  const handleTaxDataDirectImport = async (fileList: FileList | null) => {
+    const files = Array.from(fileList || [])
+    if (!files.length || taxDataDirectImporting) return
+    if (!selectedClient?.id) {
+      setTaxDataDirectImportMessage('请先选择企业。')
+      return
+    }
+    setTaxDataDirectImporting(true)
+    setTaxDataDirectImportMessage(`正在按固定模板规则解析 ${files.length} 个文件...`)
+    const results: string[] = []
+    let savedCount = 0
+    let recordCount = 0
+    let currentClient = selectedClient
+    try {
+      for (const file of files) {
+        try {
+          const material = await uploadTaxDataDirectMaterial(file)
+          const parsedImport = await parseTaxDataDirectFile(file)
+          currentClient = await resolveClientForTaxDataDirectImport(currentClient, parsedImport)
+          const savedRecords = await saveTaxDataDirectImport(file, parsedImport, material, currentClient)
+          savedCount += 1
+          recordCount += savedRecords
+          results.push(`已入库：${file.name}（${savedRecords} 条）`)
+        } catch (error) {
+          results.push(`未入库：${file.name}（${error instanceof Error ? error.message : String(error)}）`)
+        }
+      }
+      taxDataDetailCache.current.clear()
+      const refreshed = await apiGet<TaxDataSummary>(`/api/tax-data/summary?clientId=${encodeURIComponent(currentClient.id)}`)
+      setTaxDataSummary(refreshed)
+      setTaxDataDirectImportMessage(`规则导入完成：已入库 ${savedCount}/${files.length} 个文件，共 ${recordCount} 条标准记录。\n${results.join('\n')}`)
+    } catch (error) {
+      setTaxDataDirectImportMessage(`规则导入失败：${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setTaxDataDirectImporting(false)
+      if (taxDataDirectImportInputRef.current) taxDataDirectImportInputRef.current.value = ''
     }
   }
 
@@ -6582,7 +6757,26 @@ function App() {
                         </div>
                       </>
                     ) : <p>查看企业历年已收录的资料类别；是否齐全请切换到具体月份。</p>}
+                    <div className="tax-data-direct-import">
+                      <input
+                        ref={taxDataDirectImportInputRef}
+                        type="file"
+                        multiple
+                        accept=".xls,.xlsx,.pdf,.csv,.tsv,.txt,.json"
+                        className="assistant-hidden-file-input"
+                        onChange={(event) => void handleTaxDataDirectImport(event.target.files)}
+                      />
+                      <button
+                        type="button"
+                        className="primary-button compact-button"
+                        onClick={() => taxDataDirectImportInputRef.current?.click()}
+                        disabled={taxDataDirectImporting || !selectedClient}
+                      >
+                        <FileText /> {taxDataDirectImporting ? '规则导入中' : '标准资料导入'}
+                      </button>
+                    </div>
                   </div>
+                  {taxDataDirectImportMessage ? <pre className="tax-data-direct-import-result">{taxDataDirectImportMessage}</pre> : null}
                   {taxDataViewMode === 'overview' ? (
                     <div className="tax-data-coverage-matrix" aria-label="各月资料覆盖情况">
                       {taxDataPeriodYears.map((year) => (

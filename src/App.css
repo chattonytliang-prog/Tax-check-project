@@ -1206,7 +1206,7 @@ td small,
 
 .tax-data-period-nav {
   display: grid;
-  grid-template-columns: minmax(150px, auto) auto 110px 1fr;
+  grid-template-columns: minmax(150px, auto) auto 110px 1fr auto;
   gap: 12px;
   align-items: center;
   padding: 12px;
@@ -1263,6 +1263,28 @@ td small,
 .tax-data-period-nav select {
   min-height: 38px;
   padding: 0 10px;
+}
+
+.tax-data-direct-import {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.tax-data-direct-import .compact-button {
+  white-space: nowrap;
+}
+
+.tax-data-direct-import-result {
+  margin: 0;
+  border: 1px solid rgba(12, 140, 130, 0.18);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #f7fbfb;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
 }
 
 .tax-data-period-months {
