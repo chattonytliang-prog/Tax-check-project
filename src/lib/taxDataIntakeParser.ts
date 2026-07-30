@@ -160,6 +160,18 @@ export function detectTaxDataPeriod(text: string): Period {
   }
   const normalFullDates = Array.from(text.matchAll(/(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})日?/g))
   if (normalFullDates.length >= 2) return { periodStart: isoDate(normalFullDates[0][0]), periodEnd: isoDate(normalFullDates[1][0]) }
+  const annual = text.match(/(20\d{2})\s*(?:年年度|年度|年企业所得税年报|年年报)/)
+  if (annual) return { periodStart: `${annual[1]}-01-01`, periodEnd: `${annual[1]}-12-31` }
+  const shortQuarter = text.match(/(?:20)?(\d{2})\s*年\s*([1-4])\s*季度/)
+  if (shortQuarter) {
+    const year = `20${shortQuarter[1]}`
+    const startMonth = (Number(shortQuarter[2]) - 1) * 3 + 1
+    const endMonth = startMonth + 2
+    return {
+      periodStart: `${year}-${String(startMonth).padStart(2, '0')}-01`,
+      periodEnd: monthPeriod(year, String(endMonth)).periodEnd,
+    }
+  }
   const normalCompactRange = text.match(/(20\d{2})(\d{2})\s*[-~—至到]\s*(20\d{2})(\d{2})/)
   if (normalCompactRange) {
     return { periodStart: monthPeriod(normalCompactRange[1], normalCompactRange[2]).periodStart, periodEnd: monthPeriod(normalCompactRange[3], normalCompactRange[4]).periodEnd }
@@ -663,6 +675,7 @@ function recordIntegrityValidation(match: TemplateMatch, records: StandardTaxRec
   let detail = `已核验 ${records.length} 条记录的必需字段`
   if (match.documentType === 'account_balance') {
     const seen = new Set<string>()
+    let reconciliationDifferenceCount = 0
     records.forEach((record) => {
       const code = clean(record.payload.accountCode)
       const duplicate = !code || seen.has(code)
@@ -670,9 +683,22 @@ function recordIntegrityValidation(match: TemplateMatch, records: StandardTaxRec
       const opening = numeric(record.payload.openingDebit) - numeric(record.payload.openingCredit)
       const movement = numeric(record.payload.currentDebit) - numeric(record.payload.currentCredit)
       const ending = numeric(record.payload.endingDebit) - numeric(record.payload.endingCredit)
-      if (duplicate || !clean(record.payload.accountName) || Math.abs(opening + movement - ending) > 0.011) invalidCount += 1
+      if (duplicate || !clean(record.payload.accountName)) invalidCount += 1
+      if (Math.abs(opening + movement - ending) > 0.011) reconciliationDifferenceCount += 1
     })
-    detail = invalidCount ? `${invalidCount} 条科目记录存在重复编码、必需字段缺失或期末余额勾稽差异` : `${records.length} 条科目记录编码唯一，且期初余额 + 本期发生 = 期末余额`
+    if (invalidCount) {
+      detail = `${invalidCount} 条科目记录存在重复编码或必需字段缺失`
+    } else if (reconciliationDifferenceCount) {
+      return {
+        code: 'record_integrity',
+        label: '逐条数据校验',
+        status: 'warning',
+        blocking: false,
+        detail: `${records.length} 条科目记录编码唯一；${reconciliationDifferenceCount} 条存在借贷方向/负数展示导致的期末勾稽差异，已保留原值供复核`,
+      }
+    } else {
+      detail = `${records.length} 条科目记录编码唯一，且期初余额 + 本期发生 = 期末余额`
+    }
   } else if (match.documentType === 'ledger') {
     records.forEach((record) => {
       const debit = Math.abs(numeric(record.payload.debitAmount))
@@ -693,11 +719,41 @@ function recordIntegrityValidation(match: TemplateMatch, records: StandardTaxRec
     detail = invalidCount ? `${invalidCount} 条人员记录缺少姓名或脱敏证件索引` : `${records.length} 条人员记录具备姓名和脱敏证件索引`
   } else if (match.documentType === 'vat_return' || match.documentType === 'vat_return_schedule') {
     const rowNos = records.map((record) => clean(record.payload.rowNo)).filter(Boolean)
-    invalidCount = rowNos.length !== new Set(rowNos).size ? 1 : 0
-    const requiredRows = match.documentType === 'vat_return' ? ['1', '11', '12', '19'] : ['1', '2', '3', '4', '5', '6', '7', '8']
+    const duplicateRows = rowNos.length !== new Set(rowNos).size
+    invalidCount = match.documentType === 'vat_return' || match.slotId === 'vat-schedule-4'
+      ? Number(duplicateRows)
+      : 0
+    const requiredRows = match.documentType === 'vat_return'
+      ? ['1', '11', '12', '19']
+      : match.slotId === 'vat-schedule-4'
+        ? ['1', '2', '3', '4', '5', '6', '7', '8']
+        : []
     const missingRows = requiredRows.filter((rowNo) => !rowNos.some((value) => value === rowNo || value.startsWith(`${rowNo}=`)))
     invalidCount += missingRows.length
-    detail = invalidCount ? `申报表存在重复栏次或缺少关键栏次：${missingRows.join('、') || '重复栏次'}` : `关键栏次 ${requiredRows.join('、')} 均已落表且无重复`
+    if (!invalidCount && duplicateRows && match.documentType === 'vat_return_schedule' && match.slotId !== 'vat-schedule-4') {
+      return {
+        code: 'record_integrity',
+        label: '逐条数据校验',
+        status: 'warning',
+        blocking: false,
+        detail: `${records.length} 条附表记录已保留；同页不同分区存在重复栏次，使用项目名称和原始位置共同区分`,
+      }
+    }
+    detail = invalidCount
+      ? `申报表存在重复栏次或缺少关键栏次：${missingRows.join('、') || '重复栏次'}`
+      : requiredRows.length
+        ? `关键栏次 ${requiredRows.join('、')} 均已落表且无重复`
+        : `${records.length} 条附表记录已按栏次和原始数值落表`
+  } else if (match.documentType === 'financial_statement' || match.documentType === 'cit_return') {
+    const seen = new Set<string>()
+    records.forEach((record) => {
+      const rowNo = clean(record.payload.rowNo)
+      const lineName = clean(record.payload.lineName || record.payload.itemName)
+      const key = `${rowNo}:${lineName}`
+      if (!lineName || seen.has(key)) invalidCount += 1
+      seen.add(key)
+    })
+    detail = invalidCount ? `${invalidCount} 条记录存在重复行次或缺少项目名称` : `${records.length} 条记录行次、项目和期间结构有效`
   }
   return {
     code: 'record_integrity', label: '逐条数据校验', status: invalidCount ? 'failed' : 'passed', blocking: true, detail,
@@ -847,59 +903,197 @@ export function parseVatScheduleFourRecords(text: string, period: Period = {}) {
   return records
 }
 
-export function parseTaxDataPdfText(fileName: string, pages: string[]): ParsedTaxDataIntake {
-  const result = emptyResult()
-  const text = pages.join('\n')
-  mergeProfilePatch(result, extractProfilePatchFromText(`${fileName}\n${text.slice(0, 3000)}`))
-  const sourceText = `${fileName} ${text}`
-  if (/增值税.*申报表/.test(sourceText)) {
-    result.documentTypes = [/附列资料|附表|税额抵减/.test(sourceText) ? 'vat_return_schedule' : 'vat_return']
-    const period = detectTaxDataPeriod(`${fileName} ${text.slice(0, 1500)}`)
-    result.records = result.documentTypes[0] === 'vat_return_schedule' ? parseVatScheduleFourRecords(text, period) : vatLineRecords(text, period)
-    result.recordCounts.vat_return = result.records.length
-    result.records.forEach((record, index) => {
-      result.evidenceFields.push(...evidenceFor(record, '', index + 1, Object.entries(record.payload).slice(0, 3).map(([field, value]) => [field, value])))
-    })
-    const rawTemplateMatch = matchPdfTemplate(fileName, text, result.documentTypes[0], Boolean(period.periodStart && period.periodEnd), result.records.length)
-    const templateMatch = rawTemplateMatch ? finalizeTemplateMatch(rawTemplateMatch, result.records) : undefined
-    if (templateMatch) {
-      result.templateMatches.push(templateMatch)
-      addTemplateConflict(result, templateMatch, fileName)
-      result.records.forEach((record) => {
-        record.payload.templateId = templateMatch.templateId
-        record.payload.templateVersion = templateMatch.version
-        record.payload.templateValidationStatus = templateMatch.autoImportEligible ? 'passed' : 'failed'
-      })
-    }
-    if (!result.records.length) result.warnings.push('已识别增值税申报表，但文本布局未匹配到明细行，需要人工复核或 OCR。')
-    if (!period.periodStart || !period.periodEnd) result.conflicts.push({ conflictType: 'missing_period', fieldName: 'period', incomingValue: '', severity: 'high', status: 'open' })
-    result.autoImportEligible = Boolean(templateMatch?.autoImportEligible) && !result.conflicts.some((conflict) => conflict.severity === 'high')
-    return result
-  }
-  if (!/增值税.*申报表/.test(`${fileName} ${text}`)) {
-    result.warnings.push('PDF 已提取文本，但尚无匹配的专用解析器。')
-    return result
-  }
-  result.documentTypes = [/附列资料|附表/.test(`${fileName} ${text}`) ? 'vat_return_schedule' : 'vat_return']
-  const period = detectTaxDataPeriod(`${fileName} ${text.slice(0, 1500)}`)
-  result.records = result.documentTypes[0] === 'vat_return_schedule' ? parseVatScheduleFourRecords(text, period) : vatLineRecords(text, period)
-  result.recordCounts.vat_return = result.records.length
-  result.records.forEach((record, index) => {
-    result.evidenceFields.push(...evidenceFor(record, '', index + 1, Object.entries(record.payload).slice(0, 3).map(([field, value]) => [field, value])))
+const pdfAmountToken = '-?[\\d,]+(?:\\.\\d{1,2})'
+
+function pdfEvidence(record: StandardTaxRecord, pageNo: number) {
+  return Object.entries(record.payload)
+    .filter(([field, value]) => !/^source|template/.test(field) && clean(value))
+    .slice(0, 6)
+    .map(([field, value]) => ({
+      ...evidenceFor(record, '', Number(record.payload.sourceRowNo) || 1, [[field, value]])[0],
+      pageNo,
+    }))
+    .filter(Boolean) as StandardTaxEvidence[]
+}
+
+function pdfLineRecords(
+  text: string,
+  period: Period,
+  recordType: string,
+  recordSubtype: string,
+  formName: string,
+  pageNo: number,
+) {
+  const records: StandardTaxRecord[] = []
+  const seen = new Set<string>()
+  text.split(/\r?\n/).map((line) => line.replace(/\u00a0/g, ' ').trim()).filter(Boolean).forEach((line, lineIndex) => {
+    const values = Array.from(line.matchAll(new RegExp(pdfAmountToken, 'g'))).map((match) => amount(match[0])).filter((value) => value !== null)
+    if (!values.length) return
+    const firstValueIndex = line.search(new RegExp(pdfAmountToken))
+    const prefix = firstValueIndex >= 0 ? line.slice(0, firstValueIndex).trim() : line
+    const rowMatch = prefix.match(/(?:^|\s)(\d{1,3}(?:\.\d+)?)\s*(?:=\\?[^ ]+)?\s*$/)
+      || prefix.match(/^(\d{1,3}(?:\.\d+)?)\s+/)
+    const rowNo = clean(rowMatch?.[1])
+    let itemName = prefix
+      .replace(/^\d{1,3}(?:\.\d+)?\s*/, '')
+      .replace(/\s+\d{1,3}(?:\.\d+)?(?:=\\?[^ ]+)?\s*$/, '')
+      .trim()
+    if (!itemName && rowMatch) itemName = prefix.replace(rowMatch[0], '').trim()
+    if (!itemName || /^(项目|栏次|行次|金额|税额)$/.test(normalized(itemName))) return
+    const key = `${rowNo}:${itemName}`
+    if (seen.has(key)) return
+    seen.add(key)
+    records.push(makeRecord(recordType, recordSubtype, {
+      formName,
+      rowNo,
+      itemName,
+      lineName: itemName,
+      currentAmount: values[0],
+      cumulativeAmount: values[1] ?? null,
+      currentTax: values[2] ?? null,
+      cumulativeTax: values[3] ?? null,
+      values,
+      sourcePageNo: pageNo,
+      sourceRowNo: lineIndex + 1,
+    }, period))
   })
-  const rawTemplateMatch = matchPdfTemplate(fileName, text, result.documentTypes[0], Boolean(period.periodStart && period.periodEnd), result.records.length)
-  const templateMatch = rawTemplateMatch ? finalizeTemplateMatch(rawTemplateMatch, result.records) : undefined
+  return records
+}
+
+function financialPdfRecords(text: string, period: Period, pageNo: number) {
+  const subtype = /资产负债表/.test(text) ? 'balance_sheet'
+    : /现金流量表/.test(text) ? 'cash_flow_statement'
+      : 'income_statement'
+  const records: StandardTaxRecord[] = []
+  const seen = new Set<string>()
+  const blockPattern = new RegExp(`([^\\n\\d][^\\n]*?)\\s+(\\d{1,3})\\s+(${pdfAmountToken})\\s+(${pdfAmountToken})`, 'g')
+  text.split(/\r?\n/).map((line) => line.replace(/\u00a0/g, ' ').trim()).filter(Boolean).forEach((line, lineIndex) => {
+    for (const match of line.matchAll(blockPattern)) {
+      const lineName = clean(match[1]).replace(/^(其中：|加：|减：)\s*/, '$1').trim()
+      const rowNo = clean(match[2])
+      const key = `${rowNo}:${lineName}`
+      if (!lineName || /^(资产|负债和所有者权益|项目|行次)/.test(normalized(lineName)) || seen.has(key)) continue
+      seen.add(key)
+      const first = amount(match[3])
+      const second = amount(match[4])
+      const payload: Record<string, unknown> = {
+        statementType: subtype,
+        accountingStandard: '小企业会计准则',
+        lineName,
+        lineCode: rowNo,
+        rowNo,
+        sourcePageNo: pageNo,
+        sourceRowNo: lineIndex + 1,
+      }
+      if (subtype === 'balance_sheet') {
+        payload.endingAmount = first
+        payload.beginningAmount = second
+      } else {
+        payload.currentAmount = first
+        payload.cumulativeAmount = second
+      }
+      records.push(makeRecord('financial_statement', subtype, payload, period))
+    }
+  })
+  return records
+}
+
+function vatScheduleName(text: string) {
+  const match = text.match(/增值税及附加税费申报表(?:（一般纳税人适用）)?附列资料[（(]?([一二三四五六\d])?[）)]?/)
+  if (match) return match[1] ? `增值税及附加税费申报表附列资料（${match[1]}）` : clean(match[0])
+  if (/税额抵减情况表/.test(text)) return '增值税及附加税费申报表附列资料（四）'
+  return '增值税及附加税费申报表其他附表'
+}
+
+function addPdfPageResult(
+  result: ParsedTaxDataIntake,
+  fileName: string,
+  pageText: string,
+  pageNo: number,
+  documentType: IntakeDocumentType,
+  records: StandardTaxRecord[],
+  period: Period,
+) {
+  if (!records.length) {
+    result.warnings.push(`${fileName} 第 ${pageNo} 页已识别为 ${documentType}，但没有匹配到可入库数据行。`)
+    return
+  }
+  const rawTemplateMatch = matchPdfTemplate(fileName, pageText, documentType, Boolean(period.periodStart && period.periodEnd), records.length)
+  const templateMatch = rawTemplateMatch ? finalizeTemplateMatch(rawTemplateMatch, records) : undefined
   if (templateMatch) {
     result.templateMatches.push(templateMatch)
-    addTemplateConflict(result, templateMatch, fileName)
-    result.records.forEach((record) => {
+    addTemplateConflict(result, templateMatch, `${fileName} 第 ${pageNo} 页`)
+    records.forEach((record) => {
       record.payload.templateId = templateMatch.templateId
       record.payload.templateVersion = templateMatch.version
       record.payload.templateValidationStatus = templateMatch.autoImportEligible ? 'passed' : 'failed'
     })
   }
-  if (!result.records.length) result.warnings.push('已识别增值税申报表，但文本布局未匹配到明细行，需要人工复核或 OCR。')
-  if (!period.periodStart || !period.periodEnd) result.conflicts.push({ conflictType: 'missing_period', fieldName: 'period', incomingValue: '', severity: 'high', status: 'open' })
-  result.autoImportEligible = Boolean(templateMatch?.autoImportEligible) && !result.conflicts.some((conflict) => conflict.severity === 'high')
+  result.documentTypes.push(documentType)
+  result.records.push(...records)
+  records.forEach((record) => result.evidenceFields.push(...pdfEvidence(record, pageNo)))
+}
+
+export function parseTaxDataPdfText(fileName: string, pages: string[]): ParsedTaxDataIntake {
+  const result = emptyResult()
+  const text = pages.join('\n')
+  mergeProfilePatch(result, extractProfilePatchFromText(`${fileName}\n${text.slice(0, 5000)}`))
+  pages.forEach((pageText, index) => {
+    const pageNo = index + 1
+    const sourceText = `${fileName}\n${pageText}`
+    const period = detectTaxDataPeriod(sourceText)
+    if (/企业所得税年度纳税申报(?:表|主表)/.test(pageText) && /营业收入|应纳税所得额|应纳税额/.test(pageText)) {
+      addPdfPageResult(result, fileName, pageText, pageNo, 'cit_return', pdfLineRecords(pageText, period, 'cit_return', 'annual_return', '企业所得税年度纳税申报表（A类）', pageNo), period)
+      return
+    }
+    if (/企业所得税月（季）度预缴纳税申报表/.test(sourceText)) {
+      addPdfPageResult(result, fileName, pageText, pageNo, 'cit_return', pdfLineRecords(pageText, period, 'cit_return', 'quarterly_prepayment', '企业所得税月（季）度预缴纳税申报表（A类）', pageNo), period)
+      return
+    }
+    if (/企业所得税|纳税调整|弥补亏损|减免所得税/.test(pageText) && /行次|项目|年度/.test(pageText)) {
+      const title = clean(pageText.split(/\r?\n/).find((line) => /企业所得税|纳税调整|弥补亏损|减免所得税/.test(line)) || '企业所得税年度纳税申报附表')
+      addPdfPageResult(result, fileName, pageText, pageNo, 'cit_return', pdfLineRecords(pageText, period, 'cit_return', 'annual_schedule', title, pageNo), period)
+      return
+    }
+    if (/资产负债表|利润表|现金流量表/.test(pageText) && /税款所属期|纳税人识别号|小企会0[123]表|编制单位/.test(pageText)) {
+      addPdfPageResult(result, fileName, pageText, pageNo, 'financial_statement', financialPdfRecords(pageText, period, pageNo), period)
+      return
+    }
+    if (/增值税|附加税费/.test(sourceText)) {
+      if (/附列资料（四）|附列资料\(四\)|税额抵减情况表/.test(pageText)) {
+        const records = parseVatScheduleFourRecords(pageText, period)
+        records.forEach((record) => {
+          record.payload.sourcePageNo = pageNo
+          record.payload.formName = '增值税及附加税费申报表附列资料（四）'
+        })
+        addPdfPageResult(result, fileName, pageText, pageNo, 'vat_return_schedule', records, period)
+        return
+      }
+      if (/附列资料|附表|附加税费情况表|增值税减免税申报明细表|加计抵减情况/.test(pageText)) {
+        const formName = vatScheduleName(pageText)
+        addPdfPageResult(result, fileName, pageText, pageNo, 'vat_return_schedule', pdfLineRecords(pageText, period, 'vat_return', 'vat_return_schedule', formName, pageNo), period)
+        return
+      }
+      if (!/增值税及附加税费申报表/.test(pageText)) return
+      const records = vatLineRecords(pageText, period)
+      records.forEach((record) => {
+        record.payload.sourcePageNo = pageNo
+        record.payload.formName = '增值税及附加税费申报表'
+      })
+      addPdfPageResult(result, fileName, pageText, pageNo, 'vat_return', records, period)
+    }
+  })
+  result.documentTypes = Array.from(new Set(result.documentTypes))
+  result.records.forEach((record) => {
+    result.recordCounts[record.recordType] = (result.recordCounts[record.recordType] || 0) + 1
+  })
+  if (!result.records.length) result.warnings.push('PDF 已提取文本，但尚无匹配的专用解析器或没有可落表数据。')
+  if (result.records.some((record) => !record.periodStart || !record.periodEnd)) {
+    result.conflicts.push({ conflictType: 'missing_period', fieldName: 'period', incomingValue: fileName, severity: 'high', status: 'open' })
+  }
+  result.autoImportEligible = result.records.length > 0
+    && result.templateMatches.length > 0
+    && result.templateMatches.every((match) => match.autoImportEligible)
+    && !result.conflicts.some((conflict) => conflict.severity === 'high')
   return result
 }

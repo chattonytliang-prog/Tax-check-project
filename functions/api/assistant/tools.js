@@ -627,7 +627,10 @@ async function materializeStandardRecord(db, auth, batchId, record, defaultClien
 
   if (type === 'vat_return' && clientId && periodStart && periodEnd && payload.itemName) {
     const returnType = normalizeString(payload.formName || record.recordSubtype || 'vat_return', 160)
-    const formKey = /附列资料（四）|附表四|税额抵减/.test(returnType) ? 'schedule4' : 'main'
+    const scheduleMatch = returnType.match(/(?:附列资料|附表)[（(]?([一二三四五六\d]+)[）)]?/)
+    const scheduleNumbers = { 一: '1', 二: '2', 三: '3', 四: '4', 五: '5', 六: '6' }
+    const scheduleNo = scheduleMatch?.[1] ? (scheduleNumbers[scheduleMatch[1]] || scheduleMatch[1]) : ''
+    const formKey = /税额抵减/.test(returnType) ? 'schedule4' : scheduleNo ? `schedule${scheduleNo}` : 'main'
     const parentId = `${batchId}:vat:${formKey}:${periodStart}:${periodEnd}`.slice(0, 120)
     await db.prepare(
       `INSERT OR IGNORE INTO tax_data_vat_returns (

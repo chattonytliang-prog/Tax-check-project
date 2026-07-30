@@ -1,6 +1,6 @@
 export type AnalysisPeriodType = '' | '年度' | '季度' | '月度' | '年初至今' | '自定义期间'
 export type AnalysisQuarter = '' | 'Q1' | 'Q2' | 'Q3' | 'Q4'
-export type DataBasis = '' | '申报数据' | '管理报表' | '暂估数据' | '混合口径'
+export type DataBasis = '' | '标准资料' | '申报数据' | '管理报表' | '暂估数据' | '混合口径'
 
 export type PeriodClientFields = {
   analysisPeriodType: AnalysisPeriodType

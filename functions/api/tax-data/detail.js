@@ -24,6 +24,10 @@ function recordFilter(slotId) {
     'financial-cash-flow': ['financial_statement', 'cash_flow_statement'],
     'vat-return-main': ['vat_return'],
     'vat-schedule-4': ['vat_return'],
+    'vat-other-schedules': ['vat_return'],
+    'cit-quarterly-prepayment': ['cit_return', 'quarterly_prepayment'],
+    'cit-annual-return': ['cit_return', 'annual_return'],
+    'cit-adjustment': ['cit_return', 'annual_schedule'],
   }
   const [type, subtype] = types[slotId] || []
   if (!type) return { sql: '', params: [] }
@@ -48,7 +52,7 @@ async function typedRecords(db, ownerUserId, clientId, sourceFileIds, slotId, pe
   const placeholders = sourceFileIds.map(() => '?').join(',')
   const base = [ownerUserId, clientId, ...sourceFileIds]
   let sql = ''
-  if (slotId === 'vat-return-main' || slotId === 'vat-schedule-4') {
+  if (slotId === 'vat-return-main' || slotId === 'vat-schedule-4' || slotId === 'vat-other-schedules') {
     const period = periodClause('r.period_start', 'r.period_end', periodStart, periodEnd)
     sql = `SELECT l.id, r.source_file_id, r.return_type AS record_subtype, r.period_start, r.period_end,
                   l.row_no, l.item_name, l.current_amount, l.cumulative_amount, l.current_tax, l.cumulative_tax

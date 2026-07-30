@@ -5,6 +5,7 @@ export const intakeDocumentTypes = [
   'ledger',
   'vat_return',
   'vat_return_schedule',
+  'cit_return',
   'invoice_list',
   'payroll',
   'iit_withholding',
@@ -47,6 +48,7 @@ const specializedTypes = new Set<IntakeDocumentType>([
   'ledger',
   'vat_return',
   'vat_return_schedule',
+  'cit_return',
   'invoice_list',
   'payroll',
   'iit_withholding',
@@ -64,6 +66,7 @@ function normalizedSignal(input: IntakeMaterialSignal) {
 function classifyByPattern(text: string): Pick<IntakeClassification, 'documentType' | 'reasons'> {
   if (/个人所得税扣缴申报表|综合所得申报|扣缴义务人|正常工资薪金/.test(text)) return { documentType: 'iit_withholding', reasons: ['识别到个税扣缴申报结构'] }
   if (/工资表|应发工资|累计收入额|身份证件号码/.test(text)) return { documentType: 'payroll', reasons: ['识别到工资表或薪酬明细字段'] }
+  if (/企业所得税.*(?:年度纳税申报表|月（季）度预缴纳税申报表)|居民企业（查账征收）企业所得税/.test(text)) return { documentType: 'cit_return', reasons: ['识别到企业所得税申报表结构'] }
   if (/增值税及附加税费申报表附列资料|税额抵减情况表|加计抵减情况/.test(text)) return { documentType: 'vat_return_schedule', reasons: ['识别到增值税申报附表'] }
   if (/增值税及附加税费申报表|增值税申报表|销项税额|进项税额|应纳税额合计/.test(text)) return { documentType: 'vat_return', reasons: ['识别到增值税申报主表'] }
   if (/发票清单|数电发票|发票号码|销售方纳税人名称|有效抵扣税额/.test(text)) return { documentType: 'invoice_list', reasons: ['识别到发票清单字段'] }

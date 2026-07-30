@@ -164,7 +164,9 @@ function vatValidationMessages(row) {
 }
 
 function classifyVatSlot(returnType) {
-  return /附列资料（四）|附表四|税额抵减/.test(returnType || '') ? 'vat-schedule-4' : 'vat-return-main'
+  if (/附列资料（四）|附表四|税额抵减/.test(returnType || '')) return 'vat-schedule-4'
+  if (/附列资料|附表|附加|减免/.test(returnType || '')) return 'vat-other-schedules'
+  return 'vat-return-main'
 }
 
 function emptyCatalogSlots(collected) {
@@ -253,6 +255,36 @@ export async function onRequestGet({ request, env }) {
       const catalog = SLOT_CATALOG.find((item) => item.id === statementSlotId(row.statement_type))
       mergeCollected(collected, makeSlot(catalog, {
         id: `financial:${row.statement_type}:${row.period_start}:${row.period_end}`,
+        periodStart: row.period_start,
+        periodEnd: row.period_end,
+        recordCount: Number(row.record_count) || 0,
+        sourceFileCount: row.source_file_id ? 1 : 0,
+        sourceFiles: row.source_file_id ? [row.source_file_id] : [],
+      }))
+    }
+
+    const citRows = await all(
+      db,
+      `SELECT record_subtype, period_start, period_end, source_file_id, COUNT(*) AS record_count
+       FROM tax_data_standard_records
+       WHERE owner_user_id = ? AND client_id = ? AND record_type = 'cit_return'
+       GROUP BY record_subtype, period_start, period_end, source_file_id
+       ORDER BY period_start DESC, record_subtype`,
+      auth.user.id,
+      clientId,
+    )
+    const citSlots = {
+      quarterly_prepayment: 'cit-quarterly-prepayment',
+      annual_return: 'cit-annual-return',
+      annual_schedule: 'cit-adjustment',
+    }
+    for (const row of citRows) {
+      const slotId = citSlots[row.record_subtype]
+      const catalog = SLOT_CATALOG.find((item) => item.id === slotId)
+      if (!catalog) continue
+      sourceFileIds.push(row.source_file_id)
+      mergeCollected(collected, makeSlot(catalog, {
+        id: `cit:${row.record_subtype}:${row.period_start}:${row.period_end}`,
         periodStart: row.period_start,
         periodEnd: row.period_end,
         recordCount: Number(row.record_count) || 0,

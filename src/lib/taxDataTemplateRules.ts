@@ -86,6 +86,42 @@ const pdfRules: PdfTemplateRule[] = [
     fileName: /附列资料四|附列资料（四）|税额抵减情况表/,
     requiredSignatures: [/附列资料.?四|税额抵减情况表/, /税款所属时间/, /纳税人名称/, /期初余额/, /本期发生额/, /本期实际抵减税额/, /期末余额/],
   },
+  {
+    id: 'vat_other_schedule_pdf_v1', name: '增值税及附加税费申报表其他附表', version: 1,
+    documentType: 'vat_return_schedule', slotId: 'vat-other-schedules', minimumSignatureMatches: 3,
+    fileName: /增值税及附加税费申报表/,
+    requiredSignatures: [/附列资料|附表/, /税款所属时间|所属期/, /纳税人名称|纳税人识别号/, /栏次|项目/],
+  },
+  {
+    id: 'cit_quarterly_prepayment_pdf_v1', name: '企业所得税月（季）度预缴纳税申报表（A类）', version: 1,
+    documentType: 'cit_return', slotId: 'cit-quarterly-prepayment', minimumSignatureMatches: 5,
+    fileName: /企业所得税.*月（季）度|居民企业（查账征收）企业所得税/,
+    requiredSignatures: [/企业所得税月（季）度预缴纳税申报表/, /税款所属期间/, /营业收入/, /营业成本/, /利润总额/, /实际利润额|应纳税所得额/],
+  },
+  {
+    id: 'cit_annual_return_pdf_v1', name: '企业所得税年度纳税申报表（A类）', version: 1,
+    documentType: 'cit_return', slotId: 'cit-annual-return', minimumSignatureMatches: 5,
+    fileName: /企业所得税.*年度|企业所得税年报/,
+    requiredSignatures: [/企业所得税年度纳税申报表/, /税款所属期间/, /营业收入/, /营业成本/, /利润总额/, /应纳税所得额|应纳税额/],
+  },
+  {
+    id: 'cit_annual_schedule_pdf_v1', name: '企业所得税年度纳税申报附表', version: 1,
+    documentType: 'cit_return', slotId: 'cit-adjustment', minimumSignatureMatches: 2,
+    fileName: /企业所得税.*年度|企业所得税年报/,
+    requiredSignatures: [/企业所得税|纳税调整|弥补亏损|减免所得税/, /行次|项目|年度/],
+  },
+  {
+    id: 'small_enterprise_balance_sheet_pdf_v1', name: '小企业会计准则资产负债表', version: 1,
+    documentType: 'financial_statement', slotId: 'financial-balance-sheet', minimumSignatureMatches: 5,
+    fileName: /财务报表报送与信息采集/,
+    requiredSignatures: [/资产负债表/, /税款所属期/, /期末余额/, /年初余额/, /资产合计/, /负债和所有者权益/],
+  },
+  {
+    id: 'small_enterprise_income_statement_pdf_v1', name: '小企业会计准则利润表', version: 1,
+    documentType: 'financial_statement', slotId: 'financial-income-statement', minimumSignatureMatches: 5,
+    fileName: /财务报表报送与信息采集/,
+    requiredSignatures: [/利润表/, /税款所属期/, /本年累计金额|累计金额/, /本月金额|本期金额/, /营业收入/, /利润总额/],
+  },
 ]
 
 function normalizeText(value: string) {
@@ -163,6 +199,24 @@ function normalPdfTemplate(fileName: string, text: string, documentType: IntakeD
   }
   if (documentType === 'vat_return_schedule' && /附列资料|税额抵减情况表/.test(sample) && /本期实际抵减税额|期末余额/.test(sample)) {
     return normalPassedTemplate('vat_schedule_4_tax_credit_pdf_v1', '增值税附列资料（四）税额抵减情况表', documentType, 'vat-schedule-4', recordCount, hasPeriod)
+  }
+  if (documentType === 'vat_return_schedule' && /附列资料|附表|附加税费|减免税|加计抵减/.test(sample) && recordCount > 0) {
+    return normalPassedTemplate('vat_other_schedule_pdf_v1', '增值税及附加税费申报表其他附表', documentType, 'vat-other-schedules', recordCount, hasPeriod)
+  }
+  if (documentType === 'cit_return' && /企业所得税年度纳税申报(?:表|主表)/.test(sample) && /营业收入/.test(sample) && /应纳税所得额|应纳税额/.test(sample)) {
+    return normalPassedTemplate('cit_annual_return_pdf_v1', '企业所得税年度纳税申报表（A类）', documentType, 'cit-annual-return', recordCount, hasPeriod)
+  }
+  if (documentType === 'cit_return' && /企业所得税月（季）度预缴纳税申报表/.test(sample) && /营业收入/.test(sample) && /利润总额/.test(sample)) {
+    return normalPassedTemplate('cit_quarterly_prepayment_pdf_v1', '企业所得税月（季）度预缴纳税申报表（A类）', documentType, 'cit-quarterly-prepayment', recordCount, hasPeriod)
+  }
+  if (documentType === 'cit_return' && /企业所得税|纳税调整|弥补亏损|减免所得税/.test(sample) && recordCount > 0) {
+    return normalPassedTemplate('cit_annual_schedule_pdf_v1', '企业所得税年度纳税申报附表', documentType, 'cit-adjustment', recordCount, hasPeriod)
+  }
+  if (documentType === 'financial_statement' && /资产负债表/.test(sample) && /期末余额/.test(sample) && /年初余额/.test(sample)) {
+    return normalPassedTemplate('small_enterprise_balance_sheet_pdf_v1', '小企业会计准则资产负债表', documentType, 'financial-balance-sheet', recordCount, hasPeriod)
+  }
+  if (documentType === 'financial_statement' && /利润表/.test(sample) && /营业收入/.test(sample) && /利润总额/.test(sample)) {
+    return normalPassedTemplate('small_enterprise_income_statement_pdf_v1', '小企业会计准则利润表', documentType, 'financial-income-statement', recordCount, hasPeriod)
   }
   return undefined
 }

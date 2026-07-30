@@ -167,4 +167,84 @@ describe('tax data intake parser', () => {
       endingAmount: 5,
     })
   })
+
+  it('separates a multi-page VAT package into main and schedule records', () => {
+    const parsed = parseTaxDataPdfText('增值税申报资料_2026-05-01-2026-05-31.pdf', [
+      [
+        '增值税及附加税费申报表（一般纳税人适用）',
+        '税款所属时间：2026年5月1日至2026年5月31日',
+        '销售额 1 1000.00 1000.00',
+        '销项税额 11 130.00 130.00',
+        '进项税额 12 80.00 80.00',
+        '应纳税额 19 50.00 50.00',
+      ].join('\n'),
+      [
+        '增值税及附加税费申报表附列资料（一）',
+        '税款所属时间：2026年5月1日至2026年5月31日',
+        '开具增值税专用发票 1 1000.00 130.00',
+      ].join('\n'),
+      [
+        '增值税及附加税费申报表附列资料（四） 税额抵减情况表',
+        '税款所属时间：2026年5月1日至2026年5月31日',
+        '1 税控设备费及技术维护费 0.00 0.00 0.00 0.00 0.00',
+      ].join('\n'),
+    ])
+
+    expect(new Set(parsed.documentTypes)).toEqual(new Set(['vat_return', 'vat_return_schedule']))
+    expect(parsed.records.some((record) => record.payload.sourcePageNo === 1)).toBe(true)
+    expect(parsed.records.some((record) => record.payload.sourcePageNo === 2)).toBe(true)
+    expect(parsed.records.some((record) => record.payload.sourcePageNo === 3)).toBe(true)
+    expect(parsed.autoImportEligible).toBe(true)
+  })
+
+  it('parses quarterly and annual corporate-income-tax forms', () => {
+    const quarterly = parseTaxDataPdfText('企业所得税季度申报表_26年1季度.pdf', [[
+      '中华人民共和国企业所得税月（季）度预缴纳税申报表（A类）',
+      '营业收入 1 120000.00',
+      '营业成本 2 80000.00',
+      '利润总额 3 20000.00',
+      '应纳税所得额 10 18000.00',
+    ].join('\n')])
+    const annual = parseTaxDataPdfText('企业所得税年报_2025年年度.pdf', [[
+      '中华人民共和国企业所得税年度纳税申报表（A类）',
+      '营业收入 1 900000.00',
+      '营业成本 2 600000.00',
+      '利润总额 3 120000.00',
+      '应纳税所得额 10 100000.00',
+    ].join('\n')])
+
+    expect(quarterly.records).toEqual(expect.arrayContaining([
+      expect.objectContaining({ recordType: 'cit_return', recordSubtype: 'quarterly_prepayment', periodStart: '2026-01-01', periodEnd: '2026-03-31' }),
+    ]))
+    expect(annual.records).toEqual(expect.arrayContaining([
+      expect.objectContaining({ recordType: 'cit_return', recordSubtype: 'annual_return', periodStart: '2025-01-01', periodEnd: '2025-12-31' }),
+    ]))
+    expect(quarterly.autoImportEligible).toBe(true)
+    expect(annual.autoImportEligible).toBe(true)
+  })
+
+  it('parses small-enterprise financial PDF pages with page evidence', () => {
+    const parsed = parseTaxDataPdfText('小企业会计准则财务报表_2026年1季度.pdf', [
+      [
+        '资产负债表 小企会01表',
+        '2026年3月31日',
+        '资产 行次 期末余额 年初余额',
+        '货币资金 1 80000.00 60000.00',
+        '资产合计 31 180000.00 150000.00',
+      ].join('\n'),
+      [
+        '利润表 小企会02表',
+        '2026年1月1日至2026年3月31日',
+        '项目 行次 本年累计金额 本期金额',
+        '营业收入 1 120000.00 50000.00',
+        '营业成本 2 80000.00 30000.00',
+        '利润总额 30 20000.00 9000.00',
+      ].join('\n'),
+    ])
+
+    expect(new Set(parsed.records.map((record) => record.recordSubtype))).toEqual(new Set(['balance_sheet', 'income_statement']))
+    expect(parsed.evidenceFields.some((evidence) => evidence.pageNo === 1)).toBe(true)
+    expect(parsed.evidenceFields.some((evidence) => evidence.pageNo === 2)).toBe(true)
+    expect(parsed.autoImportEligible).toBe(true)
+  })
 })

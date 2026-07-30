@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EChartsOption } from 'echarts'
+import { unzipSync } from 'fflate'
 import type { EChartsType } from 'echarts/core'
 import type * as ThreeNamespace from 'three'
 import {
@@ -1275,6 +1276,156 @@ const blankClient: Client = {
 }
 
 const blankDraftClient = () => deriveClientMetrics({ ...blankClient, id: crypto.randomUUID() })
+
+function mergeTaxDataIntakes(intakes: ParsedTaxDataIntake[]): ParsedTaxDataIntake {
+  const records = intakes.flatMap((intake) => intake.records)
+  return {
+    profilePatch: intakes.reduce((patch, intake) => ({ ...patch, ...(intake.profilePatch || {}) }), {}),
+    documentTypes: Array.from(new Set(intakes.flatMap((intake) => intake.documentTypes))),
+    records,
+    evidenceFields: intakes.flatMap((intake) => intake.evidenceFields),
+    conflicts: intakes.flatMap((intake) => intake.conflicts),
+    warnings: intakes.flatMap((intake) => intake.warnings),
+    recordCounts: records.reduce<Record<string, number>>((counts, record) => {
+      counts[record.recordType] = (counts[record.recordType] || 0) + 1
+      return counts
+    }, {}),
+    templateMatches: intakes.flatMap((intake) => intake.templateMatches),
+    autoImportEligible: records.length > 0 && intakes.every((intake) => intake.autoImportEligible),
+  }
+}
+
+function taxRecordFingerprint(record: ParsedTaxDataIntake['records'][number]) {
+  const payload = Object.fromEntries(Object.entries(record.payload).filter(([key]) => ![
+    'sourcePageNo', 'sourceRowNo', 'sourceSheetName', 'archiveEntryName',
+    'templateId', 'templateVersion', 'templateValidationStatus',
+  ].includes(key)))
+  return JSON.stringify([record.recordType, record.recordSubtype || '', record.periodStart || '', record.periodEnd || '', payload])
+}
+
+function analysisPeriodFromDates(periodStart: string, periodEnd: string) {
+  const months = monthsBetween(periodStart.slice(0, 7), periodEnd.slice(0, 7))
+  const year = periodStart.slice(0, 4)
+  if (months.length === 1) return { analysisPeriodType: '月度' as AnalysisPeriodType, analysisYear: year, analysisMonth: months[0], analysisQuarter: '' as AnalysisQuarter }
+  if (months.length === 3 && [1, 4, 7, 10].includes(Number(periodStart.slice(5, 7)))) {
+    return { analysisPeriodType: '季度' as AnalysisPeriodType, analysisYear: year, analysisMonth: '', analysisQuarter: `Q${Math.ceil(Number(periodStart.slice(5, 7)) / 3)}` as AnalysisQuarter }
+  }
+  if (months.length === 12 && periodStart.endsWith('-01-01')) return { analysisPeriodType: '年度' as AnalysisPeriodType, analysisYear: year, analysisMonth: '', analysisQuarter: '' as AnalysisQuarter }
+  if (periodStart.endsWith('-01-01')) return { analysisPeriodType: '年初至今' as AnalysisPeriodType, analysisYear: year, analysisMonth: '', analysisQuarter: '' as AnalysisQuarter }
+  return { analysisPeriodType: '自定义期间' as AnalysisPeriodType, analysisYear: year, analysisMonth: '', analysisQuarter: '' as AnalysisQuarter }
+}
+
+function standardClientFromIntake(client: Client, intake: ParsedTaxDataIntake) {
+  const groups = new Map<string, ParsedTaxDataIntake['records']>()
+  intake.records.forEach((record) => {
+    if (!record.periodStart || !record.periodEnd) return
+    const key = `${record.periodStart}|${record.periodEnd}`
+    groups.set(key, [...(groups.get(key) || []), record])
+  })
+  let periodEntries = [...client.periodEntries]
+  groups.forEach((records, key) => {
+    const [periodStartDate, periodEndDate] = key.split('|')
+    const period = analysisPeriodFromDates(periodStartDate, periodEndDate)
+    const months = monthsBetween(periodStartDate.slice(0, 7), periodEndDate.slice(0, 7))
+    const entryId = `标准资料-${months.join('_') || period.analysisPeriodType}`
+    const previous = periodEntries.find((entry) => entry.id === entryId)?.snapshot
+    const snapshot = deriveClientMetrics({
+      ...client,
+      ...blankClient,
+      ...(previous || {}),
+      id: client.id,
+      name: client.name,
+      creditCode: client.creditCode,
+      region: client.region,
+      industry: client.industry,
+      taxpayerType: client.taxpayerType,
+      establishedAt: client.establishedAt,
+      projectScope: client.projectScope,
+      groupName: client.groupName,
+      entityRole: client.entityRole,
+      ...period,
+      periodStartDate,
+      periodEndDate,
+      dataBasis: '标准资料',
+      comparisonPeriod: '来源文件自动解析',
+      periodEntries: [],
+    })
+    const monthCount = Math.max(months.length, 1)
+    const setTotal = (field: 'monthlyRevenue' | 'monthlyCost' | 'monthlyProfit' | 'monthlyInvoice', total: number) => {
+      snapshot[field] = total / monthCount
+      if (field === 'monthlyRevenue' && period.analysisPeriodType === '年度') snapshot.annualRevenue = total
+    }
+    const lineValue = (record: ParsedTaxDataIntake['records'][number]) => {
+      const payload = record.payload
+      const preferred = period.analysisPeriodType === '月度'
+        ? payload.currentAmount ?? payload.currentTax
+        : payload.cumulativeAmount ?? payload.currentAmount ?? payload.currentTax
+      const value = Number(preferred)
+      return Number.isFinite(value) ? value : 0
+    }
+    records.forEach((record) => {
+      const payload = record.payload
+      const name = String(payload.lineName || payload.itemName || payload.accountName || '')
+      const rowNo = String(payload.rowNo || '')
+      const formName = String(payload.formName || '')
+      const value = lineValue(record)
+      if (record.recordType === 'vat_return' && !/附列资料|附表|税额抵减/.test(formName)) {
+        if (rowNo === '1') { snapshot.taxableSales = value; setTotal('monthlyRevenue', value) }
+        if (rowNo === '11') snapshot.outputTax = value
+        if (rowNo === '12') snapshot.inputTax = value
+        if (rowNo === '19') snapshot.vatTaxPayable = value
+        if (rowNo === '20') snapshot.endingVatCredit = value
+      }
+      if (record.recordType === 'financial_statement' && record.recordSubtype === 'income_statement') {
+        if (/营业收入合计|营业收入/.test(name) && !/营业外/.test(name)) setTotal('monthlyRevenue', value)
+        if (/营业成本合计|营业成本/.test(name) && !/营业外/.test(name)) setTotal('monthlyCost', value)
+        if (/利润总额/.test(name)) setTotal('monthlyProfit', value)
+      }
+      if (record.recordType === 'financial_statement' && record.recordSubtype === 'balance_sheet' && /资产合计/.test(name)) {
+        const assets = Number(payload.endingAmount ?? value)
+        if (Number.isFinite(assets)) snapshot.assetsTotal = assets
+      }
+      if (record.recordType === 'cit_return') {
+        if (/营业收入/.test(name)) setTotal('monthlyRevenue', value)
+        if (/营业成本/.test(name)) setTotal('monthlyCost', value)
+        if (/利润总额/.test(name)) setTotal('monthlyProfit', value)
+        if (/应纳税所得额/.test(name)) snapshot.taxableIncome = value
+      }
+    })
+    const iitRecords = records.filter((record) => record.recordType === 'iit_withholding')
+    if (iitRecords.length) {
+      snapshot.employees = new Set(iitRecords.map((record) => String(record.payload.personName || '')).filter(Boolean)).size
+      snapshot.salaryDeclaredCount = snapshot.employees
+      snapshot.payrollTotal = iitRecords.reduce((sum, record) => sum + Number(record.payload.currentIncome || 0), 0)
+      snapshot.taxableIncome = iitRecords.reduce((sum, record) => sum + Number(record.payload.taxableIncome || 0), 0)
+    }
+    periodEntries = upsertPeriodEntry(periodEntries, createPeriodEntry(snapshot, snapshot, new Date().toLocaleString('zh-CN')))
+  })
+  return deriveClientMetrics({ ...client, periodEntries })
+}
+
+function manualStandardDifferences(entries: ClientPeriodEntry[]) {
+  const labels: Array<[keyof Client, string, number]> = [
+    ['monthlyRevenue', '月均收入', 1], ['monthlyCost', '月均成本', 1], ['monthlyProfit', '月均利润', 1],
+    ['outputTax', '销项税额', 1], ['inputTax', '进项税额', 1], ['vatTaxPayable', '增值税应纳税额', 1],
+    ['taxableIncome', '应纳税所得额', 1], ['assetsTotal', '资产总额', 1], ['employees', '员工人数', 0],
+    ['payrollTotal', '工资薪金', 1],
+  ]
+  const warnings: string[] = []
+  entries.filter((entry) => entry.dataBasis === '标准资料').forEach((standard) => {
+    const manual = entries.find((entry) => entry.dataBasis === '管理报表' && entry.months.join('|') === standard.months.join('|'))
+    if (!manual) return
+    labels.forEach(([field, label, decimals]) => {
+      const sourceValue = Number(standard.snapshot[field] || 0)
+      const manualValue = Number(manual.snapshot[field] || 0)
+      if (!sourceValue && !manualValue) return
+      const tolerance = decimals ? Math.max(1, Math.abs(sourceValue) * 0.001) : 0
+      if (Math.abs(sourceValue - manualValue) <= tolerance) return
+      warnings.push(`${formatMonthRange(standard.months)} ${label}：手工 ${manualValue.toLocaleString('zh-CN')}，标准资料 ${sourceValue.toLocaleString('zh-CN')}，差异 ${(sourceValue - manualValue).toLocaleString('zh-CN')}`)
+    })
+  })
+  return warnings
+}
 
 function clientFromReport(report: Report): Client {
   return deriveClientMetrics({
@@ -5323,7 +5474,10 @@ function App() {
     : filteredRules.slice((normalizedRulePage - 1) * rulePageSize, normalizedRulePage * rulePageSize)
   const ruleCheck = useMemo(() => ruleSelfCheck(managedRules), [managedRules])
   const selectedClientPeriodWarnings = useMemo(() => (
-    selectedClient ? findPeriodConsistencyWarnings(selectedClient.periodEntries) : []
+    selectedClient ? [
+      ...findPeriodConsistencyWarnings(selectedClient.periodEntries),
+      ...manualStandardDifferences(selectedClient.periodEntries),
+    ] : []
   ), [selectedClient])
   const selectedClientPeriodYears = useMemo(() => {
     if (!selectedClient) return []
@@ -5529,17 +5683,36 @@ function App() {
         storageStatus: response.material.storageStatus || fallback.storageStatus,
       }
     } catch (error) {
-      console.warn('Tax data source material stored locally only.', error)
-      return fallback
+      throw new Error(`原始文件上传失败，未写入标准记录：${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
   const parseTaxDataDirectFile = async (file: File): Promise<ParsedClientImport> => {
-    if (!/\.(xlsx|xls|csv|tsv|txt|json|pdf)$/i.test(file.name)) {
-      throw new Error('仅支持 Excel、PDF、CSV、TSV、TXT、JSON')
+    if (!/\.(xlsx|xls|csv|tsv|txt|json|pdf|zip)$/i.test(file.name)) {
+      throw new Error('仅支持 Excel、PDF、ZIP、CSV、TSV、TXT、JSON')
     }
     const buffer = await file.arrayBuffer()
     if (/\.(xlsx|xls)$/i.test(file.name)) return parseClientImportWorkbook(buffer, file.name)
+    if (/\.zip$/i.test(file.name)) {
+      const entries = unzipSync(new Uint8Array(buffer))
+      const pdfEntries = Object.entries(entries).filter(([name]) => /\.pdf$/i.test(name) && !name.startsWith('__MACOSX/'))
+      if (!pdfEntries.length) throw new Error('压缩包中没有可解析的 PDF 税务资料')
+      const intakes: ParsedTaxDataIntake[] = []
+      for (const [entryName, bytes] of pdfEntries) {
+        const intake = parseTaxDataPdfText(entryName, await extractPdfTextPages(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)))
+        intake.records.forEach((record) => { record.payload.archiveEntryName = entryName })
+        intake.evidenceFields.forEach((evidence) => { evidence.note = [evidence.note, `压缩包内文件：${entryName}`].filter(Boolean).join('；') })
+        intakes.push(intake)
+      }
+      return {
+        patch: {},
+        mappings: [],
+        unmappedHeaders: [],
+        detectedTables: pdfEntries.map(([name]) => `ZIP / ${name}`),
+        detectedSourceType: 'ZIP 税务申报资料包',
+        taxDataIntake: mergeTaxDataIntakes(intakes),
+      }
+    }
     if (/\.pdf$/i.test(file.name)) {
       return {
         patch: {},
@@ -5673,13 +5846,44 @@ function App() {
     let savedCount = 0
     let recordCount = 0
     let currentClient: Client | null = selectedClient || null
+    const seenFileHashes = new Set<string>()
+    const seenRecordFingerprints = new Set<string>()
     try {
       for (const file of files) {
         try {
-          const material = await uploadTaxDataDirectMaterial(file)
+          const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer())))
+            .map((byte) => byte.toString(16).padStart(2, '0')).join('')
+          if (seenFileHashes.has(digest)) {
+            results.push(`已跳过重复文件：${file.name}`)
+            continue
+          }
+          seenFileHashes.add(digest)
           const parsedImport = await parseTaxDataDirectFile(file)
+          const intake = parsedImport.taxDataIntake
+          if (intake) {
+            const retainedIds = new Set<string>()
+            intake.records = intake.records.filter((record) => {
+              const fingerprint = taxRecordFingerprint(record)
+              if (seenRecordFingerprints.has(fingerprint)) return false
+              seenRecordFingerprints.add(fingerprint)
+              retainedIds.add(record.id)
+              return true
+            })
+            intake.evidenceFields = intake.evidenceFields.filter((evidence) => retainedIds.has(evidence.targetId))
+            intake.recordCounts = intake.records.reduce<Record<string, number>>((counts, record) => {
+              counts[record.recordType] = (counts[record.recordType] || 0) + 1
+              return counts
+            }, {})
+            if (!intake.records.length) {
+              results.push(`已跳过重复内容：${file.name}`)
+              continue
+            }
+          }
+          const material = await uploadTaxDataDirectMaterial(file)
           currentClient = await resolveClientForTaxDataDirectImport(currentClient, parsedImport, file.name)
           const savedRecords = await saveTaxDataDirectImport(file, parsedImport, material, currentClient)
+          currentClient = standardClientFromIntake(currentClient, parsedImport.taxDataIntake!)
+          await persistClientUpdate(currentClient)
           savedCount += 1
           recordCount += savedRecords
           results.push(`已入库：${file.name}（${savedRecords} 条）`)
@@ -6675,7 +6879,7 @@ function App() {
                   ref={taxDataDirectImportInputRef}
                   type="file"
                   multiple
-                  accept=".xls,.xlsx,.pdf,.csv,.tsv,.txt,.json"
+                  accept=".xls,.xlsx,.pdf,.zip,.csv,.tsv,.txt,.json"
                   className="assistant-hidden-file-input"
                   onChange={(event) => void handleTaxDataDirectImport(event.target.files)}
                 />
@@ -9024,6 +9228,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
           <Field label="数据来源" missing={missingStateForLabel('数据来源')}>
             <select value={client.dataBasis || '管理报表'} onChange={(e) => changeDataBasis(e.target.value as DataBasis)}>
               <option>申报数据</option>
+              <option>标准资料</option>
               <option>管理报表</option>
               <option>暂估数据</option>
               <option>混合口径</option>

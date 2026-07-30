@@ -4,9 +4,17 @@ import { matchPdfTemplate, matchWorkbookTemplate, supportedTaxDataTemplates } fr
 
 describe('tax data template rules', () => {
   it('publishes every supported production template with a stable version', () => {
-    expect(supportedTaxDataTemplates).toHaveLength(9)
-    expect(new Set(supportedTaxDataTemplates.map((template) => template.id)).size).toBe(9)
+    expect(supportedTaxDataTemplates).toHaveLength(15)
+    expect(new Set(supportedTaxDataTemplates.map((template) => template.id)).size).toBe(15)
     expect(supportedTaxDataTemplates.every((template) => template.version === 1)).toBe(true)
+    expect(supportedTaxDataTemplates.map((template) => template.id)).toEqual(expect.arrayContaining([
+      'vat_other_schedule_pdf_v1',
+      'cit_quarterly_prepayment_pdf_v1',
+      'cit_annual_return_pdf_v1',
+      'cit_annual_schedule_pdf_v1',
+      'small_enterprise_balance_sheet_pdf_v1',
+      'small_enterprise_income_statement_pdf_v1',
+    ]))
   })
 
   it('splits a multi-month payroll workbook into monthly periods under one template', () => {
@@ -29,7 +37,7 @@ describe('tax data template rules', () => {
     expect(parsed.autoImportEligible).toBe(true)
   })
 
-  it('blocks an account balance whose row-level balance equation fails', () => {
+  it('keeps account-balance sign conventions as a review warning without losing source data', () => {
     const parsed = parseTaxDataWorkbook('科目余额表_2026年3月-2026年3月_测试企业_20260507.xls', [{
       name: '科目余额表',
       rows: [
@@ -41,9 +49,8 @@ describe('tax data template rules', () => {
       ],
     }])
 
-    expect(parsed.templateMatches[0].validations).toContainEqual(expect.objectContaining({ code: 'record_integrity', status: 'failed', blocking: true }))
-    expect(parsed.autoImportEligible).toBe(false)
-    expect(parsed.conflicts).toContainEqual(expect.objectContaining({ conflictType: 'template_validation_failed', severity: 'high' }))
+    expect(parsed.templateMatches[0].validations).toContainEqual(expect.objectContaining({ code: 'record_integrity', status: 'warning', blocking: false }))
+    expect(parsed.autoImportEligible).toBe(true)
   })
 
   it('captures all eight rows of VAT schedule four', () => {
