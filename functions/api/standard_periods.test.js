@@ -115,6 +115,28 @@ describe('buildStandardPeriods', () => {
     expect(result.crossValidation.warnings).toEqual([])
   })
 
+  it('falls back to prior financial and VAT cumulative records when prior CIT totals are missing', () => {
+    const rows = [
+      vatMonth('2025-03', 2795629.20, 2795629.20),
+      financialLine('2025-01-01', '2025-03-31', '营业收入', 2795629.20, null),
+      financialLine('2025-01-01', '2025-03-31', '营业成本', 2583052.32, null),
+      financialLine('2025-01-01', '2025-03-31', '利润总额', -75955.30, null),
+      vatMonth('2025-04', 163434.52, 2959063.72),
+      vatMonth('2025-05', 148700.90, 3107764.62),
+      vatMonth('2025-06', 7939518.83, 11047283.45),
+      financialLine('2025-04-01', '2025-06-30', '营业收入', 11047283.45, null),
+      financialLine('2025-04-01', '2025-06-30', '营业成本', 10215091.75, null),
+      financialLine('2025-04-01', '2025-06-30', '利润总额', 347817.68, null),
+    ]
+    const result = buildStandardPeriods(rows)
+    const quarter = result.periods.find((period) => period.analysisQuarter === 'Q2')
+
+    expect(quarter.sourceMetrics.revenueTotal).toBeCloseTo(8251654.25)
+    expect(quarter.sourceMetrics.costTotal).toBeCloseTo(7632039.43)
+    expect(quarter.sourceMetrics.profitTotal).toBeCloseTo(423772.98)
+    expect(result.crossValidation.warnings).toEqual([])
+  })
+
   it('rebuilds a missing December period directly from standard records', () => {
     const result = buildStandardPeriods([
       vatMonth('2025-12', 10452692.10, 29464140.72),

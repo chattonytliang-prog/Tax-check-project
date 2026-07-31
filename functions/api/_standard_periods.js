@@ -378,10 +378,12 @@ function normalizeLegacyAggregateTotals(periods) {
     const contained = monthly.filter((item) => item.months.some((month) => period.months.includes(month)))
     if (contained.length !== period.months.length) continue
     const vatTotal = contained.reduce((sum, item) => sum + Number(item.sourceMetrics.vatCurrentSales || 0), 0)
-    const citRevenue = period.sourceMetrics.citRevenueCumulative
-    if (citRevenue === null) continue
+    const revenueCumulative = period.sourceMetrics.citRevenueCumulative
+      ?? period.sourceMetrics.financialRevenueCurrent
+    if (revenueCumulative === null) continue
 
     let previous = null
+    let previousMonth = null
     if (period.analysisPeriodType === '季度') {
       const quarterNumber = Number(String(period.analysisQuarter).slice(1))
       const previousStartMonth = (quarterNumber - 2) * 3 + 1
@@ -389,16 +391,28 @@ function normalizeLegacyAggregateTotals(periods) {
         ? `${period.analysisYear}-${String(previousStartMonth).padStart(2, '0')}-01`
         : ''
       previous = previousStart ? periodByStart.get(previousStart) : null
+      const currentStartIndex = monthIndex(period.months[0])
+      previousMonth = monthly.find((item) => monthIndex(item.months[0]) === currentStartIndex - 1) || null
     }
-    const revenueTotal = citRevenue - Number(previous?.sourceMetrics.citRevenueCumulative || 0)
+    const previousRevenueCumulative = previous?.sourceMetrics.citRevenueCumulative
+      ?? previous?.sourceMetrics.financialRevenueCurrent
+      ?? previousMonth?.sourceMetrics.vatCumulativeSales
+      ?? 0
+    const revenueTotal = revenueCumulative - Number(previousRevenueCumulative)
     if (!closeEnough(revenueTotal, vatTotal)) continue
 
-    const costTotal = period.sourceMetrics.citCostCumulative === null
-      ? period.sourceMetrics.costTotal
-      : period.sourceMetrics.citCostCumulative - Number(previous?.sourceMetrics.citCostCumulative || 0)
-    const profitTotal = period.sourceMetrics.citProfitCumulative === null
-      ? period.sourceMetrics.profitTotal
-      : period.sourceMetrics.citProfitCumulative - Number(previous?.sourceMetrics.citProfitCumulative || 0)
+    const costCumulative = period.sourceMetrics.citCostCumulative
+      ?? period.sourceMetrics.financialCostCurrent
+    const previousCostCumulative = previous?.sourceMetrics.citCostCumulative
+      ?? previous?.sourceMetrics.financialCostCurrent
+      ?? 0
+    const profitCumulative = period.sourceMetrics.citProfitCumulative
+      ?? period.sourceMetrics.financialProfitCurrent
+    const previousProfitCumulative = previous?.sourceMetrics.citProfitCumulative
+      ?? previous?.sourceMetrics.financialProfitCurrent
+      ?? 0
+    const costTotal = costCumulative === null ? period.sourceMetrics.costTotal : costCumulative - Number(previousCostCumulative)
+    const profitTotal = profitCumulative === null ? period.sourceMetrics.profitTotal : profitCumulative - Number(previousProfitCumulative)
     const monthCount = Math.max(period.months.length, 1)
     period.sourceMetrics.revenueTotal = revenueTotal
     period.sourceMetrics.costTotal = costTotal
