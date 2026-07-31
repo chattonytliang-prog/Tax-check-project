@@ -445,7 +445,7 @@ export async function onRequestGet({ request, env }) {
       standardTemplates: {
         vat_general_return_main_v1: VAT_MAIN_KEY_ROWS.map(([field, label, rows]) => ({ field, label, rows })),
       },
-    })
+    }, { headers: { 'cache-control': 'no-store' } })
   } catch (error) {
     return serverError(error)
   }

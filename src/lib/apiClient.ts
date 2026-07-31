@@ -21,7 +21,7 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export function apiGet<T>(url: string) {
-  return requestJson<T>(url)
+  return requestJson<T>(url, { cache: 'no-store' })
 }
 
 export function apiSend<T>(url: string, method: 'POST' | 'PUT', body: unknown, init?: RequestInit) {
