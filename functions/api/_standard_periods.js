@@ -226,6 +226,8 @@ function buildPeriod(group) {
       financialProfitCurrent: group.financial.profitCurrent ?? null,
       financialProfitCumulative: group.financial.profitCumulative ?? null,
       citRevenueCumulative: group.cit.revenueCumulative ?? null,
+      citCostCumulative: group.cit.costCumulative ?? null,
+      citProfitCumulative: group.cit.profitCumulative ?? null,
       citTaxableIncomeCumulative: group.cit.taxableIncome ?? null,
       citPayrollAccruedCumulative: group.cit.payrollAccruedCumulative ?? null,
       citPayrollPaidCumulative: group.cit.payrollPaidCumulative ?? null,
@@ -369,6 +371,49 @@ function normalizeFinancialColumnOrientation(periods) {
   return periods
 }
 
+function normalizeLegacyAggregateTotals(periods) {
+  const monthly = periods.filter((period) => period.analysisPeriodType === '月度')
+  const periodByStart = new Map(periods.map((period) => [period.periodStartDate, period]))
+  for (const period of periods.filter((item) => item.analysisPeriodType === '季度' || item.analysisPeriodType === '年度')) {
+    const contained = monthly.filter((item) => item.months.some((month) => period.months.includes(month)))
+    if (contained.length !== period.months.length) continue
+    const vatTotal = contained.reduce((sum, item) => sum + Number(item.sourceMetrics.vatCurrentSales || 0), 0)
+    const citRevenue = period.sourceMetrics.citRevenueCumulative
+    if (citRevenue === null) continue
+
+    let previous = null
+    if (period.analysisPeriodType === '季度') {
+      const quarterNumber = Number(String(period.analysisQuarter).slice(1))
+      const previousStartMonth = (quarterNumber - 2) * 3 + 1
+      const previousStart = quarterNumber > 1
+        ? `${period.analysisYear}-${String(previousStartMonth).padStart(2, '0')}-01`
+        : ''
+      previous = previousStart ? periodByStart.get(previousStart) : null
+    }
+    const revenueTotal = citRevenue - Number(previous?.sourceMetrics.citRevenueCumulative || 0)
+    if (!closeEnough(revenueTotal, vatTotal)) continue
+
+    const costTotal = period.sourceMetrics.citCostCumulative === null
+      ? period.sourceMetrics.costTotal
+      : period.sourceMetrics.citCostCumulative - Number(previous?.sourceMetrics.citCostCumulative || 0)
+    const profitTotal = period.sourceMetrics.citProfitCumulative === null
+      ? period.sourceMetrics.profitTotal
+      : period.sourceMetrics.citProfitCumulative - Number(previous?.sourceMetrics.citProfitCumulative || 0)
+    const monthCount = Math.max(period.months.length, 1)
+    period.sourceMetrics.revenueTotal = revenueTotal
+    period.sourceMetrics.costTotal = costTotal
+    period.sourceMetrics.profitTotal = profitTotal
+    period.metrics.monthlyRevenue = revenueTotal / monthCount
+    period.metrics.monthlyCost = costTotal / monthCount
+    period.metrics.monthlyProfit = profitTotal / monthCount
+    if (period.analysisPeriodType === '年度') {
+      period.metrics.annualRevenue = revenueTotal
+      period.metrics.consecutive12MonthSales = revenueTotal
+    }
+  }
+  return periods
+}
+
 function normalizeCumulativeQuarterMetrics(periods) {
   const periodByStart = new Map(periods.map((period) => [period.periodStartDate, period]))
   for (const period of periods.filter((item) => item.analysisPeriodType === '季度')) {
@@ -413,9 +458,9 @@ export function buildStandardPeriods(rows) {
     consumeRecord(group, row)
     groups.set(key, group)
   }
-  const periods = enrichAggregateMetrics(normalizeCumulativeQuarterMetrics(normalizeFinancialColumnOrientation(Array.from(groups.values())
+  const periods = enrichAggregateMetrics(normalizeCumulativeQuarterMetrics(normalizeLegacyAggregateTotals(normalizeFinancialColumnOrientation(Array.from(groups.values())
     .map(buildPeriod)
     .filter((period) => period.months.length > 0 && hasDetectionEvidence(period))
-    .sort((left, right) => left.periodStartDate.localeCompare(right.periodStartDate) || right.months.length - left.months.length))))
+    .sort((left, right) => left.periodStartDate.localeCompare(right.periodStartDate) || right.months.length - left.months.length)))))
   return { periods, crossValidation: crossValidate(periods) }
 }
