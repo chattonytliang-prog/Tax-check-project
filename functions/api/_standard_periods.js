@@ -221,6 +221,10 @@ function buildPeriod(group) {
       vatCumulativeSales: group.vatMain.cumulativeSales ?? null,
       financialRevenueCurrent: group.financial.revenueCurrent ?? null,
       financialRevenueCumulative: group.financial.revenueCumulative ?? null,
+      financialCostCurrent: group.financial.costCurrent ?? null,
+      financialCostCumulative: group.financial.costCumulative ?? null,
+      financialProfitCurrent: group.financial.profitCurrent ?? null,
+      financialProfitCumulative: group.financial.profitCumulative ?? null,
       citRevenueCumulative: group.cit.revenueCumulative ?? null,
       citTaxableIncomeCumulative: group.cit.taxableIncome ?? null,
       citPayrollAccruedCumulative: group.cit.payrollAccruedCumulative ?? null,
@@ -319,6 +323,52 @@ function enrichAggregateMetrics(periods) {
   return periods
 }
 
+function normalizeFinancialColumnOrientation(periods) {
+  const monthly = periods.filter((period) => period.analysisPeriodType === '月度')
+  for (const period of periods.filter((item) => item.months.length > 1)) {
+    const current = period.sourceMetrics.financialRevenueCurrent
+    const cumulative = period.sourceMetrics.financialRevenueCumulative
+    if (current === null || cumulative === null) continue
+
+    let secondColumnIsAuthoritative = false
+    if (period.analysisPeriodType === '年度') {
+      const citRevenue = period.sourceMetrics.citRevenueCumulative
+      secondColumnIsAuthoritative = citRevenue !== null
+        && closeEnough(cumulative, citRevenue)
+        && !closeEnough(current, citRevenue)
+    } else {
+      const coveredMonthly = monthly.filter((item) => item.months.some((month) => period.months.includes(month)))
+      if (coveredMonthly.length !== period.months.length) continue
+      const vatTotal = coveredMonthly.reduce((sum, item) => sum + Number(item.sourceMetrics.vatCurrentSales || 0), 0)
+      secondColumnIsAuthoritative = closeEnough(cumulative, vatTotal) && !closeEnough(current, vatTotal)
+    }
+    if (!secondColumnIsAuthoritative) continue
+
+    const pairs = [
+      ['financialRevenueCurrent', 'financialRevenueCumulative'],
+      ['financialCostCurrent', 'financialCostCumulative'],
+      ['financialProfitCurrent', 'financialProfitCumulative'],
+    ]
+    for (const [currentKey, cumulativeKey] of pairs) {
+      const first = period.sourceMetrics[currentKey]
+      period.sourceMetrics[currentKey] = period.sourceMetrics[cumulativeKey]
+      period.sourceMetrics[cumulativeKey] = first
+    }
+    const monthCount = Math.max(period.months.length, 1)
+    period.sourceMetrics.revenueTotal = period.sourceMetrics.financialRevenueCurrent || 0
+    period.sourceMetrics.costTotal = period.sourceMetrics.financialCostCurrent || 0
+    period.sourceMetrics.profitTotal = period.sourceMetrics.financialProfitCurrent || 0
+    period.metrics.monthlyRevenue = period.sourceMetrics.revenueTotal / monthCount
+    period.metrics.monthlyCost = period.sourceMetrics.costTotal / monthCount
+    period.metrics.monthlyProfit = period.sourceMetrics.profitTotal / monthCount
+    if (period.analysisPeriodType === '年度') {
+      period.metrics.annualRevenue = period.sourceMetrics.revenueTotal
+      period.metrics.consecutive12MonthSales = period.sourceMetrics.revenueTotal
+    }
+  }
+  return periods
+}
+
 function normalizeCumulativeQuarterMetrics(periods) {
   const periodByStart = new Map(periods.map((period) => [period.periodStartDate, period]))
   for (const period of periods.filter((item) => item.analysisPeriodType === '季度')) {
@@ -363,9 +413,9 @@ export function buildStandardPeriods(rows) {
     consumeRecord(group, row)
     groups.set(key, group)
   }
-  const periods = enrichAggregateMetrics(normalizeCumulativeQuarterMetrics(Array.from(groups.values())
+  const periods = enrichAggregateMetrics(normalizeCumulativeQuarterMetrics(normalizeFinancialColumnOrientation(Array.from(groups.values())
     .map(buildPeriod)
     .filter((period) => period.months.length > 0 && hasDetectionEvidence(period))
-    .sort((left, right) => left.periodStartDate.localeCompare(right.periodStartDate) || right.months.length - left.months.length)))
+    .sort((left, right) => left.periodStartDate.localeCompare(right.periodStartDate) || right.months.length - left.months.length))))
   return { periods, crossValidation: crossValidate(periods) }
 }
