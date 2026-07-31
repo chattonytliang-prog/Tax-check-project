@@ -108,7 +108,22 @@ function makeSlot(catalog, partial = {}) {
 
 function mergeCollected(collected, slot) {
   const key = `${slot.slotId}:${slot.periodStart}:${slot.periodEnd}`
-  collected.set(key, slot)
+  const previous = collected.get(key)
+  if (!previous) {
+    collected.set(key, slot)
+    return
+  }
+  const sourceFiles = Array.from(new Set([...(previous.sourceFiles || []), ...(slot.sourceFiles || [])]))
+  collected.set(key, {
+    ...previous,
+    ...slot,
+    id: previous.id,
+    recordCount: Number(previous.recordCount || 0) + Number(slot.recordCount || 0),
+    sourceFileCount: sourceFiles.length,
+    sourceFiles,
+    keyValues: slot.keyValues?.length ? slot.keyValues : previous.keyValues,
+    validationMessages: Array.from(new Set([...(previous.validationMessages || []), ...(slot.validationMessages || [])])),
+  })
 }
 
 function parseSourceFileIds(value) {
@@ -383,7 +398,21 @@ export async function onRequestGet({ request, env }) {
 
     const missingSlots = slots.filter((slot) => slot.status === 'missing').map((slot) => slot.name)
     const collectedSlotIds = new Set(slots.filter((slot) => slot.status === 'collected').map((slot) => slot.slotId))
-    const pendingConfirmationCount = await openIssueCount(db, auth.user.id, clientId)
+    const [pendingConfirmationCount, sourceCountRows, standardRecordCountRows] = await Promise.all([
+      openIssueCount(db, auth.user.id, clientId),
+      all(
+        db,
+        `SELECT COUNT(*) AS count FROM tax_data_source_files WHERE owner_user_id = ? AND client_id = ?`,
+        auth.user.id,
+        clientId,
+      ),
+      all(
+        db,
+        `SELECT COUNT(*) AS count FROM tax_data_standard_records WHERE owner_user_id = ? AND client_id = ?`,
+        auth.user.id,
+        clientId,
+      ),
+    ])
 
     return json({
       clientId,
@@ -394,7 +423,8 @@ export async function onRequestGet({ request, env }) {
       stats: {
         collectedSlotCount: collectedSlotIds.size,
         totalSlotCount: SLOT_CATALOG.length,
-        recordCount: slots.reduce((sum, slot) => sum + slot.recordCount, 0),
+        sourceFileCount: Number(sourceCountRows[0]?.count) || 0,
+        recordCount: Number(standardRecordCountRows[0]?.count) || 0,
       },
       standardTemplates: {
         vat_general_return_main_v1: VAT_MAIN_KEY_ROWS.map(([field, label, rows]) => ({ field, label, rows })),

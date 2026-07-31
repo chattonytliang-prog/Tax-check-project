@@ -489,6 +489,7 @@ type TaxDataSummary = {
   stats: {
     collectedSlotCount: number
     totalSlotCount: number
+    sourceFileCount?: number
     recordCount: number
   }
 }
@@ -1418,7 +1419,7 @@ function manualStandardDifferences(entries: ClientPeriodEntry[]) {
     labels.forEach(([field, label, decimals]) => {
       const sourceValue = Number(standard.snapshot[field] || 0)
       const manualValue = Number(manual.snapshot[field] || 0)
-      if (!sourceValue && !manualValue) return
+      if (!sourceValue) return
       const tolerance = decimals ? Math.max(1, Math.abs(sourceValue) * 0.001) : 0
       if (Math.abs(sourceValue - manualValue) <= tolerance) return
       warnings.push(`${formatMonthRange(standard.months)} ${label}：手工 ${manualValue.toLocaleString('zh-CN')}，标准资料 ${sourceValue.toLocaleString('zh-CN')}，差异 ${(sourceValue - manualValue).toLocaleString('zh-CN')}`)
@@ -5121,14 +5122,19 @@ function App() {
   const selectedTaxDataSlots = selectedTaxDataFolderSummary?.slots || []
   const displayedTaxDataStats = useMemo(() => {
     const collected = displayedTaxDataSlots.filter((slot) => slot.status === 'collected')
+    const isOverview = taxDataViewMode === 'overview'
     return {
       collectedCategoryCount: new Set(collected.map((slot) => slot.slotId)).size,
       totalCategoryCount: new Set(displayedTaxDataSlots.map((slot) => slot.slotId)).size,
-      sourceFileCount: new Set(collected.flatMap((slot) => slot.sourceFiles.map((file) => file.id))).size,
-      recordCount: collected.reduce((sum, slot) => sum + slot.recordCount, 0),
+      sourceFileCount: isOverview
+        ? activeTaxDataSummary?.stats.sourceFileCount ?? new Set(collected.flatMap((slot) => slot.sourceFiles.map((file) => file.id))).size
+        : new Set(collected.flatMap((slot) => slot.sourceFiles.map((file) => file.id))).size,
+      recordCount: isOverview
+        ? activeTaxDataSummary?.stats.recordCount ?? collected.reduce((sum, slot) => sum + slot.recordCount, 0)
+        : collected.reduce((sum, slot) => sum + slot.recordCount, 0),
       missingCount: new Set(displayedTaxDataSlots.filter((slot) => slot.status === 'missing').map((slot) => slot.slotId)).size,
     }
-  }, [displayedTaxDataSlots])
+  }, [activeTaxDataSummary?.stats, displayedTaxDataSlots, taxDataViewMode])
   const taxDataMonthsWithData = useMemo(() => new Set(
     (activeTaxDataSummary?.slots || []).filter((slot) => slot.status === 'collected').flatMap((slot) => {
       const start = (slot.periodStart || slot.periodEnd).slice(0, 7)
@@ -5683,7 +5689,7 @@ function App() {
         storageStatus: response.material.storageStatus || fallback.storageStatus,
       }
     } catch (error) {
-      throw new Error(`原始文件上传失败，未写入标准记录：${error instanceof Error ? error.message : String(error)}`)
+      throw new Error(`原始文件上传失败，未写入标准记录：${error instanceof Error ? error.message : String(error)}`, { cause: error })
     }
   }
 
