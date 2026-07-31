@@ -1,6 +1,7 @@
 import { badRequest, json, requireDb, serverError } from '../_utils.js'
 import { requireUser } from '../auth/_auth.js'
 import { ensureTaxDataIntakeTables } from '../_tax_data_schema.js'
+import { buildStandardPeriods } from '../_standard_periods.js'
 
 const SLOT_CATALOG = [
   {
@@ -398,7 +399,7 @@ export async function onRequestGet({ request, env }) {
 
     const missingSlots = slots.filter((slot) => slot.status === 'missing').map((slot) => slot.name)
     const collectedSlotIds = new Set(slots.filter((slot) => slot.status === 'collected').map((slot) => slot.slotId))
-    const [pendingConfirmationCount, sourceCountRows, standardRecordCountRows] = await Promise.all([
+    const [pendingConfirmationCount, sourceCountRows, standardRecordCountRows, standardRecordRows] = await Promise.all([
       openIssueCount(db, auth.user.id, clientId),
       all(
         db,
@@ -414,11 +415,24 @@ export async function onRequestGet({ request, env }) {
         auth.user.id,
         clientId,
       ),
+      all(
+        db,
+        `SELECT record_type, record_subtype, period_start, period_end, record_json
+         FROM tax_data_standard_records
+         WHERE owner_user_id = ? AND client_id = ?
+           AND COALESCE(period_start, '') <> '' AND COALESCE(period_end, '') <> ''
+         ORDER BY period_start, period_end, record_type, record_subtype`,
+        auth.user.id,
+        clientId,
+      ),
     ])
+    const standardPeriodResult = buildStandardPeriods(standardRecordRows)
 
     return json({
       clientId,
       slots,
+      standardPeriods: standardPeriodResult.periods,
+      crossValidation: standardPeriodResult.crossValidation,
       slotCatalog: SLOT_CATALOG,
       missingSlots,
       pendingConfirmationCount,

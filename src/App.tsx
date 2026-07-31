@@ -87,6 +87,7 @@ import {
 } from './lib/intakeConfirmationQuestions'
 import {
   areMonthsContinuous,
+  canonicalPeriodCover,
   createPeriodEntry,
   findPeriodConsistencyWarnings,
   formatAnalysisPeriod,
@@ -96,6 +97,7 @@ import {
   monthIndex,
   monthsBetween,
   quarterMonths,
+  summarizeCanonicalPeriodEntries,
   summarizePeriodEntries,
   upsertPeriodEntry,
   type AnalysisPeriodType,
@@ -483,6 +485,11 @@ type TaxDataSlot = {
 type TaxDataSummary = {
   clientId: string
   slots: TaxDataSlot[]
+  standardPeriods?: TaxDataStandardPeriod[]
+  crossValidation?: {
+    messages: string[]
+    warnings: string[]
+  }
   slotCatalog?: Array<Pick<TaxDataSlot, 'group' | 'name' | 'periodType' | 'parserType' | 'standardTemplate' | 'description'> & { id?: string; slotId?: string }>
   missingSlots: string[]
   pendingConfirmationCount?: number
@@ -492,6 +499,23 @@ type TaxDataSummary = {
     sourceFileCount?: number
     recordCount: number
   }
+}
+
+type TaxDataStandardPeriod = {
+  id: string
+  label: string
+  analysisPeriodType: AnalysisPeriodType
+  analysisYear: string
+  analysisQuarter: AnalysisQuarter
+  analysisMonth: string
+  periodStartDate: string
+  periodEndDate: string
+  dataBasis: DataBasis
+  comparisonPeriod: string
+  months: string[]
+  savedAt: string
+  sourceKinds: string[]
+  metrics: Partial<Client>
 }
 
 function taxDataCatalogSlotId(item: { id?: string; slotId?: string }) {
@@ -1403,29 +1427,6 @@ function standardClientFromIntake(client: Client, intake: ParsedTaxDataIntake) {
     periodEntries = upsertPeriodEntry(periodEntries, createPeriodEntry(snapshot, snapshot, new Date().toLocaleString('zh-CN')))
   })
   return deriveClientMetrics({ ...client, periodEntries })
-}
-
-function manualStandardDifferences(entries: ClientPeriodEntry[]) {
-  const labels: Array<[keyof Client, string, number]> = [
-    ['monthlyRevenue', '月均收入', 1], ['monthlyCost', '月均成本', 1], ['monthlyProfit', '月均利润', 1],
-    ['outputTax', '销项税额', 1], ['inputTax', '进项税额', 1], ['vatTaxPayable', '增值税应纳税额', 1],
-    ['taxableIncome', '应纳税所得额', 1], ['assetsTotal', '资产总额', 1], ['employees', '员工人数', 0],
-    ['payrollTotal', '工资薪金', 1],
-  ]
-  const warnings: string[] = []
-  entries.filter((entry) => entry.dataBasis === '标准资料').forEach((standard) => {
-    const manual = entries.find((entry) => entry.dataBasis === '管理报表' && entry.months.join('|') === standard.months.join('|'))
-    if (!manual) return
-    labels.forEach(([field, label, decimals]) => {
-      const sourceValue = Number(standard.snapshot[field] || 0)
-      const manualValue = Number(manual.snapshot[field] || 0)
-      if (!sourceValue) return
-      const tolerance = decimals ? Math.max(1, Math.abs(sourceValue) * 0.001) : 0
-      if (Math.abs(sourceValue - manualValue) <= tolerance) return
-      warnings.push(`${formatMonthRange(standard.months)} ${label}：手工 ${manualValue.toLocaleString('zh-CN')}，标准资料 ${sourceValue.toLocaleString('zh-CN')}，差异 ${(sourceValue - manualValue).toLocaleString('zh-CN')}`)
-    })
-  })
-  return warnings
 }
 
 function clientFromReport(report: Report): Client {
@@ -3255,6 +3256,36 @@ function deriveClientMetrics(client: Client): Client {
   return derived
 }
 
+function standardPeriodEntriesFromSummary(client: Client, summary: TaxDataSummary | null) {
+  return (summary?.standardPeriods || []).flatMap((period) => {
+    const snapshot = deriveClientMetrics({
+      ...blankClient,
+      ...period.metrics,
+      id: client.id,
+      name: client.name,
+      creditCode: client.creditCode,
+      region: client.region,
+      industry: client.industry,
+      taxpayerType: client.taxpayerType,
+      establishedAt: client.establishedAt,
+      projectScope: client.projectScope,
+      groupName: client.groupName,
+      entityRole: client.entityRole,
+      analysisPeriodType: period.analysisPeriodType,
+      analysisYear: period.analysisYear,
+      analysisQuarter: period.analysisQuarter,
+      analysisMonth: period.analysisMonth,
+      periodStartDate: period.periodStartDate,
+      periodEndDate: period.periodEndDate,
+      dataBasis: '标准资料',
+      comparisonPeriod: period.comparisonPeriod,
+      periodEntries: [],
+    })
+    const entry = normalizePeriodEntry({ ...period, dataBasis: '标准资料', snapshot })
+    return entry ? [entry] : []
+  })
+}
+
 function applyExplicitDerivedPatch(client: Client, patch: Partial<Client>, reason: string) {
   const { fields: manualDerivedFields, reasons: manualDerivedReasons } = explicitDerivedMetadata(
     patch as Record<string, unknown>,
@@ -4983,12 +5014,18 @@ function App() {
   }, [loggedIn, selectedClient?.id])
 
   const selectedReport = reports.find((report) => report.id === selectedReportId)
+  const activeTaxDataSummary = taxDataSummary?.clientId === selectedClient?.id ? taxDataSummary : null
+  const detectionPeriodEntries = useMemo(() => {
+    if (!selectedClient) return []
+    const sourceBacked = standardPeriodEntriesFromSummary(selectedClient, activeTaxDataSummary)
+    if (sourceBacked.length) return sourceBacked
+    return selectedClient.periodEntries.filter((entry) => entry.dataBasis === '标准资料')
+  }, [activeTaxDataSummary, selectedClient])
   const selectedPeriodEntryIdSet = useMemo(() => new Set(selectedPeriodEntryIds), [selectedPeriodEntryIds])
   const selectedPeriodEntries = useMemo(() => {
-    if (!selectedClient) return []
-    const selected = selectedClient.periodEntries.filter((entry) => selectedPeriodEntryIdSet.has(entry.id))
+    const selected = detectionPeriodEntries.filter((entry) => selectedPeriodEntryIdSet.has(entry.id))
     return selected.sort((a, b) => monthIndex(a.months[0] || '') - monthIndex(b.months[0] || ''))
-  }, [selectedClient, selectedPeriodEntryIdSet])
+  }, [detectionPeriodEntries, selectedPeriodEntryIdSet])
   const selectedPeriodMonths = useMemo(() => selectedPeriodEntries.flatMap((entry) => entry.months), [selectedPeriodEntries])
   const selectedPeriodsContinuous = selectedPeriodEntries.length === 0 || areMonthsContinuous(selectedPeriodMonths)
   const selectedPeriodLabel = selectedPeriodEntries.length
@@ -4999,7 +5036,7 @@ function App() {
     if (!selectedPeriodEntries.length || !selectedPeriodsContinuous) return null
     return deriveClientMetrics({
       ...selectedClient,
-      ...summarizePeriodEntries(selectedClient, selectedPeriodEntries),
+      ...summarizeCanonicalPeriodEntries(selectedClient, selectedPeriodEntries),
       id: selectedClient.id,
       name: selectedClient.name,
       creditCode: selectedClient.creditCode,
@@ -5010,9 +5047,9 @@ function App() {
       projectScope: selectedClient.projectScope,
       groupName: selectedClient.groupName,
       entityRole: selectedClient.entityRole,
-      periodEntries: selectedClient.periodEntries,
+      periodEntries: detectionPeriodEntries,
     })
-  }, [selectedClient, selectedPeriodEntries, selectedPeriodsContinuous])
+  }, [detectionPeriodEntries, selectedClient, selectedPeriodEntries, selectedPeriodsContinuous])
   const currentRisks = useMemo(() => (selectedDetectionClient ? detectRisks(selectedDetectionClient, managedRules) : []), [selectedDetectionClient, managedRules])
   const currentSkippedRules = useMemo(() => (selectedDetectionClient ? getSkippedRules(selectedDetectionClient, managedRules) : []), [selectedDetectionClient, managedRules])
   const overallLevel = getOverallLevel(currentRisks)
@@ -5022,10 +5059,9 @@ function App() {
     ? clients.find((client) => client.id === selectedReport.clientId) || clientFromReport(selectedReport)
     : selectedClient
   const reportPageRisks = selectedReport ? reportRiskList(selectedReport) : currentRisks
-  const activeTaxDataSummary = taxDataSummary?.clientId === selectedClient?.id ? taxDataSummary : null
   const taxDataPeriodYears = useMemo(() => {
     const years = new Set<string>()
-    for (const entry of selectedClient?.periodEntries || []) {
+    for (const entry of detectionPeriodEntries) {
       entry.months.forEach((month) => years.add(month.slice(0, 4)))
       if (entry.analysisYear) years.add(entry.analysisYear)
     }
@@ -5035,7 +5071,7 @@ function App() {
     }
     if (!years.size) years.add(String(new Date().getFullYear()))
     return Array.from(years).filter(Boolean).sort((a, b) => Number(b) - Number(a))
-  }, [activeTaxDataSummary, selectedClient])
+  }, [activeTaxDataSummary, detectionPeriodEntries])
   const defaultTaxDataMonth = useMemo(() => {
     const collectedMonths = (activeTaxDataSummary?.slots || [])
       .filter((slot) => slot.status === 'collected')
@@ -5151,21 +5187,48 @@ function App() {
     }),
   ), [activeTaxDataSummary])
 
+  const sourceBackedOverviewClient = useMemo(() => {
+    if (!selectedClient || !detectionPeriodEntries.length) return selectedClient
+    const standardEntries = canonicalPeriodCover(detectionPeriodEntries)
+    const standardMonths = standardEntries.flatMap((entry) => entry.months)
+    if (!standardEntries.length || !areMonthsContinuous(standardMonths)) return selectedClient
+    return deriveClientMetrics({
+      ...selectedClient,
+      ...summarizeCanonicalPeriodEntries(selectedClient, standardEntries),
+      id: selectedClient.id,
+      name: selectedClient.name,
+      creditCode: selectedClient.creditCode,
+      region: selectedClient.region,
+      industry: selectedClient.industry,
+      taxpayerType: selectedClient.taxpayerType,
+      establishedAt: selectedClient.establishedAt,
+      projectScope: selectedClient.projectScope,
+      groupName: selectedClient.groupName,
+      entityRole: selectedClient.entityRole,
+      periodEntries: detectionPeriodEntries,
+    })
+  }, [detectionPeriodEntries, selectedClient])
+  const analysisClients = useMemo(() => clients.map((client) => (
+    sourceBackedOverviewClient?.id === client.id ? sourceBackedOverviewClient : client
+  )), [clients, sourceBackedOverviewClient])
+
   const clientRows = useMemo(() => {
     return clients
       .filter((client) => client.name.includes(query) || client.creditCode.includes(query) || getGroupName(client).includes(query))
       .map((client) => {
-        const risks = detectRisks(client, managedRules)
+        const analysisClient = analysisClients.find((item) => item.id === client.id) || client
+        const risks = detectRisks(analysisClient, managedRules)
         return {
           client,
+          analysisClient,
           risks,
           level: getOverallLevel(risks),
           report: reports.find((report) => report.clientId === client.id),
         }
       })
-  }, [clients, query, reports, managedRules])
+  }, [analysisClients, clients, query, reports, managedRules])
 
-  const groupSummaries = useMemo(() => buildGroupSummaries(clients, managedRules), [clients, managedRules])
+  const groupSummaries = useMemo(() => buildGroupSummaries(analysisClients, managedRules), [analysisClients, managedRules])
   const selectedGroupSummary = useMemo(() => {
     if (!selectedClient) return null
     const groupName = getGroupName(selectedClient)
@@ -5174,14 +5237,14 @@ function App() {
   }, [selectedClient, groupSummaries])
 
   const stats = useMemo(() => {
-    const clientStats = clients.map((client) => detectRisks(client, managedRules))
+    const clientStats = analysisClients.map((client) => detectRisks(client, managedRules))
     return {
       high: clientStats.filter((risks) => getOverallLevel(risks) === '高').length,
       medium: clientStats.filter((risks) => getOverallLevel(risks) === '中').length,
       detections: clientStats.reduce((sum, risks) => sum + risks.length, 0),
-      groups: buildGroupSummaries(clients, managedRules).length,
+      groups: buildGroupSummaries(analysisClients, managedRules).length,
     }
-  }, [clients, managedRules])
+  }, [analysisClients, managedRules])
   const bossPeriodMonths = useMemo(() => (
     bossPeriodStart && bossPeriodEnd ? monthsBetween(bossPeriodStart, bossPeriodEnd) : []
   ), [bossPeriodEnd, bossPeriodStart])
@@ -5190,7 +5253,7 @@ function App() {
   const bossPeriodLabel = bossPeriodActive ? formatMonthRange(bossPeriodMonths) : '全部期间'
   const bossPeriodClientRows = useMemo(() => {
     if (!bossPeriodActive) {
-      return clientRows.map((row) => ({ ...row, analysisClient: row.client, missingMonths: [] as string[], periodComplete: true }))
+      return clientRows.map((row) => ({ ...row, missingMonths: [] as string[], periodComplete: true }))
     }
 
     return clients.map((client) => {
@@ -5269,7 +5332,7 @@ function App() {
         })
       }
       const issues = row.periodComplete
-        ? validateClientForReport(row.client).map((issue) => ({ label: issue.label, source: '企业基础资料字段' }))
+        ? validateClientForReport(row.analysisClient).map((issue) => ({ label: issue.label, source: '企业基础资料字段' }))
         : []
       const periodIssues = row.missingMonths.slice(0, 3).map((month) => ({ label: `${month} 月度归档`, source: '期间归档' }))
       const combinedIssues = [...periodIssues, ...issues]
@@ -5340,22 +5403,22 @@ function App() {
     return { level, conclusion, topRisks, actions, missingDataClients, missingFields, deliveryChecks }
   }, [bossPeriodActive, bossPeriodClientRows, bossPeriodLabel, bossStats.analysable, bossStats.high, bossStats.medium, bossStats.missingPeriodClients, clients.length, managedRules, reports.length])
   const dashboardLevelRows = useMemo<ChartDatum[]>(() => {
-    const clientStats = clients.map((client) => detectRisks(client, managedRules))
+    const clientStats = analysisClients.map((client) => detectRisks(client, managedRules))
     return [
       { name: '高风险', value: clientStats.filter((risks) => getOverallLevel(risks) === '高').length },
       { name: '中风险', value: clientStats.filter((risks) => getOverallLevel(risks) === '中').length },
       { name: '低风险', value: clientStats.filter((risks) => getOverallLevel(risks) === '低').length },
     ]
-  }, [clients, managedRules])
+  }, [analysisClients, managedRules])
   const dashboardTaxRows = useMemo<ChartDatum[]>(() => {
     const totals = new Map<string, number>()
-    clients.flatMap((client) => detectRisks(client, managedRules)).forEach((risk) => {
+    analysisClients.flatMap((client) => detectRisks(client, managedRules)).forEach((risk) => {
       const name = risk.taxType || '未分类'
       totals.set(name, (totals.get(name) || 0) + 1)
     })
     const rows = Array.from(totals, ([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
     return rows.length ? rows : [{ name: '暂无风险事项', value: 0 }]
-  }, [clients, managedRules])
+  }, [analysisClients, managedRules])
   const dashboardTaxDisplayRows = useMemo(() => compactChartRows(dashboardTaxRows, 5), [dashboardTaxRows])
   const dashboardLevelOption = useMemo<EChartsOption>(() => ({
     color: ['#8f3d42', '#b88a46', '#2b8a78'],
@@ -5481,27 +5544,35 @@ function App() {
   const ruleCheck = useMemo(() => ruleSelfCheck(managedRules), [managedRules])
   const selectedClientPeriodWarnings = useMemo(() => (
     selectedClient ? [
-      ...findPeriodConsistencyWarnings(selectedClient.periodEntries),
-      ...manualStandardDifferences(selectedClient.periodEntries),
+      ...findPeriodConsistencyWarnings(detectionPeriodEntries),
+      ...(activeTaxDataSummary?.crossValidation?.warnings || []),
     ] : []
-  ), [selectedClient])
+  ), [activeTaxDataSummary, detectionPeriodEntries, selectedClient])
   const selectedClientPeriodYears = useMemo(() => {
     if (!selectedClient) return []
     const years = new Set<string>()
-    selectedClient.periodEntries.forEach((entry) => {
+    detectionPeriodEntries.forEach((entry) => {
       entry.months.forEach((month) => years.add(month.slice(0, 4)))
       if (entry.analysisYear) years.add(entry.analysisYear)
     })
     if (!years.size) years.add(String(new Date().getFullYear()))
     return Array.from(years).sort((a, b) => Number(b) - Number(a))
-  }, [selectedClient])
+  }, [detectionPeriodEntries, selectedClient])
   const selectedClientAvailableMonths = useMemo(() => (
-    new Set(selectedClient?.periodEntries.flatMap((entry) => entry.months) || [])
-  ), [selectedClient])
+    new Set(detectionPeriodEntries.flatMap((entry) => entry.months))
+  ), [detectionPeriodEntries])
   const selectPeriodMonths = (months: string[], label: string) => {
     if (!selectedClient) return
     const expectedMonths = Array.from(new Set(months)).sort((a, b) => monthIndex(a) - monthIndex(b))
-    const entries = expectedMonths.map((month) => selectedClient.periodEntries.find((entry) => entry.months.length === 1 && entry.months[0] === month))
+    const exactPeriod = detectionPeriodEntries.find((entry) => (
+      entry.months.length === expectedMonths.length
+      && entry.months.every((month, index) => month === expectedMonths[index])
+    ))
+    if (exactPeriod) {
+      setSelectedPeriodEntryIds([exactPeriod.id])
+      return
+    }
+    const entries = expectedMonths.map((month) => detectionPeriodEntries.find((entry) => entry.months.length === 1 && entry.months[0] === month))
     if (entries.some((entry) => !entry)) {
       window.alert(`当前企业缺少「${label}」的完整月度归档数据。请先补齐月度数据，或在下方选择已有期间卡片。`)
       return
@@ -5543,8 +5614,12 @@ function App() {
     if (!selectedClient) return
     setSelectedPeriodEntryIds((current) => {
       const next = current.includes(entryId) ? current.filter((id) => id !== entryId) : [...current, entryId]
-      const nextEntries = selectedClient.periodEntries.filter((entry) => next.includes(entry.id))
+      const nextEntries = detectionPeriodEntries.filter((entry) => next.includes(entry.id))
       const nextMonths = nextEntries.flatMap((entry) => entry.months)
+      if (new Set(nextMonths).size !== nextMonths.length) {
+        window.alert('所选标准期间存在月份重叠，不能重复汇总。请选择季度/年度汇总期，或选择对应月度明细。')
+        return current
+      }
       if (nextEntries.length > 1 && !areMonthsContinuous(nextMonths)) {
         window.alert('当前选择的月份不连续，不能合并分析。请选择连续月份，例如 2025-01 至 2025-03，或分别生成单月报告。')
         return current
@@ -5562,12 +5637,13 @@ function App() {
 
   const selectAllPeriodEntriesForAnalysis = () => {
     if (!selectedClient) return
-    const months = selectedClient.periodEntries.flatMap((entry) => entry.months)
-    if (selectedClient.periodEntries.length > 1 && !areMonthsContinuous(months)) {
+    const canonicalEntries = canonicalPeriodCover(detectionPeriodEntries)
+    const months = canonicalEntries.flatMap((entry) => entry.months)
+    if (canonicalEntries.length > 1 && !areMonthsContinuous(months)) {
       window.alert('当前企业的已录入月份不连续，不能一键选择全部期间合并分析。请手动选择连续月份，或分别生成单月报告。')
       return
     }
-    setSelectedPeriodEntryIds(selectedClient.periodEntries.map((entry) => entry.id))
+    setSelectedPeriodEntryIds(canonicalEntries.map((entry) => entry.id))
   }
 
   const selectClientForRiskDetection = (client: Client) => {
@@ -5583,8 +5659,8 @@ function App() {
 
   const proceedToRiskConfirmation = () => {
     if (!selectedClient) return
-    if (!selectedClient.periodEntries.length) {
-      window.alert('当前企业还没有保存期间数据，请先到数据录入页保存一条期间数据。')
+    if (!detectionPeriodEntries.length) {
+      window.alert('当前企业还没有可用于检测的标准资料。请先导入并解析原始申报资料或财务报表。')
       return
     }
     if (!selectedPeriodEntries.length) {
@@ -6011,14 +6087,6 @@ function App() {
     setPage('form')
   }
 
-  const deletePeriodEntry = async (entry: ClientPeriodEntry) => {
-    if (!selectedClient) return
-    if (!window.confirm(`确定删除期间数据「${entry.label}」吗？已生成的历史报告不会删除。`)) return
-    const updatedClient = { ...selectedClient, periodEntries: selectedClient.periodEntries.filter((item) => item.id !== entry.id) }
-    setSelectedPeriodEntryIds((current) => current.filter((id) => id !== entry.id))
-    await persistClientUpdate(updatedClient)
-  }
-
   const canUseAdmin = authUser?.role === 'admin' || authUser?.actor?.role === 'admin'
 
   const refreshAdminUsers = async () => {
@@ -6223,8 +6291,8 @@ function App() {
 
   const createReport = async (confirmed = false) => {
     if (!selectedClient || aiReportStage) return
-    if (!selectedClient.periodEntries.length) {
-      window.alert('请先在数据录入页保存一条期间数据，再基于已归档数据生成报告。')
+    if (!detectionPeriodEntries.length) {
+      window.alert('请先导入并解析原始标准资料，再基于标准资料生成报告。')
       return
     }
     if (!selectedPeriodEntries.length) {
@@ -7304,7 +7372,7 @@ function App() {
                 <div>
                   <p className="eyebrow">已有档案</p>
                   <h3>第一步：选择需要分析的企业</h3>
-                  <p className="section-helper">风险检测只基于企业档案中的已保存期间数据。先选择企业，再进入期间选择和检测确认。</p>
+                  <p className="section-helper">风险检测只使用原始标准资料自动重建的期间数据；手工记录仅作历史留存，不参与计算。</p>
                 </div>
                 <span>{clients.length} 个企业</span>
               </div>
@@ -7336,10 +7404,17 @@ function App() {
                         <td>{client.industry}</td>
                         <td>{client.taxpayerType}</td>
                         <td>{client.region}</td>
-                        <td>{client.periodEntries.length ? `${client.periodEntries.length} 期` : '未归档'}</td>
+                        <td>{client.id === activeTaxDataSummary?.clientId
+                          ? `${activeTaxDataSummary.standardPeriods?.length || 0} 期标准资料`
+                          : `${client.periodEntries.filter((entry) => entry.dataBasis === '标准资料').length} 期标准资料`}</td>
                         <td><LevelBadge level={level} /></td>
                         <td className="row-actions">
-                          <button onClick={() => selectClientForRiskDetection(client)} disabled={!client.periodEntries.length}>
+                          <button
+                            onClick={() => selectClientForRiskDetection(client)}
+                            disabled={client.id === selectedClient?.id
+                              ? !detectionPeriodEntries.length
+                              : !client.periodEntries.some((entry) => entry.dataBasis === '标准资料')}
+                          >
                             选择企业
                           </button>
                         </td>
@@ -7356,7 +7431,7 @@ function App() {
                 <div>
                   <p className="eyebrow">期间数据</p>
                   <h3>第二步：选择连续期间</h3>
-                  <p className="section-helper">最小单位为月份。可以选择单月、连续多月、季度或全年；不连续月份不能合并成一份报告。</p>
+                  <p className="section-helper">期间来自原始资料的文件名或表内所属期。可选择单月、季度、全年或连续期间；系统会阻止月份重叠和重复汇总。</p>
                 </div>
                 <div className="period-title-actions">
                   <span>{selectedPeriodLabel}</span>
@@ -7370,7 +7445,7 @@ function App() {
                   </button>
                 </div>
               </div>
-              {selectedClient.periodEntries.length > 0 ? (
+              {detectionPeriodEntries.length > 0 ? (
                 <>
                   <div className="period-picker">
                     {selectedClientPeriodYears.map((year) => {
@@ -7418,7 +7493,7 @@ function App() {
                     })}
                   </div>
                   <div className="period-entry-grid">
-                    {selectedClient.periodEntries.map((entry) => {
+                    {detectionPeriodEntries.map((entry) => {
                       const checked = selectedPeriodEntryIdSet.has(entry.id)
                       return (
                         <article
@@ -7427,14 +7502,11 @@ function App() {
                         >
                           <span>{periodEntryDisplayLabel(entry)}</span>
                           <strong>{formatMonthRange(entry.months)}</strong>
-                          <small>{entry.months.length} 个月｜保存于 {entry.savedAt}</small>
+                          <small>{entry.months.length} 个月｜{entry.savedAt}｜原始标准资料</small>
                           <div className="period-card-actions">
                             <button type="button" onClick={() => togglePeriodEntry(entry.id)}>
                               {checked ? '取消选择' : '选择分析'}
                             </button>
-                            <button type="button" onClick={() => editPeriodEntry(entry)}>编辑</button>
-                            <button type="button" onClick={() => copyPeriodEntryToNext(entry)}>复制下一期</button>
-                            <button type="button" className="danger-action" onClick={() => void deletePeriodEntry(entry)}>删除</button>
                           </div>
                         </article>
                       )
@@ -7466,7 +7538,7 @@ function App() {
                   )}
                 </>
               ) : (
-                <p className="section-helper">当前企业还没有保存期间快照。请先到数据录入页保存期间数据，再选择已有档案生成检测和报告。</p>
+                <p className="section-helper">当前企业还没有可用于检测的标准资料。请先导入并解析原始申报资料或财务报表。</p>
               )}
               <div className="period-actions-row">
                 <button type="button" className="secondary-button compact-button" onClick={backToRiskClientSelection}>

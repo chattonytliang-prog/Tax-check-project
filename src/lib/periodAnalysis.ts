@@ -82,6 +82,30 @@ export function areMonthsContinuous(months: string[]) {
   return unique.every((month, index) => index === 0 || monthIndex(month) === monthIndex(unique[index - 1]) + 1)
 }
 
+export function canonicalPeriodCover<TEntry extends PeriodEntry>(entries: TEntry[]) {
+  const candidates = entries
+    .filter((entry) => entry.months.length > 0)
+    .sort((left, right) => {
+      const startDiff = monthIndex(left.months[0]) - monthIndex(right.months[0])
+      if (startDiff !== 0) return startDiff
+      return right.months.length - left.months.length
+    })
+  const remainingMonths = Array.from(new Set(candidates.flatMap((entry) => entry.months)))
+    .sort((left, right) => monthIndex(left) - monthIndex(right))
+  const selected: TEntry[] = []
+  const covered = new Set<string>()
+  for (const month of remainingMonths) {
+    if (covered.has(month)) continue
+    const candidate = candidates
+      .filter((entry) => entry.months.includes(month) && entry.months.every((item) => !covered.has(item)))
+      .sort((left, right) => right.months.length - left.months.length)[0]
+    if (!candidate) continue
+    selected.push(candidate)
+    candidate.months.forEach((item) => covered.add(item))
+  }
+  return selected.sort((left, right) => monthIndex(left.months[0]) - monthIndex(right.months[0]))
+}
+
 export function formatMonthRange(months: string[]) {
   const unique = Array.from(new Set(months)).sort((a, b) => monthIndex(a) - monthIndex(b))
   if (!unique.length) return '未覆盖月份'
@@ -170,6 +194,54 @@ export function summarizePeriodEntries<TEntry extends PeriodEntry>(client: Perio
   }
 }
 
+export function summarizeCanonicalPeriodEntries<TEntry extends PeriodEntry>(client: PeriodClientFields, entries: TEntry[]) {
+  const effectiveEntries = canonicalPeriodCover(entries)
+  const months = Array.from(new Set(effectiveEntries.flatMap((entry) => entry.months))).sort((a, b) => monthIndex(a) - monthIndex(b))
+  if (!effectiveEntries.length || !months.length) return {}
+  const first = effectiveEntries[0]
+  const monthCount = Math.max(months.length, 1)
+  const sumRevenue = effectiveEntries.reduce((sum, entry) => sum + periodRevenueTotal(entry), 0)
+  const sumCost = effectiveEntries.reduce((sum, entry) => sum + periodCostTotal(entry), 0)
+  const sumProfit = effectiveEntries.reduce((sum, entry) => sum + periodProfitTotal(entry), 0)
+  const sumInvoice = effectiveEntries.reduce((sum, entry) => sum + periodInvoiceTotal(entry), 0)
+  const numericValue = (entry: TEntry, field: string) => Number((entry.snapshot as unknown as Record<string, unknown>)[field] || 0)
+  const maxValue = (field: string) => effectiveEntries.reduce((maximum, entry) => Math.max(maximum, numericValue(entry, field)), 0)
+  const sumValue = (field: string) => effectiveEntries.reduce((sum, entry) => sum + numericValue(entry, field), 0)
+  const latestValue = (field: string) => [...effectiveEntries]
+    .sort((left, right) => monthIndex(right.months.at(-1) || '') - monthIndex(left.months.at(-1) || ''))
+    .map((entry) => numericValue(entry, field))
+    .find((value) => value !== 0) || 0
+  return {
+    ...first.snapshot,
+    analysisPeriodType: monthCount === 1 ? '月度' : monthCount === 12 && months[0].endsWith('-01') ? '年度' : '自定义期间',
+    analysisYear: months[0]?.slice(0, 4) || first.analysisYear,
+    analysisMonth: monthCount === 1 ? months[0] : '',
+    analysisQuarter: '',
+    periodStartDate: `${months[0]}-01`,
+    periodEndDate: `${months[months.length - 1]}-31`,
+    dataBasis: '标准资料',
+    comparisonPeriod: effectiveEntries.length > 1 ? `${effectiveEntries.length} 期标准资料合并分析` : first.comparisonPeriod,
+    monthlyRevenue: sumRevenue / monthCount,
+    monthlyCost: sumCost / monthCount,
+    monthlyProfit: sumProfit / monthCount,
+    monthlyInvoice: sumInvoice / monthCount,
+    annualRevenue: sumRevenue,
+    consecutive12MonthSales: monthCount >= 12 ? sumRevenue : client.consecutive12MonthSales,
+    collectionFlow: effectiveEntries.reduce((sum, entry) => sum + Number(entry.snapshot.collectionFlow || 0), 0),
+    employees: maxValue('employees'),
+    employeeAnnualAvg: maxValue('employeeAnnualAvg') || maxValue('employees'),
+    salaryDeclaredCount: maxValue('salaryDeclaredCount'),
+    payrollTotal: sumValue('payrollTotal'),
+    taxableIncome: sumValue('taxableIncome'),
+    assetsTotal: latestValue('assetsTotal'),
+    outputTax: sumValue('outputTax'),
+    inputTax: sumValue('inputTax'),
+    vatTaxPayable: sumValue('vatTaxPayable'),
+    endingVatCredit: latestValue('endingVatCredit'),
+    taxableSales: sumValue('taxableSales') || sumRevenue,
+  }
+}
+
 export function findPeriodConsistencyWarnings(entries: PeriodEntry[]) {
   const warnings: string[] = []
   const aggregateEntries = entries.filter((entry) => entry.months.length > 1)
@@ -177,7 +249,7 @@ export function findPeriodConsistencyWarnings(entries: PeriodEntry[]) {
   aggregateEntries.forEach((aggregate) => {
     const coveredMonths = new Set(aggregate.months)
     const containedMonths = monthlyEntries.filter((entry) => entry.dataBasis === aggregate.dataBasis && entry.months.some((month) => coveredMonths.has(month)))
-    if (!containedMonths.length) return
+    if (containedMonths.length !== aggregate.months.length) return
     const monthRevenue = containedMonths.reduce((sum, entry) => sum + periodRevenueTotal(entry), 0)
     const aggregateRevenue = periodRevenueTotal(aggregate)
     const diff = aggregateRevenue - monthRevenue

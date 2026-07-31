@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   areMonthsContinuous,
+  canonicalPeriodCover,
   createPeriodEntry,
   findPeriodConsistencyWarnings,
   formatAnalysisPeriod,
@@ -15,6 +16,7 @@ import {
   periodRevenueTotal,
   quarterMonths,
   summarizePeriodEntries,
+  summarizeCanonicalPeriodEntries,
   upsertPeriodEntry,
   type PeriodClientFields,
   type PeriodEntry,
@@ -149,14 +151,41 @@ describe('periodAnalysis', () => {
     expect(summarizePeriodEntries(baseClient, [])).toEqual({})
   })
 
+  it('uses a non-overlapping standard-period cover and preserves evidence fields', () => {
+    const janBase = entry({ analysisMonth: '2023-01', monthlyRevenue: 100000 })
+    const febBase = entry({ analysisMonth: '2023-02', monthlyRevenue: 200000 })
+    const quarterBase = entry({
+      analysisPeriodType: '季度',
+      analysisQuarter: 'Q1',
+      analysisMonth: '',
+      monthlyRevenue: 150000,
+      monthlyCost: 100000,
+      monthlyProfit: 50000,
+    })
+    const jan = { ...janBase, snapshot: { ...janBase.snapshot, payrollTotal: 10000, employees: 2, assetsTotal: 500000 } }
+    const feb = { ...febBase, snapshot: { ...febBase.snapshot, payrollTotal: 20000, employees: 3, assetsTotal: 600000 } }
+    const quarter = { ...quarterBase, snapshot: { ...quarterBase.snapshot, payrollTotal: 60000, employees: 4, assetsTotal: 900000 } }
+
+    expect(canonicalPeriodCover([jan, feb, quarter]).map((item) => item.id)).toEqual([quarter.id])
+    expect(summarizeCanonicalPeriodEntries(baseClient, [jan, feb, quarter])).toMatchObject({
+      dataBasis: '标准资料',
+      annualRevenue: 450000,
+      payrollTotal: 60000,
+      employees: 4,
+      assetsTotal: 900000,
+    })
+  })
+
   it('warns when aggregate periods conflict with monthly detail', () => {
-    const annual = entry({ analysisPeriodType: '年度', analysisMonth: '', annualRevenue: 500000 })
+    const quarter = entry({ analysisPeriodType: '季度', analysisQuarter: 'Q1', analysisMonth: '', monthlyRevenue: 500000 / 3 })
     const jan = entry({ analysisMonth: '2023-01', monthlyRevenue: 100000 })
     const feb = entry({ analysisMonth: '2023-02', monthlyRevenue: 200000 })
+    const mar = entry({ analysisMonth: '2023-03', monthlyRevenue: 0 })
 
-    expect(findPeriodConsistencyWarnings([annual, jan, feb])[0]).toContain('差异 200,000 元')
-    expect(findPeriodConsistencyWarnings([annual])).toEqual([])
-    expect(findPeriodConsistencyWarnings([annual, { ...jan, dataBasis: '管理报表' }])).toEqual([])
+    expect(findPeriodConsistencyWarnings([quarter, jan, feb, mar])[0]).toContain('差异 200,000 元')
+    expect(findPeriodConsistencyWarnings([quarter, jan, feb])).toEqual([])
+    expect(findPeriodConsistencyWarnings([quarter])).toEqual([])
+    expect(findPeriodConsistencyWarnings([quarter, { ...jan, dataBasis: '管理报表' }, feb, mar])).toEqual([])
     expect(findPeriodConsistencyWarnings([entry({ analysisPeriodType: '季度', analysisQuarter: 'Q1', monthlyRevenue: 35000 }), jan])).toEqual([])
   })
 })

@@ -961,9 +961,13 @@ function pdfLineRecords(
 }
 
 function financialPdfRecords(text: string, period: Period, pageNo: number) {
-  const subtype = /资产负债表/.test(text) ? 'balance_sheet'
-    : /现金流量表/.test(text) ? 'cash_flow_statement'
-      : 'income_statement'
+  const compactText = text.replace(/\s+/g, '')
+  const subtype = /会小企0?1表/.test(compactText) ? 'balance_sheet'
+    : /会小企0?3表/.test(compactText) ? 'cash_flow_statement'
+      : /会小企0?2表/.test(compactText) ? 'income_statement'
+        : /资产负债表/.test(compactText) ? 'balance_sheet'
+          : /现金流量表/.test(compactText) ? 'cash_flow_statement'
+            : 'income_statement'
   const records: StandardTaxRecord[] = []
   const seen = new Set<string>()
   const blockPattern = new RegExp(`([^\\n\\d][^\\n]*?)\\s+(\\d{1,3})\\s+(${pdfAmountToken})\\s+(${pdfAmountToken})`, 'g')
@@ -1041,6 +1045,7 @@ export function parseTaxDataPdfText(fileName: string, pages: string[]): ParsedTa
   pages.forEach((pageText, index) => {
     const pageNo = index + 1
     const sourceText = `${fileName}\n${pageText}`
+    const compactPageText = pageText.replace(/\s+/g, '')
     const period = detectTaxDataPeriod(sourceText)
     if (/企业所得税年度纳税申报(?:表|主表)/.test(pageText) && /营业收入|应纳税所得额|应纳税额/.test(pageText)) {
       addPdfPageResult(result, fileName, pageText, pageNo, 'cit_return', pdfLineRecords(pageText, period, 'cit_return', 'annual_return', '企业所得税年度纳税申报表（A类）', pageNo), period)
@@ -1055,7 +1060,7 @@ export function parseTaxDataPdfText(fileName: string, pages: string[]): ParsedTa
       addPdfPageResult(result, fileName, pageText, pageNo, 'cit_return', pdfLineRecords(pageText, period, 'cit_return', 'annual_schedule', title, pageNo), period)
       return
     }
-    if (/资产负债表|利润表|现金流量表/.test(pageText) && /税款所属期|纳税人识别号|小企会0[123]表|编制单位/.test(pageText)) {
+    if (/资产负债表|利润表|现金流量表/.test(compactPageText) && /税款所属期|纳税人识别号|小企会0[123]表|会小企0[123]表|编制单位/.test(compactPageText)) {
       addPdfPageResult(result, fileName, pageText, pageNo, 'financial_statement', financialPdfRecords(pageText, period, pageNo), period)
       return
     }
