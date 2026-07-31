@@ -402,7 +402,9 @@ export async function onRequestGet({ request, env }) {
       openIssueCount(db, auth.user.id, clientId),
       all(
         db,
-        `SELECT COUNT(*) AS count FROM tax_data_source_files WHERE owner_user_id = ? AND client_id = ?`,
+        `SELECT COUNT(DISTINCT source_file_id) AS count
+         FROM tax_data_standard_records
+         WHERE owner_user_id = ? AND client_id = ? AND COALESCE(source_file_id, '') <> ''`,
         auth.user.id,
         clientId,
       ),
