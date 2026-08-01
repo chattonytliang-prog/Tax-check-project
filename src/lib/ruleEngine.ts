@@ -33,6 +33,11 @@ export type RuleExecutionResult = {
 export const emptyRuleCondition: SimpleRuleCondition = { field: '', operator: '=', value: '' }
 
 const positiveRequiredFields = new Set([
+  'monthlyInvoice',
+  'collectionFlow',
+  'employees',
+  'socialSecurityCount',
+  'salaryDeclaredCount',
   'previousQuarterEmployees',
   'previousQuarterRevenue',
   'previousQuarterCostExpense',

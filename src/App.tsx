@@ -11623,9 +11623,9 @@ function AiAssistantPage({
             <small>{currentRecordCount ? '确认后自动入库' : '上传资料后自动识别'}</small>
           </div>
           <div>
-            <span>基础字段覆盖度</span>
+            <span>企业档案字段填写率</span>
             <strong>{dataCompleteness.score}%</strong>
-            <small>{dataCompleteness.label}</small>
+            <small>不代表凭证或账套资料完整</small>
           </div>
         </aside>
       </div>

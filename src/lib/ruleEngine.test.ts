@@ -316,6 +316,29 @@ describe('ruleEngine', () => {
     expect(evaluateRuleExecution({ currentRevenue: 150, previousRevenue: 100 }, { ...revenueRule, conditionJson: emptyRuleCondition }).status).toBe('not_executable')
   })
 
+  it('does not treat absent comparison evidence stored as zero as real data', () => {
+    const invoiceComparisonRule: ExecutableRule = {
+      code: 'INVOICE_REVENUE_GAP',
+      enabled: true,
+      conditionJson: { field: 'monthlyRevenue', operator: '>', value: 0, compareField: 'monthlyInvoice', multiplier: 1.2 },
+      requiredFields: ['monthlyInvoice'],
+    }
+
+    expect(evaluateRuleExecution({ monthlyRevenue: 100000, monthlyInvoice: 0 }, invoiceComparisonRule)).toMatchObject({
+      status: 'skipped_missing_data',
+      missingFields: ['monthlyInvoice'],
+      matched: false,
+    })
+    expect(evaluateRuleExecution({ monthlyRevenue: 100000, monthlyInvoice: 70000 }, invoiceComparisonRule).status).toBe('matched')
+    expect(missingRequiredFields({ taxableSales: 100000, vatTaxPayable: 0 }, {
+      field: 'vatTaxPayable',
+      operator: '<',
+      value: 0,
+      compareField: 'taxableSales',
+      multiplier: 0.001,
+    })).toEqual([])
+  })
+
   it('treats zero budget and prior-period values as missing for readiness checks', () => {
     const budgetRule: ExecutableRule = {
       code: 'REVENUE_BUDGET_DIFF',
