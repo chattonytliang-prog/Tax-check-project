@@ -21,7 +21,7 @@ describe('reportDeliveryChecklist', () => {
     expect(reportDeliveryChecklist({ hasRisks: false, suggestedMaterials: [] })).toEqual([
       '本报告正式版 PDF/Word 文件',
       '企业基础信息、审阅期间和数据来源确认记录',
-      '未命中风险事项的资料完整性确认记录',
+      '未命中风险事项的资料覆盖范围及未执行规则确认记录',
       '顾问复核意见或客户确认记录',
     ])
   })

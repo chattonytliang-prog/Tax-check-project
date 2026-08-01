@@ -10,7 +10,7 @@ export function reportReviewAction({ totalRisks, highRisks, mediumRisks }: Repor
   }
 
   if (mediumRisks > 0) {
-    return `建议税务顾问复核 ${mediumRisks} 项中风险事项，确认资料完整性和整改优先级。`
+    return `建议税务顾问复核 ${mediumRisks} 项中风险事项，确认资料覆盖范围和整改优先级。`
   }
 
   if (totalRisks > 0) {

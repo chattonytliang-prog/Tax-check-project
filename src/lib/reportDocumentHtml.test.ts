@@ -27,6 +27,9 @@ const structuredReport: CompleteStructuredReportShape = {
     note: '资料基本完整。',
     missingFields: ['银行流水'],
     suggestedMaterials: ['补充发票台账'],
+    assessedRuleCount: 12,
+    totalRuleCount: 15,
+    unassessedRules: [{ name: '银行流水核对', missingFields: ['银行流水'] }],
   },
   taxSummaries: ['增值税存在进销项匹配异常。'],
   keyFindings: [
@@ -67,11 +70,12 @@ describe('professionalReportDocumentHtml', () => {
     }, 'word')
 
     expect(html).toContain('<!doctype html>')
-    expect(html).toContain('中国税务健康检查报告')
+    expect(html).toContain('企业涉税风险初筛报告 · 基于已提供资料')
     expect(html).toContain('上海测试科技有限公司税务健康报告 &lt;draft&gt;')
     expect(html).toContain('高风险')
     expect(html).toContain('报告编号：')
     expect(html).toContain('生成时间：2026-07-02 10:30:00')
+    expect(html).toContain('银行流水核对（缺少：银行流水）')
     expect(html).not.toContain('<draft>')
     expect(html).not.toContain('window.print()')
   })
@@ -93,7 +97,7 @@ describe('professionalReportDocumentHtml', () => {
       createdAt: '2026-07-02 11:00:00',
     }, 'word')
 
-    expect(html).toContain('历史企业税务风险体检报告')
+    expect(html).toContain('历史企业历史口径税务风险初筛报告')
     expect(html).toContain('正文 &lt;script&gt;alert(1)&lt;/script&gt;')
     expect(html).not.toContain('Issue R-001')
     expect(html).not.toContain('code: R-001')
@@ -133,7 +137,7 @@ describe('professionalReportDocumentHtml', () => {
     expect(html).toContain('标准规则解释')
     expect(html).toContain('暂无明确补充资料。')
     expect(html).toContain('当前无需要列入整改清单的自动风险事项。')
-    expect(html).toContain('<title>历史报告税务风险体检报告</title>')
+    expect(html).toContain('<title>历史报告企业涉税风险初筛报告</title>')
   })
 
   it('renders empty finding summaries and legacy defaults', () => {
@@ -147,7 +151,7 @@ describe('professionalReportDocumentHtml', () => {
 
     expect(structuredHtml).toContain('当前未形成需要在摘要中重点列示的风险事项。')
     expect(structuredHtml).toContain('当前未命中自动风险事项。')
-    expect(legacyHtml).toContain('<h1>历史报告税务风险体检报告</h1>')
+    expect(legacyHtml).toContain('<h1>历史报告历史口径税务风险初筛报告</h1>')
     expect(legacyHtml).toContain('生成时间：')
   })
 })

@@ -10,7 +10,7 @@ describe('reportReviewAction', () => {
 
   it('points medium-risk reports to consultant review', () => {
     expect(reportReviewAction({ totalRisks: 3, highRisks: 0, mediumRisks: 3 })).toBe(
-      '建议税务顾问复核 3 项中风险事项，确认资料完整性和整改优先级。',
+      '建议税务顾问复核 3 项中风险事项，确认资料覆盖范围和整改优先级。',
     )
   })
 

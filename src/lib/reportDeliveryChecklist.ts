@@ -12,7 +12,7 @@ export function reportDeliveryChecklist({ hasRisks, suggestedMaterials }: Report
   if (hasRisks) {
     checklist.push('风险事项复核底稿及整改跟进记录')
   } else {
-    checklist.push('未命中风险事项的资料完整性确认记录')
+    checklist.push('未命中风险事项的资料覆盖范围及未执行规则确认记录')
   }
 
   if (suggestedMaterials.length) {

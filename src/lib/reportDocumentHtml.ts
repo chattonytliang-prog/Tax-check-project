@@ -86,7 +86,7 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
 
   return `
     <section class="cover">
-      <p class="eyebrow">中国税务健康检查报告</p>
+      <p class="eyebrow">企业涉税风险初筛报告 · 基于已提供资料</p>
       <h1>${escapeHtml(report.title)}</h1>
       <div class="cover-grid">
         ${report.scope.slice(0, 4).map((item) => `<span>${escapeHtml(item.label)}：${escapeHtml(item.value)}</span>`).join('')}
@@ -103,10 +103,10 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
       <h2>二、报告摘要：我们的观点</h2>
       <table class="summary-table">
         <tr>
-          <th>综合风险等级</th>
+          <th>已执行规则风险等级</th>
           <th>命中风险事项</th>
           <th>高 / 中 / 低</th>
-          <th>资料完整性</th>
+          <th>基础字段覆盖度</th>
         </tr>
         <tr>
           <td>${exportBadgeHtml(report.executiveSummary.overallLevel)}</td>
@@ -145,6 +145,11 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
       ${exportList(report.dataQuality.suggestedMaterials, '暂无明确资料缺口。')}
       <h3>基础检测缺失字段</h3>
       ${exportList(report.dataQuality.missingFields, '无。')}
+      <h3>因资料不足未执行的规则</h3>
+      ${exportList(
+        report.dataQuality.unassessedRules?.map((item) => `${item.name}（缺少：${item.missingFields.join('、')}）`) || [],
+        '无。',
+      )}
     </section>
 
     <section>
@@ -192,7 +197,7 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
 }
 
 function legacyReportHtml(report: ReportDocumentHtmlInput) {
-  return `<section><h1>${escapeHtml(report.clientName || '历史报告')}税务风险体检报告</h1><pre>${escapeHtml(sanitizePublicReportContent(reportTextContent(report)))}</pre></section>`
+  return `<section><h1>${escapeHtml(report.clientName || '历史报告')}历史口径税务风险初筛报告</h1><p><strong>提示：</strong>该报告生成于标准资料口径升级前，不代表当前风险结果，请重新选择期间生成新版报告。</p><pre>${escapeHtml(sanitizePublicReportContent(reportTextContent(report)))}</pre></section>`
 }
 
 function reportDocumentFooterHtml(report: ReportDocumentHtmlInput) {
@@ -203,7 +208,7 @@ function reportDocumentFooterHtml(report: ReportDocumentHtmlInput) {
       <strong>合耀科技 HY AI 税务风控工作台</strong>
       <span>报告编号：${escapeHtml(documentId)}</span>
       <span>报告版本：V1.0</span>
-      <span>报告状态：系统初筛版（待顾问复核）</span>
+      <span>报告状态：基于已提供资料的系统初筛版（待顾问复核）</span>
       <span>生成时间：${escapeHtml(generatedAt)}</span>
       <span>本报告仅供经营管理和税务风险复核参考，不替代税务机关认定、专项鉴证或正式法律/税务意见。</span>
     </footer>
@@ -219,7 +224,7 @@ export function professionalReportDocumentHtml(report: ReportDocumentHtmlInput, 
     <html>
       <head>
         <meta charset="utf-8" />
-        <title>${escapeHtml(report.clientName || '历史报告')}税务风险体检报告</title>
+        <title>${escapeHtml(report.clientName || '历史报告')}企业涉税风险初筛报告</title>
         <style>
           @page { size: A4; margin: 18mm 16mm; }
           * { box-sizing: border-box; }

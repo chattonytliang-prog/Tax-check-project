@@ -28,5 +28,5 @@ export function reportFileName(report: ReportFileNameInput, extension: string, f
   const safeClientName = safeFilePart(report.clientName || '', '企业')
   const safePeriod = safeFilePart(reportPeriodForFileName(report), '')
   const periodPart = safePeriod ? `${safePeriod}-` : ''
-  return `${safeClientName}-${periodPart}中国税务健康检查报告-${date}.${extension}`
+  return `${safeClientName}-${periodPart}企业涉税风险初筛报告-基于已提供资料-${date}.${extension}`
 }

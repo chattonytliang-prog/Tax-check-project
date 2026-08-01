@@ -2790,15 +2790,16 @@ function getDataCompleteness(client: Client, risks: RiskResult[] = []) {
   const total = saveTotal + reportTotal
   const missing = validateClientForSave(client).length + validateClientForReport(client).length
   const score = Math.round(((total - missing) / total) * 100)
-  const label = score >= 85 ? '资料较完整' : score >= 55 ? '资料部分缺失' : '资料不足'
+  const covered = total - missing
+  const label = score >= 85 ? '基础字段覆盖较高' : score >= 55 ? '基础字段部分覆盖' : '基础字段覆盖不足'
   const note = score >= 85
-    ? '当前录入信息可支持初步风险判断，建议结合原始凭证、申报表和合同继续复核。'
+    ? '当前基础检测字段覆盖较高，可支持风险初筛；该比例不代表账套、凭证、合同、流水或申报资料已经完整。'
     : score >= 55
-      ? '当前录入信息可支持初筛，但部分关键资料尚不完整，报告结论应作为风险提示使用。'
-      : '当前信息不足以支持充分判断，本次结果仅适合作为线索提示，需补充资料后重新复核。'
+      ? '当前基础检测字段仅部分覆盖，已执行规则的结论可作为风险线索；未覆盖事项不作判断。'
+      : '当前基础检测字段覆盖不足，只能对具备证据的规则进行初筛；未执行规则不得解读为低风险。'
   const suggestedMaterials = Array.from(new Set(risks.flatMap((risk) => risk.materials))).slice(0, 12)
 
-  return { score, label, note, suggestedMaterials }
+  return { score, label, note, suggestedMaterials, covered, total }
 }
 
 type FilingChecklistItem = {
@@ -3916,7 +3917,7 @@ function downloadClientImportTemplate() {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = 'HY税务健康检查导入模板.csv'
+  link.download = 'HY企业涉税风险初筛资料导入模板.csv'
   link.click()
   URL.revokeObjectURL(url)
 }
@@ -4064,7 +4065,12 @@ function buildStructuredRiskFinding(client: Client, risk: RiskResult): Structure
   }
 }
 
-function buildStructuredReport(client: Client, risks: RiskResult[]): StructuredReport {
+function buildStructuredReport(
+  client: Client,
+  risks: RiskResult[],
+  skippedRules: SkippedRule[] = [],
+  evaluatedRuleCount = getSourceRules().length,
+): StructuredReport {
   const level = getOverallLevel(risks)
   const highRisks = riskCountByRank(risks, 3)
   const mediumRisks = riskCountByRank(risks, 2)
@@ -4080,10 +4086,15 @@ function buildStructuredReport(client: Client, risks: RiskResult[]): StructuredR
   const expertReviewItems = Array.from(new Set(
     suggestedMaterials.map((item) => `复核资料：${item}`),
   )).slice(0, 10)
+  const unassessedRules = skippedRules.map(({ rule, execution }) => ({
+    name: rule.name,
+    missingFields: execution.missingFields.map(fieldLabel),
+  }))
 
   return {
     version: 'professional-v1',
-    title: `${client.name} 中国税务健康检查报告`,
+    methodology: 'source-backed-v2',
+    title: `${client.name} 企业涉税风险初筛报告——基于已提供资料`,
     clientProfile: [
       { label: '企业名称', value: reportValue(client.name) },
       { label: '统一社会信用代码', value: reportValue(client.creditCode) },
@@ -4097,7 +4108,8 @@ function buildStructuredReport(client: Client, risks: RiskResult[]): StructuredR
     scope: [
       { label: '报告编号', value: reportDocumentId(client) },
       { label: '报告版本', value: 'V1.0' },
-      { label: '报告状态', value: '系统初筛版（待顾问复核）' },
+      { label: '报告状态', value: '标准资料初筛版（待顾问复核）' },
+      { label: '报告性质', value: '基于已提供资料的风险初筛，不是完整税务体检或鉴证报告' },
       { label: '审阅期间', value: formatAnalysisPeriod(client) },
       { label: '数据来源', value: reportValue(client.dataBasis) },
       { label: '对比期间', value: reportValue(client.comparisonPeriod) },
@@ -4111,8 +4123,10 @@ function buildStructuredReport(client: Client, risks: RiskResult[]): StructuredR
       },
       { label: '复核建议', value: reportReviewAction({ totalRisks: risks.length, highRisks, mediumRisks }) },
       { label: '生成时间', value: formatDate() },
-      { label: '工作方法', value: '基于企业录入数据、已保存期间快照和系统规则库进行自动检测，并由 AI 仅作表达润色和数据复核提示。' },
-      { label: '工作限制', value: '本次检查未替代原始凭证穿行测试、税务机关沟通、专项鉴证或法律意见。' },
+      { label: '资料覆盖口径', value: `基础检测字段 ${completeness.covered}/${completeness.total}；不代表全部账套、凭证、合同、流水或申报资料完整` },
+      { label: '规则执行范围', value: `${risks.length} 条命中，${skippedRules.length} 条因资料不足未执行` },
+      { label: '工作方法', value: '基于已提供标准资料、所选连续期间和确定性规则进行自动初筛；AI 仅作表达润色和数据复核提示。' },
+      { label: '工作限制', value: '未提供证据的事项不作判断；本次初筛不替代原始凭证穿行测试、完整账套复核、税务机关沟通、专项鉴证或法律意见。' },
     ],
     executiveSummary: {
       overallLevel: level,
@@ -4121,8 +4135,8 @@ function buildStructuredReport(client: Client, risks: RiskResult[]): StructuredR
       mediumRisks,
       lowRisks,
       conclusion: risks.length
-        ? `本次共识别 ${risks.length} 项税务风险提示，其中高风险 ${highRisks} 项、中风险 ${mediumRisks} 项、低风险 ${lowRisks} 项，综合风险等级为${plainRiskLevel(level)}。建议优先处理高风险事项，并对中风险事项安排资料复核。`
-        : '本次在已录入数据和当前规则覆盖范围内未识别明显风险事项，但仍建议补充原始凭证、申报表和发票明细进行人工复核。',
+        ? `在已提供资料和已执行规则范围内，共识别 ${risks.length} 项风险提示，其中高风险 ${highRisks} 项、中风险 ${mediumRisks} 项、低风险 ${lowRisks} 项，已执行规则综合等级为${plainRiskLevel(level)}。未执行规则不纳入本等级。`
+        : '本次在已提供资料和已执行规则范围内未识别明显风险事项；该结论不覆盖因资料不足而未执行的规则。',
     },
     dataQuality: {
       score: completeness.score,
@@ -4130,6 +4144,11 @@ function buildStructuredReport(client: Client, risks: RiskResult[]): StructuredR
       note: completeness.note,
       missingFields,
       suggestedMaterials,
+      coveredFields: completeness.covered,
+      totalFields: completeness.total,
+      assessedRuleCount: Math.max(evaluatedRuleCount - skippedRules.length, 0),
+      totalRuleCount: evaluatedRuleCount,
+      unassessedRules,
     },
     taxSummaries: taxTypeSummary(risks),
     keyFindings: findings.filter((finding) => riskRank(finding.level) >= 2).slice(0, 8),
@@ -4149,6 +4168,8 @@ function buildStructuredReport(client: Client, risks: RiskResult[]): StructuredR
     signOffBlock: reportSignOffBlock(),
     disclaimers: [
       '本报告基于企业提供资料、系统录入数据及规则库进行风险提示，不构成税务机关认定、税务鉴证结论或法律意见。',
+      '资料覆盖度仅反映系统基础检测字段覆盖情况，不代表原始凭证、账套、合同、资金流水和全部申报资料完整。',
+      '因资料不足未执行的规则不参与风险等级计算，也不代表相关事项不存在风险。',
       'AI 仅用于数据复核提示和报告表达润色，不得新增、删除或覆盖规则引擎已经命中的风险结论。',
       '若审阅期间、数据来源、申报口径或原始凭证发生变化，应重新检测并生成报告。',
       '涉及具体补税、滞纳金、罚款或整改方案的事项，应结合完整账套、申报表、发票、合同、付款流水及当地税务实践进一步确认。',
@@ -4187,8 +4208,11 @@ ${scope}
 二、报告摘要：我们的观点
 ${report.executiveSummary.conclusion}
 
-资料完整性：${report.dataQuality.score}%（${report.dataQuality.label}）
+基础字段覆盖度：${report.dataQuality.score}%（${report.dataQuality.label}）
 ${report.dataQuality.note}
+
+规则执行情况：已执行 ${report.dataQuality.assessedRuleCount ?? '未记录'} / ${report.dataQuality.totalRuleCount ?? '未记录'} 条。
+未执行规则：${report.dataQuality.unassessedRules?.length ? report.dataQuality.unassessedRules.map((item) => `${item.name}（缺少：${item.missingFields.join('、')}）`).join('；') : '无。'}
 
 三、重要事项汇总
 ${keyFindings}
@@ -4245,7 +4269,7 @@ ${items.length ? items.map((risk, index) => `${index + 1}. 【${risk.level}风�
     .map((risk, index) => `${index + 1}. 【${risk.level}风险】${riskDisplayTitle(risk)}：${riskReasonForReport(client, risk)}`)
     .join('\n')
 
-  return `《企业税务风险体检报告》
+  return `《企业涉税风险初筛报告——基于已提供资料》
 
 一、企业基本情况
 企业名称：${client.name}
@@ -4266,8 +4290,8 @@ ${reportMissingFields.length ? `本次基础检测资料仍缺少：${validation
 本结论基于已选档案期间数据和系统规则库生成，建议由财税专业人员结合原始凭证、账套、申报表、合同、资金流水进一步复核。
 本报告仅适用于上述数据期间和数据来源；期间或数据来源变化后，建议重新生成报告。
 
-三、资料完整性说明
-资料完整度：${completeness.score}%（${completeness.label}）
+三、资料覆盖范围说明
+基础字段覆盖度：${completeness.score}%（${completeness.label}）
 说明：${completeness.note}
 基础检测缺失字段：${reportMissingFields.length ? validationSummary(reportMissingFields) : '无'}
 建议优先补充资料：${completeness.suggestedMaterials.length ? completeness.suggestedMaterials.join('、') : '当前未形成明确补充资料清单。'}
@@ -5360,7 +5384,7 @@ function App() {
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'zh-Hans-CN'))
       .slice(0, 5)
     const conclusion = clients.length === 0
-      ? '当前还没有企业档案。建议先导入企业和最近期间数据，再生成管理层可读的税务健康结论。'
+      ? '当前还没有企业档案。建议先导入企业和最近期间数据，再生成管理层可读的涉税风险初筛结论。'
       : bossPeriodActive && bossStats.analysable === 0
         ? `${bossPeriodLabel} 暂无企业具备完整月度归档，建议先让财务补齐指定期间资料。`
         : bossStats.high > 0
@@ -5375,7 +5399,7 @@ function App() {
             ? `先补齐 ${bossStats.missingPeriodClients} 家企业的指定期间月度归档`
             : missingDataClients > 0 ? `安排财务补齐 ${missingDataClients} 家企业的关键资料` : '要求财务保留本次检查底稿',
           topRisks.length > 0 ? `优先复核 ${topRisks.length} 个重点风险事项` : '将低风险初筛结果归档',
-          reports.length > 0 ? '查看最新报告并确认后续跟进节奏' : '生成第一份税务健康报告',
+          reports.length > 0 ? '查看最新报告并确认后续跟进节奏' : '生成第一份涉税风险初筛报告',
         ]
     const deliveryChecks = [
       {
@@ -6312,7 +6336,9 @@ function App() {
     const reportClient = deriveClientMetrics({ ...(selectedDetectionClient || selectedClient), periodEntries: [] })
     const startedAt = Date.now()
     const risks = detectRisks(reportClient, managedRules)
-    const structuredReport = buildStructuredReport(reportClient, risks)
+    const skippedRules = getSkippedRules(reportClient, managedRules)
+    const evaluatedRuleCount = getSourceRules(managedRules).length
+    const structuredReport = buildStructuredReport(reportClient, risks, skippedRules, evaluatedRuleCount)
     const baseReport: Report = {
       id: crypto.randomUUID(),
       clientId: reportClient.id,
@@ -6349,12 +6375,12 @@ function App() {
           client: reportClient,
           risks: risksForAi,
           content: baseReport.content,
-          structuredReport: buildStructuredReport(reportClient, risks),
+          structuredReport,
           aiReview: reviewResponse.review,
         }),
         wait(2000),
       ])
-      const reviewedStructuredReport = buildStructuredReport(reportClient, risks)
+      const reviewedStructuredReport = buildStructuredReport(reportClient, risks, skippedRules, evaluatedRuleCount)
 
       report = {
         ...baseReport,
@@ -6562,7 +6588,7 @@ function App() {
           </div>
           <p className="eyebrow">内部税务风控工作台</p>
           <h1>合耀税务风控工作台</h1>
-          <p className="login-copy">录入企业财税画像，自动命中风险规则，生成可复核、可流转的税务风险体检报告。</p>
+          <p className="login-copy">导入企业真实财税资料，按证据范围执行规则，生成可复核、可流转的涉税风险初筛报告。</p>
           <form className="login-card" onSubmit={handleAuthSubmit}>
             <div className="auth-switch">
               <button type="button" className={authMode === 'login' ? 'active' : ''} onClick={() => setAuthMode('login')}>
@@ -6627,7 +6653,7 @@ function App() {
         <nav className="sidebar-nav">
           <div className="nav-group">
             <button className={page === 'dashboard' ? 'active' : ''} onClick={() => setPage('dashboard')}>
-              <LayoutDashboard /> 税务健康总览
+              <LayoutDashboard /> 涉税风险总览
             </button>
           </div>
           <div className="nav-group">
@@ -6670,7 +6696,7 @@ function App() {
             <header className="page-header">
               <div>
                 <p className="eyebrow">税务总览</p>
-                <h2>税务健康总览</h2>
+                <h2>涉税风险总览</h2>
               </div>
               <div className="header-actions">
                 <button className="secondary-button" onClick={() => setPage('reports')}>
@@ -6787,7 +6813,7 @@ function App() {
             </div>
             <section className={`boss-dashboard level-${bossDashboard.level === '高' ? 'high' : bossDashboard.level === '中' ? 'medium' : 'low'}`}>
               <div className="boss-summary">
-                <span>当前税务健康等级</span>
+                <span>已执行规则风险等级</span>
                 <strong>{plainRiskLevel(bossDashboard.level)}风险</strong>
                 <p>{bossDashboard.conclusion}</p>
                 <div className="boss-delivery-checks" aria-label="试点交付状态">
@@ -6892,13 +6918,13 @@ function App() {
               </section>
               <section className="panel dark-panel">
                 <Sparkles />
-                <h3>税务风险体检流程</h3>
+                <h3>涉税风险初筛流程</h3>
                 <p>从企业财税画像出发，先用规则引擎完成确定性检测，再由 AI 辅助复核数据疑点并生成可流转报告。</p>
                 <ul>
                   <li>录入企业基础、经营、发票和人员数据</li>
                   <li>集团项目按主体分别建档，汇总查看多主体风险</li>
                   <li>自动识别增值税、所得税、发票和资金风险</li>
-                  <li>生成风险体检报告并支持 Word 导出</li>
+                  <li>生成“基于已提供资料”的风险初筛报告并支持 Word 导出</li>
                 </ul>
               </section>
             </div>
@@ -7014,7 +7040,7 @@ function App() {
                     </button>
                   </div>
                 </div>
-                <section className="tax-data-board" aria-label="企业资料完整性看板">
+                <section className="tax-data-board" aria-label="企业资料覆盖看板">
                   <div className="tax-data-period-nav">
                     <div>
                       <span>{taxDataViewMode === 'overview' ? '企业资料' : '查看资料期间'}</span>
@@ -7642,7 +7668,7 @@ function App() {
             {currentCompleteness && (
               <section className="panel readiness-panel">
                 <div>
-                  <p className="eyebrow">资料完整性说明</p>
+                  <p className="eyebrow">资料覆盖范围说明</p>
                   <h3>{currentCompleteness.label}（{currentCompleteness.score}%）</h3>
                   <p>{currentCompleteness.note}</p>
                 </div>
@@ -7817,7 +7843,7 @@ function App() {
             <header className="page-header">
               <div>
                 <p className="eyebrow">报告记录</p>
-                <h2>历史体检报告</h2>
+                <h2>历史初筛报告</h2>
               </div>
             </header>
             <section className="panel archive-overview-panel">
@@ -7858,7 +7884,7 @@ function App() {
                         </td>
                         <td>{client.periodEntries.length ? `${client.periodEntries.length} 期` : '未归档'}</td>
                         <td><LevelBadge level={level} /></td>
-                        <td>{report ? '已生成' : '未生成'}</td>
+                        <td>{report ? (report.structured?.methodology === 'source-backed-v2' ? '标准资料初筛' : '历史口径（建议重算）') : '未生成'}</td>
                         <td className="row-actions">
                           <button onClick={() => openClientForPeriodSelection(client)}>
                             选择期间
@@ -9236,7 +9262,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         <div className="section-title-row">
           <div>
             <h3>项目结构</h3>
-            <p className="section-helper">真实健康检查通常按主体分别建档；选择集团项目后，系统会在工作台和结果页生成集团口径汇总。</p>
+            <p className="section-helper">涉税风险初筛通常按主体分别建档；选择集团项目后，系统会在工作台和结果页生成集团口径汇总。</p>
             {renderSectionRequirementSummary(['项目口径'])}
           </div>
           {renderSectionActions('项目结构', 'Step 1', clearProjectSection)}
@@ -9582,7 +9608,7 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
   return (
     <div className="structured-report">
       <section className="report-cover">
-        <p className="eyebrow">中国税务健康检查报告</p>
+        <p className="eyebrow">企业涉税风险初筛报告 · 基于已提供资料</p>
         <h1>{report.title}</h1>
         <div className="report-cover-meta">
           {report.scope.slice(0, 4).map((item) => (
@@ -9617,10 +9643,10 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
           <h3>报告摘要：我们的观点</h3>
         </div>
         <div className="executive-summary">
-          <div><span>综合风险等级</span><strong>{plainRiskLevel(report.executiveSummary.overallLevel)}风险</strong></div>
+          <div><span>已执行规则风险等级</span><strong>{plainRiskLevel(report.executiveSummary.overallLevel)}风险</strong></div>
           <div><span>命中风险事项</span><strong>{report.executiveSummary.totalRisks} 项</strong></div>
           <div><span>高 / 中 / 低</span><strong>{report.executiveSummary.highRisks} / {report.executiveSummary.mediumRisks} / {report.executiveSummary.lowRisks}</strong></div>
-          <div><span>资料完整性</span><strong>{report.dataQuality.score}%</strong></div>
+          <div><span>基础字段覆盖度</span><strong>{report.dataQuality.score}%</strong></div>
         </div>
         <p className="report-lead">{report.executiveSummary.conclusion}</p>
         <p className="report-note">{report.dataQuality.note}</p>
@@ -9719,6 +9745,13 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
               <p>暂无明确资料缺口。</p>
             )}
           </article>
+        </div>
+        <div className="report-scope-list">
+          <p><strong>规则执行覆盖：</strong>已执行 {report.dataQuality.assessedRuleCount ?? '未记录'} / {report.dataQuality.totalRuleCount ?? '未记录'} 条。</p>
+          <p><strong>不可检测项：</strong>{report.dataQuality.unassessedRules?.length
+            ? report.dataQuality.unassessedRules.slice(0, 12).map((item) => `${item.name}（缺少：${item.missingFields.join('、')}）`).join('；')
+            : '无。'}</p>
+          {(report.dataQuality.unassessedRules?.length || 0) > 12 && <p>另有 {(report.dataQuality.unassessedRules?.length || 0) - 12} 条规则因资料不足未执行，补齐资料后应重新检测。</p>}
         </div>
       </section>
 
@@ -11590,7 +11623,7 @@ function AiAssistantPage({
             <small>{currentRecordCount ? '确认后自动入库' : '上传资料后自动识别'}</small>
           </div>
           <div>
-            <span>资料完整度</span>
+            <span>基础字段覆盖度</span>
             <strong>{dataCompleteness.score}%</strong>
             <small>{dataCompleteness.label}</small>
           </div>
@@ -11616,9 +11649,11 @@ function ReportPage({
   onUpdate: (content: string) => void
 }) {
   const safeRisks = Array.isArray(risks) ? risks : []
+  const fallbackSkippedRules = getSkippedRules(client)
   const structured = isCompleteStructuredReport(report?.structured)
     ? report.structured
-    : buildStructuredReport(client, safeRisks)
+    : buildStructuredReport(client, safeRisks, fallbackSkippedRules)
+  const legacyMethodology = Boolean(report) && structured.methodology !== 'source-backed-v2'
   const fallbackContent = report ? reportTextContent(report) : buildProfessionalReportContent(structured)
   const draft = sanitizePublicReportContent(fallbackContent || buildReportContent(client, safeRisks))
   const aiMessage = aiStage === 'reviewing'
@@ -11628,7 +11663,7 @@ function ReportPage({
       : ''
   const aiStepText = aiStage === 'reviewing'
     ? '正在比对企业输入数据、规则条件和命中结果，识别字段冲突、边界值和需要人工复核的事项。'
-    : '正在把确定性规则结果和数据复核意见整合成正式税务风险体检报告。'
+    : '正在把确定性规则结果、资料覆盖范围和未执行事项整合成涉税风险初筛报告。'
   const [assistantInput, setAssistantInput] = useState('')
   const [assistantResponse, setAssistantResponse] = useState<AiAssistantResponse | null>(null)
   const [assistantLoading, setAssistantLoading] = useState(false)
@@ -11703,6 +11738,12 @@ function ReportPage({
           </button>
         </div>
       </header>
+      {legacyMethodology && (
+        <div className="period-warning-list">
+          <strong>历史口径报告</strong>
+          <p>该报告生成于标准资料口径升级前，风险数量和等级不代表当前结果；请重新选择期间并生成新版初筛报告。</p>
+        </div>
+      )}
       {aiStage ? (
         <div className="ai-process-panel">
           <div className="ai-orbit" aria-hidden="true">

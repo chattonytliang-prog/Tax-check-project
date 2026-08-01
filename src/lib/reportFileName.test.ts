@@ -17,7 +17,7 @@ describe('reportFileName', () => {
         },
         'doc',
       ),
-    ).toBe('苏州异常贸易有限公司-2025年度-中国税务健康检查报告-2026-06-25.doc')
+    ).toBe('苏州异常贸易有限公司-2025年度-企业涉税风险初筛报告-基于已提供资料-2026-06-25.doc')
   })
 
   it('removes characters that are invalid in Windows filenames', () => {
@@ -32,12 +32,12 @@ describe('reportFileName', () => {
         },
         'pdf',
       ),
-    ).toBe('ABCDEFGHI公司-202501Q1-中国税务健康检查报告-2026-06-25.pdf')
+    ).toBe('ABCDEFGHI公司-202501Q1-企业涉税风险初筛报告-基于已提供资料-2026-06-25.pdf')
   })
 
   it('keeps legacy reports compatible when no structured period exists', () => {
     expect(reportFileName({ clientName: '', createdAt: '' }, 'doc', '2026-06-25')).toBe(
-      '企业-中国税务健康检查报告-2026-06-25.doc',
+      '企业-企业涉税风险初筛报告-基于已提供资料-2026-06-25.doc',
     )
   })
 })

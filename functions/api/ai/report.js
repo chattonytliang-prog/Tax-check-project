@@ -67,7 +67,7 @@ function removeInternalReportArtifacts(content) {
 }
 
 function buildPrompt(client, risks, content, aiReview, establishmentFacts, structuredReport) {
-  return `请基于以下企业税务风险体检资料，重写一份专业、清晰、适合企业管理层和财务负责人阅读的税务风险体检报告。
+  return `请基于以下企业已提供资料，重写一份专业、清晰、适合企业管理层和财务负责人阅读的涉税风险初筛报告。
 
 要求：
 1. 只能基于输入资料分析，不要编造不存在的数据、政策或案例。
@@ -75,13 +75,15 @@ function buildPrompt(client, risks, content, aiReview, establishmentFacts, struc
 3. AI 数据复核中发现的疑点，只能写入“数据复核提示”或“观察项”，不能写成已命中风险。
 4. 保留风险提示性质，不要承诺最终税务处理结论。
 5. 输出中文纯文本，不要使用 Markdown 代码块。
-6. 结构包含：企业基本情况、综合风险结论、资料完整性说明、AI 数据复核提示、分税种风险摘要、重点风险事项、风险明细与整改建议、整改优先级、建议补充资料、免责声明。
+6. 结构包含：企业基本情况、已执行规则风险结论、资料覆盖范围、未执行规则、AI 数据复核提示、分税种风险摘要、重点风险事项、风险明细与整改建议、整改优先级、建议补充资料、免责声明。
 7. 语气专业、审慎、可执行。
 8. 企业成立时长必须以“系统计算事实”为准，不得自行推断。
 9. 只有当 isEstablishedLessThan12Months 为 true 时，才允许写“成立不足 12 个月 / 成立不足一年 / 不满 12 个月”等表述。
 10. 如果 isEstablishedLessThan12Months 为 false，禁止出现任何“成立不足 12 个月”或同义表述。
 11. 每个风险事项必须保留风险等级、涉及税种、触发原因、建议补充资料和整改建议。
 12. 面向客户的报告中禁止输出内部规则编号、issueId、code、内部字段名或类似“smallProfitEnjoyed=true”的条件表达式。
+13. 必须明确这是“基于已提供资料的风险初筛”，不得称为完整税务体检；资料覆盖度不得表述为全部资料完整度。
+14. 因资料不足未执行的规则必须保留为不可检测项，不得当作低风险或无风险。
 
 企业资料：
 ${JSON.stringify(client, null, 2)}

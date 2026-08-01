@@ -20,6 +20,7 @@ export type CompleteStructuredRiskFindingShape = {
 
 export type CompleteStructuredReportShape = {
   version: 'professional-v1'
+  methodology?: 'source-backed-v2'
   title: string
   clientProfile: Array<{ label: string; value: string }>
   scope: Array<{ label: string; value: string }>
@@ -37,6 +38,11 @@ export type CompleteStructuredReportShape = {
     note: string
     missingFields: string[]
     suggestedMaterials: string[]
+    coveredFields?: number
+    totalFields?: number
+    assessedRuleCount?: number
+    totalRuleCount?: number
+    unassessedRules?: Array<{ name: string; missingFields: string[] }>
   }
   taxSummaries: string[]
   keyFindings: CompleteStructuredRiskFindingShape[]
@@ -59,9 +65,9 @@ export function reportRiskList(report?: { risks?: unknown }): unknown[] {
 export function reportTextContent(report: { clientName?: string; content?: unknown }) {
   const content = typeof report.content === 'string' ? report.content.trim() : ''
   if (content) return content
-  return `${report.clientName || '历史报告'}税务风险体检报告
+  return `${report.clientName || '历史报告'}历史口径税务风险初筛报告
 
-该历史报告缺少正文内容，系统已切换为兼容预览。请重新生成报告以获得完整正式版本。`
+该历史报告缺少正文内容，系统已切换为兼容预览。该报告不代表当前标准资料口径，请重新选择期间并生成新版初筛报告。`
 }
 
 export function isCompleteStructuredReport(report?: unknown): report is CompleteStructuredReportShape {

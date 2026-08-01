@@ -89,12 +89,12 @@ describe('reportCompatibility', () => {
   it('creates a clear fallback when legacy reports have no body content', () => {
     const content = reportTextContent({ clientName: '苏州异常贸易有限公司' })
 
-    expect(content).toContain('苏州异常贸易有限公司税务风险体检报告')
+    expect(content).toContain('苏州异常贸易有限公司历史口径税务风险初筛报告')
     expect(content).toContain('该历史报告缺少正文内容')
     expect(content).toContain('兼容预览')
   })
 
   it('falls back to a historical report title when client name is absent', () => {
-    expect(reportTextContent({ content: '' })).toContain('历史报告税务风险体检报告')
+    expect(reportTextContent({ content: '' })).toContain('历史报告历史口径税务风险初筛报告')
   })
 })
