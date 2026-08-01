@@ -1,5 +1,5 @@
 import { badRequest, json, nowIso, readJson, requireDb, serverError } from '../_utils.js'
-import { requireAdmin } from '../auth/_auth.js'
+import { requireRuleLibraryAdmin } from '../auth/_auth.js'
 
 function normalizeCondition(condition) {
   if (!condition || typeof condition !== 'object') {
@@ -55,7 +55,7 @@ function normalizeRule(input, code) {
 export async function onRequestPut({ request, env, params }) {
   try {
     const db = requireDb(env)
-    const auth = await requireAdmin(request, db)
+    const auth = await requireRuleLibraryAdmin(request, db)
     if (auth.response) return auth.response
 
     const rule = normalizeRule(await readJson(request), params.code)
@@ -96,7 +96,7 @@ export async function onRequestPut({ request, env, params }) {
 export async function onRequestDelete({ request, env, params }) {
   try {
     const db = requireDb(env)
-    const auth = await requireAdmin(request, db)
+    const auth = await requireRuleLibraryAdmin(request, db)
     if (auth.response) return auth.response
 
     await db.prepare('DELETE FROM risk_rules WHERE code = ?').bind(String(params.code || '').toUpperCase()).run()

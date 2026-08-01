@@ -4734,6 +4734,12 @@ function App() {
   const [taxDataDirectImportMessage, setTaxDataDirectImportMessage] = useState('')
   const taxDataDirectImportInputRef = useRef<HTMLInputElement>(null)
   const taxDataDetailCache = useRef(new Map<string, TaxDataDetail>())
+  const canViewRuleLibrary = Boolean(
+    authUser
+    && !authUser.actor
+    && authUser.role === 'admin'
+    && authUser.username.trim().toLowerCase() === 'test1',
+  )
 
   useEffect(() => {
     let active = true
@@ -4849,6 +4855,7 @@ function App() {
 
   useEffect(() => {
     if (!loggedIn || !authUser) return
+    if (!canViewRuleLibrary) return
 
     let active = true
 
@@ -4869,7 +4876,7 @@ function App() {
     return () => {
       active = false
     }
-  }, [loggedIn, authUser])
+  }, [loggedIn, authUser, canViewRuleLibrary])
 
   const selectedClient = clients.find((client) => client.id === selectedClientId) || clients[0]
 
@@ -6481,6 +6488,10 @@ function App() {
         },
       )
       setAuthUser(response.user)
+      if (!(response.user.username.trim().toLowerCase() === 'test1' && response.user.role === 'admin' && !response.user.actor)) {
+        setManagedRules([])
+        setRestrictedRuleCount(0)
+      }
       setLoggedIn(true)
       setAuthPassword('')
       setDataStatus('loading')
@@ -6503,6 +6514,8 @@ function App() {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
     setLoggedIn(false)
     setAuthUser(null)
+    setManagedRules([])
+    setRestrictedRuleCount(0)
     setAuthPassword('')
     setDataStatus('loading')
   }
@@ -6546,6 +6559,8 @@ function App() {
       setAuthUser(response.user)
       setClients([])
       setReports([])
+      setManagedRules([])
+      setRestrictedRuleCount(0)
       setPage('dashboard')
       setDataStatus('loading')
     } catch (error) {
@@ -6670,9 +6685,11 @@ function App() {
             <button className={page === 'reports' || page === 'report' ? 'active' : ''} onClick={() => setPage('reports')}>
               <FileText /> 报告
             </button>
-            <button className={page === 'rules' ? 'active' : ''} onClick={() => setPage('rules')}>
-              <Settings2 /> 规则库
-            </button>
+            {canViewRuleLibrary && (
+              <button className={page === 'rules' ? 'active' : ''} onClick={() => setPage('rules')}>
+                <Settings2 /> 规则库
+              </button>
+            )}
             {canUseAdmin && (
               <button className={page === 'admin' ? 'active' : ''} onClick={() => setPage('admin')}>
                 <UserCog /> 管理员
@@ -8008,7 +8025,7 @@ function App() {
           </section>
         )}
 
-        {page === 'rules' && (
+        {page === 'rules' && canViewRuleLibrary && (
           <section className="page">
             <header className="page-header">
               <div>

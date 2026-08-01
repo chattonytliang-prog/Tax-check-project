@@ -1,5 +1,5 @@
 import { badRequest, json, nowIso, readJson, requireDb, serverError } from '../_utils.js'
-import { requireAdmin, requireUser } from '../auth/_auth.js'
+import { requireRuleLibraryAdmin } from '../auth/_auth.js'
 
 function parseRule(row) {
   const payload = row.payload_json ? JSON.parse(row.payload_json) : {}
@@ -75,19 +75,14 @@ function normalizeRule(input) {
 export async function onRequestGet({ request, env }) {
   try {
     const db = requireDb(env)
-    const auth = await requireUser(request, db)
+    const auth = await requireRuleLibraryAdmin(request, db)
     if (auth.response) return auth.response
 
-    const canViewAll = auth.user.role === 'admin' || auth.user.actor?.role === 'admin'
-    const total = await db.prepare('SELECT COUNT(*) AS count FROM risk_rules').first()
-    const statement = canViewAll
-      ? db.prepare('SELECT * FROM risk_rules ORDER BY code ASC')
-      : db.prepare('SELECT * FROM risk_rules ORDER BY code ASC LIMIT 5')
-    const { results } = await statement.all()
+    const { results } = await db.prepare('SELECT * FROM risk_rules ORDER BY code ASC').all()
 
     return json({
       rules: results.map(parseRule),
-      restrictedCount: canViewAll ? 0 : Math.max(0, (total?.count || 0) - results.length),
+      restrictedCount: 0,
     })
   } catch (error) {
     return serverError(error)
@@ -97,7 +92,7 @@ export async function onRequestGet({ request, env }) {
 export async function onRequestPost({ request, env }) {
   try {
     const db = requireDb(env)
-    const auth = await requireAdmin(request, db)
+    const auth = await requireRuleLibraryAdmin(request, db)
     if (auth.response) return auth.response
 
     const rule = normalizeRule(await readJson(request))

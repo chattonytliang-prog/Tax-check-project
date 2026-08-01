@@ -1,10 +1,10 @@
 import { json, requireDb, serverError } from '../../_utils.js'
-import { requireAdmin } from '../../auth/_auth.js'
+import { requireRuleLibraryAdmin } from '../../auth/_auth.js'
 
 export async function onRequestPost({ request, env, params }) {
   try {
     const db = requireDb(env)
-    const auth = await requireAdmin(request, db)
+    const auth = await requireRuleLibraryAdmin(request, db)
     if (auth.response) return auth.response
 
     const code = String(params.code || '').toUpperCase()

@@ -216,3 +216,25 @@ export async function requireAdmin(request, db) {
 
   return { user, admin }
 }
+
+export function canAccessRuleLibrary(user) {
+  return Boolean(
+    user
+    && !user.actor
+    && user.role === 'admin'
+    && normalizeUsername(user.username) === 'test1',
+  )
+}
+
+export async function requireRuleLibraryAdmin(request, db) {
+  const user = await getCurrentUser(request, db)
+
+  if (!user) {
+    return { response: json({ error: 'Unauthorized' }, { status: 401 }) }
+  }
+  if (!canAccessRuleLibrary(user)) {
+    return { response: json({ error: 'Forbidden' }, { status: 403 }) }
+  }
+
+  return { user, admin: user }
+}
