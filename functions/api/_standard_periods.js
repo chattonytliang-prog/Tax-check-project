@@ -461,6 +461,25 @@ function hasDetectionEvidence(period) {
     || period.sourceMetrics.iitPayrollTotal !== 0
 }
 
+function monthlyAnalysisPeriods(periods) {
+  const aggregatePeriods = periods.filter((period) => period.analysisPeriodType !== '月度')
+  return periods
+    .filter((period) => period.analysisPeriodType === '月度')
+    .map((period) => {
+      const evidencePeriods = aggregatePeriods
+        .filter((aggregate) => aggregate.months.includes(period.analysisMonth))
+        .sort((left, right) => left.months.length - right.months.length || left.periodStartDate.localeCompare(right.periodStartDate))
+        .map((aggregate) => labelForPeriod(aggregate))
+      return {
+        ...period,
+        comparisonPeriod: evidencePeriods.length
+          ? `与${evidencePeriods.join('、')}交叉验证`
+          : period.comparisonPeriod,
+        evidencePeriods,
+      }
+    })
+}
+
 export function buildStandardPeriods(rows) {
   const groups = new Map()
   for (const row of rows || []) {
@@ -472,9 +491,13 @@ export function buildStandardPeriods(rows) {
     consumeRecord(group, row)
     groups.set(key, group)
   }
-  const periods = enrichAggregateMetrics(normalizeCumulativeQuarterMetrics(normalizeLegacyAggregateTotals(normalizeFinancialColumnOrientation(Array.from(groups.values())
+  const sourcePeriods = enrichAggregateMetrics(normalizeCumulativeQuarterMetrics(normalizeLegacyAggregateTotals(normalizeFinancialColumnOrientation(Array.from(groups.values())
     .map(buildPeriod)
     .filter((period) => period.months.length > 0 && hasDetectionEvidence(period))
     .sort((left, right) => left.periodStartDate.localeCompare(right.periodStartDate) || right.months.length - left.months.length)))))
-  return { periods, crossValidation: crossValidate(periods) }
+  return {
+    periods: monthlyAnalysisPeriods(sourcePeriods),
+    sourcePeriods,
+    crossValidation: crossValidate(sourcePeriods),
+  }
 }

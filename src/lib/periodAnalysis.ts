@@ -32,6 +32,7 @@ export type PeriodEntry<TSnapshot extends PeriodClientFields = PeriodClientField
   dataBasis: DataBasis
   comparisonPeriod: string
   months: string[]
+  evidencePeriods?: string[]
   snapshot: TSnapshot
   savedAt: string
 }
@@ -86,20 +87,16 @@ export function canonicalPeriodCover<TEntry extends PeriodEntry>(entries: TEntry
   const candidates = entries
     .filter((entry) => entry.months.length > 0)
     .sort((left, right) => {
+      const lengthDiff = left.months.length - right.months.length
+      if (lengthDiff !== 0) return lengthDiff
       const startDiff = monthIndex(left.months[0]) - monthIndex(right.months[0])
       if (startDiff !== 0) return startDiff
-      return right.months.length - left.months.length
+      return left.id.localeCompare(right.id)
     })
-  const remainingMonths = Array.from(new Set(candidates.flatMap((entry) => entry.months)))
-    .sort((left, right) => monthIndex(left) - monthIndex(right))
   const selected: TEntry[] = []
   const covered = new Set<string>()
-  for (const month of remainingMonths) {
-    if (covered.has(month)) continue
-    const candidate = candidates
-      .filter((entry) => entry.months.includes(month) && entry.months.every((item) => !covered.has(item)))
-      .sort((left, right) => right.months.length - left.months.length)[0]
-    if (!candidate) continue
+  for (const candidate of candidates) {
+    if (candidate.months.some((month) => covered.has(month))) continue
     selected.push(candidate)
     candidate.months.forEach((item) => covered.add(item))
   }

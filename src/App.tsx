@@ -513,6 +513,7 @@ type TaxDataStandardPeriod = {
   dataBasis: DataBasis
   comparisonPeriod: string
   months: string[]
+  evidencePeriods?: string[]
   savedAt: string
   sourceKinds: string[]
   metrics: Partial<Client>
@@ -3106,6 +3107,7 @@ function normalizePeriodEntry(entry: Partial<ClientPeriodEntry>): ClientPeriodEn
     dataBasis: (entry.dataBasis ?? snapshot.dataBasis ?? '') as DataBasis,
     comparisonPeriod: String(entry.comparisonPeriod ?? snapshot.comparisonPeriod ?? ''),
     months,
+    evidencePeriods: entry.evidencePeriods ? [...entry.evidencePeriods] : undefined,
     snapshot,
     savedAt: entry.savedAt || formatDate(),
   }
@@ -5648,7 +5650,7 @@ function App() {
       const nextEntries = detectionPeriodEntries.filter((entry) => next.includes(entry.id))
       const nextMonths = nextEntries.flatMap((entry) => entry.months)
       if (new Set(nextMonths).size !== nextMonths.length) {
-        window.alert('所选标准期间存在月份重叠，不能重复汇总。请选择季度/年度汇总期，或选择对应月度明细。')
+        window.alert('所选标准资料存在重复月份，系统已按月去重，请刷新后重新选择。')
         return current
       }
       if (nextEntries.length > 1 && !areMonthsContinuous(nextMonths)) {
@@ -7545,7 +7547,10 @@ function App() {
                         >
                           <span>{periodEntryDisplayLabel(entry)}</span>
                           <strong>{formatMonthRange(entry.months)}</strong>
-                          <small>{entry.months.length} 个月｜{entry.savedAt}｜原始标准资料</small>
+                          <small>1 个月｜{entry.savedAt}｜原始标准资料</small>
+                          {entry.evidencePeriods?.length ? (
+                            <small>交叉验证：{entry.evidencePeriods.join('、')}</small>
+                          ) : null}
                           <div className="period-card-actions">
                             <button type="button" onClick={() => togglePeriodEntry(entry.id)}>
                               {checked ? '取消选择' : '选择分析'}

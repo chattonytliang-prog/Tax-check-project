@@ -62,7 +62,7 @@ describe('buildStandardPeriods', () => {
       citLine('2025-04-01', '2025-06-30', '利润总额', 347817.68),
     ]
     const result = buildStandardPeriods(rows)
-    const quarter = result.periods.find((period) => period.analysisQuarter === 'Q2')
+    const quarter = result.sourcePeriods.find((period) => period.analysisQuarter === 'Q2')
 
     expect(quarter.metrics.monthlyRevenue).toBeCloseTo(8251654.25 / 3)
     expect(quarter.metrics.monthlyCost).toBeCloseTo(7632039.43 / 3)
@@ -83,7 +83,7 @@ describe('buildStandardPeriods', () => {
       citLine('2025-04-01', '2025-06-30', '营业收入', 11047283.45),
     ]
     const result = buildStandardPeriods(rows)
-    const quarter = result.periods.find((period) => period.analysisQuarter === 'Q2')
+    const quarter = result.sourcePeriods.find((period) => period.analysisQuarter === 'Q2')
 
     expect(quarter.sourceMetrics.revenueTotal).toBeCloseTo(8251654.25)
     expect(quarter.sourceMetrics.costTotal).toBeCloseTo(7632039.43)
@@ -107,7 +107,7 @@ describe('buildStandardPeriods', () => {
       citLine('2025-04-01', '2025-06-30', '利润总额', 347817.68),
     ]
     const result = buildStandardPeriods(rows)
-    const quarter = result.periods.find((period) => period.analysisQuarter === 'Q2')
+    const quarter = result.sourcePeriods.find((period) => period.analysisQuarter === 'Q2')
 
     expect(quarter.sourceMetrics.revenueTotal).toBeCloseTo(8251654.25)
     expect(quarter.sourceMetrics.costTotal).toBeCloseTo(7632039.43)
@@ -129,7 +129,7 @@ describe('buildStandardPeriods', () => {
       financialLine('2025-04-01', '2025-06-30', '利润总额', 347817.68, null),
     ]
     const result = buildStandardPeriods(rows)
-    const quarter = result.periods.find((period) => period.analysisQuarter === 'Q2')
+    const quarter = result.sourcePeriods.find((period) => period.analysisQuarter === 'Q2')
 
     expect(quarter.sourceMetrics.revenueTotal).toBeCloseTo(8251654.25)
     expect(quarter.sourceMetrics.costTotal).toBeCloseTo(7632039.43)
@@ -158,8 +158,9 @@ describe('buildStandardPeriods', () => {
       financialLine('2025-01-01', '2025-12-31', '利润总额', 990473.06, 800000),
       citLine('2025-01-01', '2025-12-31', '营业收入', 29464140.72),
     ])
-    const annual = result.periods[0]
+    const annual = result.sourcePeriods[0]
 
+    expect(result.periods).toEqual([])
     expect(annual.metrics.annualRevenue).toBeCloseTo(29464140.72)
     expect(annual.sourceMetrics.costTotal).toBeCloseTo(27576993.09)
     expect(annual.sourceMetrics.profitTotal).toBeCloseTo(990473.06)
@@ -184,7 +185,7 @@ describe('buildStandardPeriods', () => {
     ]
     const result = buildStandardPeriods(rows)
     const june = result.periods.find((period) => period.analysisMonth === '2026-06')
-    const quarter = result.periods.find((period) => period.analysisYear === '2026' && period.analysisQuarter === 'Q2')
+    const quarter = result.sourcePeriods.find((period) => period.analysisYear === '2026' && period.analysisQuarter === 'Q2')
 
     expect(june.metrics.monthlyRevenue).toBe(70518.69)
     expect(june.metrics.taxableIncome).toBe(0)
@@ -201,7 +202,26 @@ describe('buildStandardPeriods', () => {
       citLine('2026-04-01', '2026-06-30', '实际利润额', 837253.90),
     ])
 
-    expect(result.periods.find((period) => period.analysisQuarter === 'Q1').metrics.taxableIncome).toBeCloseTo(970211.26)
-    expect(result.periods.find((period) => period.analysisQuarter === 'Q2').metrics.taxableIncome).toBeCloseTo(-132957.36)
+    expect(result.periods).toEqual([])
+    expect(result.sourcePeriods.find((period) => period.analysisQuarter === 'Q1').metrics.taxableIncome).toBeCloseTo(970211.26)
+    expect(result.sourcePeriods.find((period) => period.analysisQuarter === 'Q2').metrics.taxableIncome).toBeCloseTo(-132957.36)
+  })
+
+  it('returns monthly analysis periods only and keeps broader periods as cross-validation evidence', () => {
+    const result = buildStandardPeriods([
+      vatMonth('2025-01', 100, 100),
+      vatMonth('2025-02', 200, 300),
+      vatMonth('2025-03', 300, 600),
+      financialLine('2025-01-01', '2025-03-31', '营业收入', 600, 600),
+      citLine('2025-01-01', '2025-03-31', '营业收入', 600),
+      financialLine('2025-01-01', '2025-12-31', '营业收入', 600, 600),
+      citLine('2025-01-01', '2025-12-31', '营业收入', 600),
+    ])
+
+    expect(result.periods.map((period) => period.analysisMonth)).toEqual(['2025-01', '2025-02', '2025-03'])
+    expect(result.periods.every((period) => period.analysisPeriodType === '月度' && period.months.length === 1)).toBe(true)
+    expect(result.periods[0].evidencePeriods).toEqual(['2025年Q1', '2025年度'])
+    expect(result.sourcePeriods.some((period) => period.analysisPeriodType === '季度')).toBe(true)
+    expect(result.sourcePeriods.some((period) => period.analysisPeriodType === '年度')).toBe(true)
   })
 })

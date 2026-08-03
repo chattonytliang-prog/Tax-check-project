@@ -151,7 +151,7 @@ describe('periodAnalysis', () => {
     expect(summarizePeriodEntries(baseClient, [])).toEqual({})
   })
 
-  it('uses a non-overlapping standard-period cover and preserves evidence fields', () => {
+  it('prefers monthly records over overlapping aggregate evidence', () => {
     const janBase = entry({ analysisMonth: '2023-01', monthlyRevenue: 100000 })
     const febBase = entry({ analysisMonth: '2023-02', monthlyRevenue: 200000 })
     const quarterBase = entry({
@@ -166,13 +166,13 @@ describe('periodAnalysis', () => {
     const feb = { ...febBase, snapshot: { ...febBase.snapshot, payrollTotal: 20000, employees: 3, assetsTotal: 600000 } }
     const quarter = { ...quarterBase, snapshot: { ...quarterBase.snapshot, payrollTotal: 60000, employees: 4, assetsTotal: 900000 } }
 
-    expect(canonicalPeriodCover([jan, feb, quarter]).map((item) => item.id)).toEqual([quarter.id])
+    expect(canonicalPeriodCover([jan, feb, quarter]).map((item) => item.id)).toEqual([jan.id, feb.id])
     expect(summarizeCanonicalPeriodEntries(baseClient, [jan, feb, quarter])).toMatchObject({
       dataBasis: '标准资料',
-      annualRevenue: 450000,
-      payrollTotal: 60000,
-      employees: 4,
-      assetsTotal: 900000,
+      annualRevenue: 300000,
+      payrollTotal: 30000,
+      employees: 3,
+      assetsTotal: 600000,
     })
   })
 
