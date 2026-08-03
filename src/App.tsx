@@ -7450,7 +7450,7 @@ function App() {
                         <td>{client.taxpayerType}</td>
                         <td>{client.region}</td>
                         <td>{client.id === activeTaxDataSummary?.clientId
-                          ? `${activeTaxDataSummary.standardPeriods?.length || 0} 期标准资料`
+                          ? `${activeTaxDataSummary.standardPeriods?.length || 0} 个月标准资料`
                           : `${client.periodEntries.filter((entry) => entry.dataBasis === '标准资料').length} 期标准资料`}</td>
                         <td><LevelBadge level={level} /></td>
                         <td className="row-actions">
@@ -7476,7 +7476,7 @@ function App() {
                 <div>
                   <p className="eyebrow">期间数据</p>
                   <h3>第二步：选择连续期间</h3>
-                  <p className="section-helper">期间来自原始资料的文件名或表内所属期。可选择单月、季度、全年或连续期间；系统会阻止月份重叠和重复汇总。</p>
+                  <p className="section-helper">所有原始资料统一按月分析；季度、全年按钮只快捷勾选对应月份，重叠资料仅用于交叉验证，不重复汇总。</p>
                 </div>
                 <div className="period-title-actions">
                   <span>{selectedPeriodLabel}</span>
