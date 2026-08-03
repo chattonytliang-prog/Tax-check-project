@@ -5,10 +5,12 @@ import {
   createPeriodEntry,
   findPeriodConsistencyWarnings,
   formatAnalysisPeriod,
+  formatMonthCoverage,
   formatMonthRange,
   getClientPeriodMonths,
   monthFromIndex,
   monthIndex,
+  missingMonthsWithinRange,
   monthsBetween,
   periodCostTotal,
   periodInvoiceTotal,
@@ -60,6 +62,10 @@ describe('periodAnalysis', () => {
     expect(formatMonthRange([])).toBe('未覆盖月份')
     expect(formatMonthRange(['2023-07'])).toBe('2023-07')
     expect(formatMonthRange(['2023-03', '2023-01', '2023-02'])).toBe('2023-01 至 2023-03')
+    expect(missingMonthsWithinRange(['2023-01', '2023-03', '2023-04'])).toEqual(['2023-02'])
+    expect(formatMonthCoverage([])).toBe('未覆盖月份')
+    expect(formatMonthCoverage(['2023-01', '2023-02'])).toBe('2023-01 至 2023-02｜2 个月连续')
+    expect(formatMonthCoverage(['2023-01', '2023-03'])).toBe('2023-01 至 2023-03｜已提供 2 个月，缺 2023-02')
   })
 
   it('maps analysis period types to covered months', () => {
@@ -173,6 +179,18 @@ describe('periodAnalysis', () => {
       payrollTotal: 30000,
       employees: 3,
       assetsTotal: 600000,
+    })
+  })
+
+  it('summarizes uploaded months without inventing missing months', () => {
+    const jan = entry({ analysisMonth: '2023-01', monthlyRevenue: 100000 })
+    const mar = entry({ analysisMonth: '2023-03', monthlyRevenue: 300000 })
+    const summary = summarizeCanonicalPeriodEntries(baseClient, [jan, mar])
+
+    expect(summary).toMatchObject({
+      monthlyRevenue: 200000,
+      annualRevenue: 400000,
+      comparisonPeriod: '2 个已上传月份合并分析；未提供 2023-02',
     })
   })
 

@@ -83,6 +83,23 @@ export function areMonthsContinuous(months: string[]) {
   return unique.every((month, index) => index === 0 || monthIndex(month) === monthIndex(unique[index - 1]) + 1)
 }
 
+export function missingMonthsWithinRange(months: string[]) {
+  const unique = Array.from(new Set(months)).filter(Boolean).sort((a, b) => monthIndex(a) - monthIndex(b))
+  if (unique.length <= 1) return []
+  const available = new Set(unique)
+  return monthsBetween(unique[0], unique[unique.length - 1]).filter((month) => !available.has(month))
+}
+
+export function formatMonthCoverage(months: string[]) {
+  const unique = Array.from(new Set(months)).filter(Boolean).sort((a, b) => monthIndex(a) - monthIndex(b))
+  if (!unique.length) return '未覆盖月份'
+  const range = formatMonthRange(unique)
+  const missing = missingMonthsWithinRange(unique)
+  return missing.length
+    ? `${range}｜已提供 ${unique.length} 个月，缺 ${missing.join('、')}`
+    : `${range}｜${unique.length} 个月连续`
+}
+
 export function canonicalPeriodCover<TEntry extends PeriodEntry>(entries: TEntry[]) {
   const candidates = entries
     .filter((entry) => entry.months.length > 0)
@@ -197,6 +214,7 @@ export function summarizeCanonicalPeriodEntries<TEntry extends PeriodEntry>(clie
   if (!effectiveEntries.length || !months.length) return {}
   const first = effectiveEntries[0]
   const monthCount = Math.max(months.length, 1)
+  const missingMonths = missingMonthsWithinRange(months)
   const sumRevenue = effectiveEntries.reduce((sum, entry) => sum + periodRevenueTotal(entry), 0)
   const sumCost = effectiveEntries.reduce((sum, entry) => sum + periodCostTotal(entry), 0)
   const sumProfit = effectiveEntries.reduce((sum, entry) => sum + periodProfitTotal(entry), 0)
@@ -217,7 +235,9 @@ export function summarizeCanonicalPeriodEntries<TEntry extends PeriodEntry>(clie
     periodStartDate: `${months[0]}-01`,
     periodEndDate: `${months[months.length - 1]}-31`,
     dataBasis: '标准资料',
-    comparisonPeriod: effectiveEntries.length > 1 ? `${effectiveEntries.length} 期标准资料合并分析` : first.comparisonPeriod,
+    comparisonPeriod: effectiveEntries.length > 1
+      ? `${effectiveEntries.length} 个已上传月份合并分析${missingMonths.length ? `；未提供 ${missingMonths.join('、')}` : ''}`
+      : first.comparisonPeriod,
     monthlyRevenue: sumRevenue / monthCount,
     monthlyCost: sumCost / monthCount,
     monthlyProfit: sumProfit / monthCount,

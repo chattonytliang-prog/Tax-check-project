@@ -91,10 +91,12 @@ import {
   createPeriodEntry,
   findPeriodConsistencyWarnings,
   formatAnalysisPeriod,
+  formatMonthCoverage,
   formatMonthRange,
   getClientPeriodMonths,
   monthFromIndex,
   monthIndex,
+  missingMonthsWithinRange,
   monthsBetween,
   quarterMonths,
   summarizeCanonicalPeriodEntries,
@@ -5060,13 +5062,14 @@ function App() {
     return selected.sort((a, b) => monthIndex(a.months[0] || '') - monthIndex(b.months[0] || ''))
   }, [detectionPeriodEntries, selectedPeriodEntryIdSet])
   const selectedPeriodMonths = useMemo(() => selectedPeriodEntries.flatMap((entry) => entry.months), [selectedPeriodEntries])
+  const selectedMissingMonths = useMemo(() => missingMonthsWithinRange(selectedPeriodMonths), [selectedPeriodMonths])
   const selectedPeriodsContinuous = selectedPeriodEntries.length === 0 || areMonthsContinuous(selectedPeriodMonths)
   const selectedPeriodLabel = selectedPeriodEntries.length
-    ? `${formatMonthRange(selectedPeriodMonths)}｜${selectedPeriodEntries.length} 期`
+    ? formatMonthCoverage(selectedPeriodMonths)
     : '请选择已有档案期间'
   const selectedDetectionClient = useMemo(() => {
     if (!selectedClient) return null
-    if (!selectedPeriodEntries.length || !selectedPeriodsContinuous) return null
+    if (!selectedPeriodEntries.length) return null
     return deriveClientMetrics({
       ...selectedClient,
       ...summarizeCanonicalPeriodEntries(selectedClient, selectedPeriodEntries),
@@ -5082,7 +5085,7 @@ function App() {
       entityRole: selectedClient.entityRole,
       periodEntries: detectionPeriodEntries,
     })
-  }, [detectionPeriodEntries, selectedClient, selectedPeriodEntries, selectedPeriodsContinuous])
+  }, [detectionPeriodEntries, selectedClient, selectedPeriodEntries])
   const currentRisks = useMemo(() => (selectedDetectionClient ? detectRisks(selectedDetectionClient, managedRules) : []), [selectedDetectionClient, managedRules])
   const currentSkippedRules = useMemo(() => (selectedDetectionClient ? getSkippedRules(selectedDetectionClient, managedRules) : []), [selectedDetectionClient, managedRules])
   const overallLevel = getOverallLevel(currentRisks)
@@ -5223,8 +5226,7 @@ function App() {
   const sourceBackedOverviewClient = useMemo(() => {
     if (!selectedClient || !detectionPeriodEntries.length) return selectedClient
     const standardEntries = canonicalPeriodCover(detectionPeriodEntries)
-    const standardMonths = standardEntries.flatMap((entry) => entry.months)
-    if (!standardEntries.length || !areMonthsContinuous(standardMonths)) return selectedClient
+    if (!standardEntries.length) return selectedClient
     return deriveClientMetrics({
       ...selectedClient,
       ...summarizeCanonicalPeriodEntries(selectedClient, standardEntries),
@@ -5653,10 +5655,6 @@ function App() {
         window.alert('所选标准资料存在重复月份，系统已按月去重，请刷新后重新选择。')
         return current
       }
-      if (nextEntries.length > 1 && !areMonthsContinuous(nextMonths)) {
-        window.alert('当前选择的月份不连续，不能合并分析。请选择连续月份，例如 2025-01 至 2025-03，或分别生成单月报告。')
-        return current
-      }
       return next
     })
   }
@@ -5671,11 +5669,6 @@ function App() {
   const selectAllPeriodEntriesForAnalysis = () => {
     if (!selectedClient) return
     const canonicalEntries = canonicalPeriodCover(detectionPeriodEntries)
-    const months = canonicalEntries.flatMap((entry) => entry.months)
-    if (canonicalEntries.length > 1 && !areMonthsContinuous(months)) {
-      window.alert('当前企业的已录入月份不连续，不能一键选择全部期间合并分析。请手动选择连续月份，或分别生成单月报告。')
-      return
-    }
     setSelectedPeriodEntryIds(canonicalEntries.map((entry) => entry.id))
   }
 
@@ -5700,16 +5693,12 @@ function App() {
       window.alert('请先选择需要分析的期间，可以选择单月、季度、连续多月或全年。')
       return
     }
-    if (!selectedPeriodsContinuous) {
-      window.alert('选择的月份不连续，不能合并检测。请改选连续月份，例如 1-3 月、4-6 月或全年。')
-      return
-    }
     setRiskDetectionStep('confirm')
   }
 
   const startRiskDetection = () => {
     if (!selectedDetectionClient) {
-      window.alert('请先确认企业和连续期间范围。')
+      window.alert('请先确认企业和需要分析的已上传月份。')
       return
     }
     setRiskDetectionStep('result')
@@ -6330,10 +6319,6 @@ function App() {
     }
     if (!selectedPeriodEntries.length) {
       window.alert('请先选择要生成报告的已有期间数据，可以选择单月、季度、连续多月或全年。')
-      return
-    }
-    if (selectedPeriodEntries.length > 0 && !selectedPeriodsContinuous) {
-      window.alert('选择的月份不连续，不能合并生成一份报告。请改选连续月份，例如 1-3 月、4-6 月或全年。')
       return
     }
     if (!confirmed) {
@@ -7475,7 +7460,7 @@ function App() {
               <div className="panel-title">
                 <div>
                   <p className="eyebrow">期间数据</p>
-                  <h3>第二步：选择连续期间</h3>
+                  <h3>第二步：选择已上传月份</h3>
                   <p className="section-helper">所有原始资料统一按月分析；季度、全年按钮只快捷勾选对应月份，重叠资料仅用于交叉验证，不重复汇总。</p>
                 </div>
                 <div className="period-title-actions">
@@ -7484,9 +7469,9 @@ function App() {
                     type="button"
                     className="primary-button"
                     onClick={proceedToRiskConfirmation}
-                    disabled={!selectedPeriodEntries.length || !selectedPeriodsContinuous}
+                    disabled={!selectedPeriodEntries.length}
                   >
-                    {!selectedPeriodEntries.length ? '请选择期间' : !selectedPeriodsContinuous ? '期间需连续' : '确认期间'}
+                    {!selectedPeriodEntries.length ? '请选择月份' : '确认月份'}
                   </button>
                 </div>
               </div>
@@ -7569,14 +7554,14 @@ function App() {
                       className="secondary-button compact-button"
                       onClick={selectAllPeriodEntriesForAnalysis}
                     >
-                      选择全部连续期间
+                      选择全部已上传月份
                     </button>
-                    <button type="button" className="primary-button compact-button" onClick={proceedToRiskConfirmation} disabled={!selectedPeriodEntries.length || !selectedPeriodsContinuous}>
+                    <button type="button" className="primary-button compact-button" onClick={proceedToRiskConfirmation} disabled={!selectedPeriodEntries.length}>
                       下一步确认
                     </button>
                   </div>
-                  {selectedPeriodEntries.length > 0 && !selectedPeriodsContinuous && (
-                    <p className="period-warning">当前选择的月份不连续，不能合并分析。请改选连续月份，例如 1-3 月、4-6 月或全年。</p>
+                  {selectedMissingMonths.length > 0 && (
+                    <p className="period-warning">已选择全部已上传月份；未提供 {selectedMissingMonths.join('、')}，系统不会补零、平均拆分或假定连续。</p>
                   )}
                   {selectedClientPeriodWarnings.length > 0 && (
                     <div className="period-warning-list">
@@ -7601,9 +7586,9 @@ function App() {
                   <div>
                     <p className="eyebrow">检测前确认</p>
                     <h3>第三步：确认企业和分析期间</h3>
-                    <p className="section-helper">确认无误后开始检测。检测结论只适用于当前企业、所选连续期间和数据来源。</p>
+                    <p className="section-helper">确认无误后开始检测。检测结论只适用于当前企业、所选已上传月份和数据来源。</p>
                   </div>
-                  <span>{selectedPeriodsContinuous ? '期间连续' : '期间不连续'}</span>
+                  <span>{selectedPeriodsContinuous ? '月份连续' : `已标注 ${selectedMissingMonths.length} 个缺口`}</span>
                 </div>
                 <div className="confirm-grid">
                   <article>
@@ -7614,7 +7599,7 @@ function App() {
                   <article>
                     <span>分析范围</span>
                     <strong>{selectedPeriodLabel}</strong>
-                    <small>{selectedPeriodEntries.length ? formatMonthRange(selectedPeriodMonths) : '未选择归档期间'}</small>
+                  <small>{selectedPeriodEntries.length ? formatMonthCoverage(selectedPeriodMonths) : '未选择归档月份'}</small>
                   </article>
                   <article>
                     <span>数据来源</span>
@@ -7638,7 +7623,7 @@ function App() {
                 )}
                 <div className="modal-actions">
                   <button type="button" className="secondary-button" onClick={() => setRiskDetectionStep('period')}>返回选择期间</button>
-                  <button type="button" className="primary-button" disabled={!selectedDetectionClient || !selectedPeriodsContinuous} onClick={startRiskDetection}>
+                  <button type="button" className="primary-button" disabled={!selectedDetectionClient} onClick={startRiskDetection}>
                     开始检测
                   </button>
                 </div>
@@ -7798,12 +7783,12 @@ function App() {
                 <article>
                   <span>分析范围</span>
                   <strong>{selectedPeriodLabel}</strong>
-                  <small>{selectedPeriodEntries.length ? `使用 ${selectedPeriodEntries.length} 期期间数据` : '未选择归档期间'}</small>
+                  <small>{selectedPeriodEntries.length ? `使用 ${selectedPeriodEntries.length} 个已上传月份` : '未选择归档月份'}</small>
                 </article>
                 <article>
                   <span>月份连续性</span>
-                  <strong>{selectedPeriodsContinuous ? '连续' : '不连续'}</strong>
-                  <small>{selectedPeriodEntries.length ? formatMonthRange(selectedPeriodMonths) : '请先选择已有档案数据'}</small>
+                  <strong>{selectedPeriodsContinuous ? '连续' : `缺 ${selectedMissingMonths.length} 个月`}</strong>
+                  <small>{selectedPeriodEntries.length ? formatMonthCoverage(selectedPeriodMonths) : '请先选择已有档案数据'}</small>
                 </article>
                 <article>
                   <span>数据来源</span>
@@ -7827,7 +7812,7 @@ function App() {
               )}
               <div className="modal-actions">
                 <button type="button" className="secondary-button" onClick={() => setReportConfirmOpen(false)}>返回检查</button>
-                <button type="button" className="primary-button" disabled={!selectedPeriodsContinuous || Boolean(aiReportStage)} onClick={() => void createReport(true)}>
+                <button type="button" className="primary-button" disabled={!selectedDetectionClient || Boolean(aiReportStage)} onClick={() => void createReport(true)}>
                   确认生成报告
                 </button>
               </div>
