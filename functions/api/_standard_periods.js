@@ -65,6 +65,17 @@ function blankGroup(periodStart, periodEnd) {
     cit: {},
     iitPeople: new Set(),
     iitPayrollTotal: 0,
+    payrollPeople: new Set(),
+    payrollSocialPeople: new Set(),
+    payrollGrossTotal: 0,
+    ledgerRevenue: 0,
+    ledgerCost: 0,
+    ledgerProfit: 0,
+    ledgerRecordCount: 0,
+    inputInvoiceAmount: 0,
+    outputInvoiceAmount: 0,
+    inputInvoiceCount: 0,
+    outputInvoiceCount: 0,
   }
 }
 
@@ -153,6 +164,40 @@ function consumeRecord(group, row) {
     const personName = String(payload.personName || '').trim()
     if (personName) group.iitPeople.add(personName)
     group.iitPayrollTotal += numberOrNull(payload.currentIncome) || 0
+    return
+  }
+
+  if (type === 'payroll') {
+    const employeeKey = String(payload.idNumberMasked || payload.idNumber || payload.employeeName || '').trim()
+    if (employeeKey) {
+      group.payrollPeople.add(employeeKey)
+      if ((numberOrNull(payload.socialSecurity) || 0) > 0) group.payrollSocialPeople.add(employeeKey)
+    }
+    group.payrollGrossTotal += numberOrNull(payload.grossPay) || 0
+    return
+  }
+
+  if (type === 'ledger') {
+    const accountCode = String(payload.parentAccountCode || payload.accountCode || '').trim()
+    const summary = String(payload.summary || '').replace(/\s+/g, '')
+    const debit = numberOrNull(payload.debitAmount) || 0
+    const credit = numberOrNull(payload.creditAmount) || 0
+    group.ledgerRecordCount += 1
+    if (accountCode.startsWith('5001')) group.ledgerRevenue += credit
+    if (accountCode.startsWith('5401')) group.ledgerCost += debit
+    if (accountCode.startsWith('3103') && !/\u5e74\u672b\u7ed3\u8f6c\u635f\u76ca/.test(summary)) group.ledgerProfit += credit - debit
+    return
+  }
+
+  if (type === 'invoice_list') {
+    const invoiceAmount = numberOrNull(payload.amount) || 0
+    if (String(payload.invoiceDirection || subtype).includes('output')) {
+      group.outputInvoiceAmount += invoiceAmount
+      group.outputInvoiceCount += 1
+    } else {
+      group.inputInvoiceAmount += invoiceAmount
+      group.inputInvoiceCount += 1
+    }
   }
 }
 
@@ -169,13 +214,13 @@ function choosePeriodTotals(group, metadata) {
     ? (isAnnual ? group.financial.revenueCurrent ?? group.financial.revenueCumulative : group.financial.revenueCurrent)
       ?? group.cit.revenueCumulative
       ?? vatSales
-    : vatSales ?? group.financial.revenueCurrent ?? group.cit.revenueCumulative
+    : vatSales ?? (group.ledgerRecordCount ? group.ledgerRevenue : null) ?? group.financial.revenueCurrent ?? group.cit.revenueCumulative
   const cost = isAggregate
     ? (isAnnual ? group.financial.costCurrent ?? group.financial.costCumulative : group.financial.costCurrent) ?? group.cit.costCumulative
-    : group.financial.costCurrent ?? group.cit.costCumulative
+    : (group.ledgerRecordCount ? group.ledgerCost : null) ?? group.financial.costCurrent ?? group.cit.costCumulative
   const profit = isAggregate
     ? (isAnnual ? group.financial.profitCurrent ?? group.financial.profitCumulative : group.financial.profitCurrent) ?? group.cit.profitCumulative
-    : group.financial.profitCurrent ?? group.cit.profitCumulative
+    : (group.ledgerRecordCount ? group.ledgerProfit : null) ?? group.financial.profitCurrent ?? group.cit.profitCumulative
   return { revenue: revenue ?? 0, cost: cost ?? 0, profit: profit ?? 0 }
 }
 
@@ -183,8 +228,19 @@ function buildPeriod(group) {
   const metadata = periodMetadata(group.periodStart, group.periodEnd)
   const totals = choosePeriodTotals(group, metadata)
   const monthCount = Math.max(metadata.months.length, 1)
-  const employees = group.iitPeople.size || group.cit.employees || 0
+  const employees = group.payrollPeople.size || group.iitPeople.size || group.cit.employees || 0
+  const salaryDeclaredCount = group.iitPeople.size || group.payrollPeople.size || 0
+  const payrollTotal = group.payrollGrossTotal || group.iitPayrollTotal
   const assetsTotal = group.financial.assetsEnding ?? group.cit.assetsAverage ?? 0
+  const metricCoverage = []
+  if (group.vatMain.currentSales !== undefined || group.ledgerRecordCount || group.financial.revenueCurrent !== undefined || group.cit.revenueCumulative !== undefined) metricCoverage.push('monthlyRevenue')
+  if (group.ledgerRecordCount || group.financial.costCurrent !== undefined || group.cit.costCumulative !== undefined) metricCoverage.push('monthlyCost')
+  if (group.ledgerRecordCount || group.financial.profitCurrent !== undefined || group.cit.profitCumulative !== undefined) metricCoverage.push('monthlyProfit')
+  if (group.outputInvoiceCount) metricCoverage.push('monthlyInvoice')
+  if (employees) metricCoverage.push('employees')
+  if (group.payrollSocialPeople.size) metricCoverage.push('socialSecurityCount')
+  if (salaryDeclaredCount) metricCoverage.push('salaryDeclaredCount')
+  if (payrollTotal) metricCoverage.push('payrollTotal')
   return {
     id: `标准资料-${metadata.months.join('_') || `${group.periodStart}_${group.periodEnd}`}`,
     label: `${labelForPeriod(metadata)}｜标准资料`,
@@ -195,6 +251,7 @@ function buildPeriod(group) {
     comparisonPeriod: '原始资料自动重建',
     savedAt: '源文件归档',
     sourceKinds: Array.from(group.sourceKinds).sort(),
+    metricCoverage,
     metrics: {
       monthlyRevenue: totals.revenue / monthCount,
       monthlyCost: totals.cost / monthCount,
@@ -210,8 +267,10 @@ function buildPeriod(group) {
       assetsTotal,
       employees,
       employeeAnnualAvg: employees,
-      salaryDeclaredCount: group.iitPeople.size,
-      payrollTotal: group.iitPayrollTotal,
+      socialSecurityCount: group.payrollSocialPeople.size,
+      salaryDeclaredCount,
+      payrollTotal,
+      monthlyInvoice: group.outputInvoiceAmount,
     },
     sourceMetrics: {
       revenueTotal: totals.revenue,
@@ -234,6 +293,14 @@ function buildPeriod(group) {
       assetsEnding: group.financial.assetsEnding ?? group.cit.assetsAverage ?? null,
       iitPayrollTotal: group.iitPayrollTotal,
       iitEmployeeCount: group.iitPeople.size,
+      payrollGrossTotal: group.payrollGrossTotal,
+      payrollEmployeeCount: group.payrollPeople.size,
+      payrollSocialEmployeeCount: group.payrollSocialPeople.size,
+      ledgerRevenue: group.ledgerRecordCount ? group.ledgerRevenue : null,
+      ledgerCost: group.ledgerRecordCount ? group.ledgerCost : null,
+      ledgerProfit: group.ledgerRecordCount ? group.ledgerProfit : null,
+      inputInvoiceAmount: group.inputInvoiceCount ? group.inputInvoiceAmount : null,
+      outputInvoiceAmount: group.outputInvoiceCount ? group.outputInvoiceAmount : null,
     },
   }
 }
@@ -248,6 +315,23 @@ function crossValidate(periods) {
   const warnings = []
   const periodByStart = new Map(periods.map((period) => [period.periodStartDate, period]))
   const monthly = periods.filter((period) => period.analysisPeriodType === '月度')
+
+  for (const period of monthly) {
+    const vatRevenue = period.sourceMetrics.vatCurrentSales
+    const ledgerRevenue = period.sourceMetrics.ledgerRevenue
+    if (vatRevenue !== null && ledgerRevenue !== null) {
+      if (closeEnough(vatRevenue, ledgerRevenue)) {
+        messages.push(`${labelForPeriod(period)}：增值税申报销售额与明细账主营业务收入一致（${vatRevenue.toLocaleString('zh-CN')} 元）。`)
+      } else {
+        warnings.push(`${labelForPeriod(period)}：增值税申报销售额 ${vatRevenue.toLocaleString('zh-CN')} 元，明细账主营业务收入 ${ledgerRevenue.toLocaleString('zh-CN')} 元，请核对时点和会计口径（非文件读取失败）。`)
+      }
+    }
+    const payrollGross = period.sourceMetrics.payrollGrossTotal
+    const iitPayroll = period.sourceMetrics.iitPayrollTotal
+    if (payrollGross > 0 && iitPayroll > 0 && !closeEnough(payrollGross, iitPayroll)) {
+      warnings.push(`${labelForPeriod(period)}：工资表应发工资 ${payrollGross.toLocaleString('zh-CN')} 元，个税申报当期收入 ${iitPayroll.toLocaleString('zh-CN')} 元，请核对发放与申报口径（非文件读取失败）。`)
+    }
+  }
 
   for (const period of periods.filter((item) => item.months.length > 1)) {
     const financialCumulative = period.analysisPeriodType === '年度'
@@ -292,13 +376,13 @@ function crossValidate(periods) {
       if (accrued !== null && iitPayroll > 0) {
         const currentAccrued = accrued - previousAccrued
         if (!closeEnough(currentAccrued, iitPayroll)) {
-          warnings.push(`${labelForPeriod(period)}：所得税附报本期计入成本职工薪酬 ${currentAccrued.toLocaleString('zh-CN')} 元，与个税申报工资 ${iitPayroll.toLocaleString('zh-CN')} 元相差 ${(currentAccrued - iitPayroll).toLocaleString('zh-CN')} 元。`)
+          warnings.push(`${labelForPeriod(period)}：职工薪酬口径核对（非文件读取失败）：所得税附报本期计入成本 ${currentAccrued.toLocaleString('zh-CN')} 元，个税申报工资 ${iitPayroll.toLocaleString('zh-CN')} 元，相差 ${(currentAccrued - iitPayroll).toLocaleString('zh-CN')} 元。`)
         }
       }
       if (paid !== null && iitPayroll > 0) {
         const currentPaid = paid - previousPaid
         if (!closeEnough(currentPaid, iitPayroll)) {
-          warnings.push(`${labelForPeriod(period)}：所得税附报本期实际支付职工薪酬 ${currentPaid.toLocaleString('zh-CN')} 元，与个税申报工资 ${iitPayroll.toLocaleString('zh-CN')} 元相差 ${(currentPaid - iitPayroll).toLocaleString('zh-CN')} 元。`)
+          warnings.push(`${labelForPeriod(period)}：职工薪酬口径核对（非文件读取失败）：所得税附报本期实际支付 ${currentPaid.toLocaleString('zh-CN')} 元，个税申报工资 ${iitPayroll.toLocaleString('zh-CN')} 元，相差 ${(currentPaid - iitPayroll).toLocaleString('zh-CN')} 元。`)
         }
       }
     }
@@ -318,7 +402,9 @@ function enrichAggregateMetrics(periods) {
     period.metrics.employees = contained.reduce((maximum, item) => Math.max(maximum, Number(item.metrics.employees || 0)), Number(period.metrics.employees || 0))
     period.metrics.employeeAnnualAvg = period.metrics.employees
     period.metrics.salaryDeclaredCount = contained.reduce((maximum, item) => Math.max(maximum, Number(item.metrics.salaryDeclaredCount || 0)), Number(period.metrics.salaryDeclaredCount || 0))
+    period.metrics.socialSecurityCount = contained.reduce((maximum, item) => Math.max(maximum, Number(item.metrics.socialSecurityCount || 0)), Number(period.metrics.socialSecurityCount || 0))
     period.metrics.payrollTotal = contained.reduce((sum, item) => sum + Number(item.metrics.payrollTotal || 0), 0)
+    period.metrics.monthlyInvoice = contained.reduce((sum, item) => sum + Number(item.metrics.monthlyInvoice || 0), 0) / Math.max(contained.length, 1)
     period.sourceMetrics.iitPayrollTotal = period.metrics.payrollTotal
     period.sourceMetrics.iitEmployeeCount = period.metrics.salaryDeclaredCount
   }
@@ -456,9 +542,16 @@ function hasDetectionEvidence(period) {
     'citPayrollAccruedCumulative',
     'citPayrollPaidCumulative',
     'assetsEnding',
+    'ledgerRevenue',
+    'ledgerCost',
+    'ledgerProfit',
+    'inputInvoiceAmount',
+    'outputInvoiceAmount',
   ].some((field) => period.sourceMetrics[field] !== null)
     || period.sourceMetrics.iitEmployeeCount > 0
     || period.sourceMetrics.iitPayrollTotal !== 0
+    || period.sourceMetrics.payrollEmployeeCount > 0
+    || period.sourceMetrics.payrollGrossTotal !== 0
 }
 
 function monthlyAnalysisPeriods(periods) {

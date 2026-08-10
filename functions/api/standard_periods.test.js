@@ -192,8 +192,11 @@ describe('buildStandardPeriods', () => {
     expect(june.metrics.employees).toBe(2)
     expect(june.metrics.payrollTotal).toBe(46790)
     expect(quarter.metrics.monthlyRevenue).toBeCloseTo(640069.59 / 3)
-    expect(result.crossValidation.warnings).toContain('2026年Q2：所得税附报本期计入成本职工薪酬 194,965.44 元，与个税申报工资 140,370 元相差 54,595.44 元。')
-    expect(result.crossValidation.warnings).toContain('2026年Q2：所得税附报本期实际支付职工薪酬 55,214.77 元，与个税申报工资 140,370 元相差 -85,155.23 元。')
+    expect(result.crossValidation.warnings).toEqual(expect.arrayContaining([
+      expect.stringContaining('职工薪酬口径核对（非文件读取失败）'),
+      expect.stringContaining('194,965.44'),
+      expect.stringContaining('55,214.77'),
+    ]))
   })
 
   it('converts quarterly cumulative taxable income to the current-quarter amount', () => {
@@ -223,5 +226,36 @@ describe('buildStandardPeriods', () => {
     expect(result.periods[0].evidencePeriods).toEqual(['2025年Q1', '2025年度'])
     expect(result.sourcePeriods.some((period) => period.analysisPeriodType === '季度')).toBe(true)
     expect(result.sourcePeriods.some((period) => period.analysisPeriodType === '年度')).toBe(true)
+  })
+
+  it('standardizes monthly ledger, payroll, social-security and invoice evidence', () => {
+    const periodStart = '2025-12-01'
+    const periodEnd = '2025-12-31'
+    const result = buildStandardPeriods([
+      row('ledger', 'ledger_entry', periodStart, periodEnd, { parentAccountCode: '5001', creditAmount: 1000, debitAmount: 0, summary: 'sale' }),
+      row('ledger', 'ledger_entry', periodStart, periodEnd, { parentAccountCode: '5401', creditAmount: 0, debitAmount: 600, summary: 'cost' }),
+      row('ledger', 'ledger_entry', periodStart, periodEnd, { parentAccountCode: '3103', creditAmount: 400, debitAmount: 0, summary: 'profit close' }),
+      row('payroll', 'payroll_line', periodStart, periodEnd, { employeeName: 'A', idNumberMasked: 'A1', grossPay: 200, socialSecurity: 20 }),
+      row('payroll', 'payroll_line', periodStart, periodEnd, { employeeName: 'B', idNumberMasked: 'B1', grossPay: 300, socialSecurity: 0 }),
+      row('invoice_list', 'input_invoice', periodStart, periodEnd, { invoiceDirection: 'input', amount: 800 }),
+      row('invoice_list', 'output_invoice', periodStart, periodEnd, { invoiceDirection: 'output', amount: 1000 }),
+    ])
+    const month = result.periods[0]
+
+    expect(month.metrics).toMatchObject({
+      monthlyRevenue: 1000,
+      monthlyCost: 600,
+      monthlyProfit: 400,
+      employees: 2,
+      socialSecurityCount: 1,
+      salaryDeclaredCount: 2,
+      payrollTotal: 500,
+      monthlyInvoice: 1000,
+    })
+    expect(month.metricCoverage).toEqual(expect.arrayContaining([
+      'monthlyRevenue', 'monthlyCost', 'monthlyProfit', 'monthlyInvoice',
+      'employees', 'socialSecurityCount', 'salaryDeclaredCount', 'payrollTotal',
+    ]))
+    expect(month.sourceMetrics.inputInvoiceAmount).toBe(800)
   })
 })

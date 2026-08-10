@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { parseClientImportWorkbook } from './clientImportParser'
 import { extractPdfTextPages } from './pdfTextExtractor'
 import { parseTaxDataPdfText, type ParsedTaxDataIntake } from './taxDataIntakeParser'
+import { buildStandardPeriods } from '../../functions/api/_standard_periods.js'
 
 const goldenDir = join(process.cwd(), '客户真实案例资料', '北京正泰浦电气科技有限公司', '00_客户原始资料_汇总复制')
 
@@ -75,6 +76,7 @@ describe.skipIf(!existsSync(goldenDir))('real customer golden tax data samples',
     const ledger = await parseWorkbookGolden('明细账_全部科目_202501-202512_北京正泰浦电气科技有限公司_20260507.xls')
     expectAutonomousParse(ledger, 'ledger', 1000)
     expect(ledger.records[0].payload).toMatchObject({ entryDate: '2025-01-31', accountCode: '1001', accountName: '库存现金' })
+    expect(ledger.records[0]).toMatchObject({ periodStart: '2025-01-01', periodEnd: '2025-01-31' })
 
     const balanceYtd = await parseWorkbookGolden('科目余额表_2026年3月-2026年3月_北京正泰浦电气科技有限公司_20260507.xls')
     expectAutonomousParse(balanceYtd, 'account_balance', 100)
@@ -87,5 +89,38 @@ describe.skipIf(!existsSync(goldenDir))('real customer golden tax data samples',
     const vatSchedule = await parsePdfGolden('《增值税及附加税费申报表附列资料四（税额抵减情况表）》(2025-12-01-2025-12-31).pdf')
     expectAutonomousParse(vatSchedule, 'vat_return_schedule', 8)
     expect(vatSchedule.records.find((record) => record.payload.rowNo === '8')?.payload).toMatchObject({ endingAmount: 0 })
+  }, 30000)
+
+  it('reconciles the real December package into one source-backed monthly record', async () => {
+    const [payroll, invoice, iit, ledger, vatMain, vatSchedule] = await Promise.all([
+      parseWorkbookGolden('2024年9月-2025年12月工资表.xlsx'),
+      parseWorkbookGolden('202512.xlsx'),
+      parseWorkbookGolden('北京正泰浦电气科技有限公司_综合所得申报_202512.xls'),
+      parseWorkbookGolden('明细账_全部科目_202501-202512_北京正泰浦电气科技有限公司_20260507.xls'),
+      parsePdfGolden('《增值税及附加税费申报表（一般纳税人适用）》(2025-12-01-2025-12-31).pdf'),
+      parsePdfGolden('《增值税及附加税费申报表附列资料四（税额抵减情况表）》(2025-12-01-2025-12-31).pdf'),
+    ])
+    const rows = [payroll, invoice, iit, ledger, vatMain, vatSchedule].flatMap((parsed) => parsed.records.map((record) => ({
+      record_type: record.recordType,
+      record_subtype: record.recordSubtype,
+      period_start: record.periodStart,
+      period_end: record.periodEnd,
+      record_json: JSON.stringify(record.payload),
+    })))
+    const result = buildStandardPeriods(rows)
+    const december = result.periods.find((period) => period.analysisMonth === '2025-12')
+
+    if (!december) throw new Error('December standard period was not rebuilt from the real source package.')
+    expect(december.metrics.monthlyRevenue).toBeCloseTo(10452692.10)
+    expect(december.metrics.monthlyCost).toBeCloseTo(290974.14)
+    expect(december.metrics.monthlyProfit).toBeCloseTo(381240.51)
+    expect(december.metrics.employees).toBeGreaterThan(0)
+    expect(december.metrics.socialSecurityCount).toBeGreaterThan(0)
+    expect(december.metrics.payrollTotal).toBeGreaterThan(0)
+    expect(december.sourceMetrics.inputInvoiceAmount).toBeCloseTo(9658947.09)
+    expect(december.metricCoverage).toEqual(expect.arrayContaining([
+      'monthlyRevenue', 'monthlyCost', 'monthlyProfit', 'employees',
+      'socialSecurityCount', 'salaryDeclaredCount', 'payrollTotal',
+    ]))
   }, 30000)
 })

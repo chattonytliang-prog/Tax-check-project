@@ -75,6 +75,23 @@ describe('tax data intake parser', () => {
       auxiliaryName: '\u5317\u4eacA\u516c\u53f8',
       sourceSheetName: '1122 \u5e94\u6536\u8d26\u6b3e',
     })
+    expect(parsed.records[0]).toMatchObject({ periodStart: '2025-01-01', periodEnd: '2025-01-31' })
+  })
+
+  it('assigns every ledger entry to its own calendar month', () => {
+    const parsed = parseTaxDataWorkbook('\u660e\u7ec6\u8d26_202501-202512.xls', [{
+      name: '5001 \u4e3b\u8425\u4e1a\u52a1\u6536\u5165',
+      rows: [
+        ['\u65e5\u671f', '\u51ed\u8bc1\u5b57\u53f7', '\u79d1\u76ee\u7f16\u7801', '\u79d1\u76ee\u540d\u79f0', '\u6458\u8981', '\u501f\u65b9', '\u8d37\u65b9', '\u65b9\u5411', '\u4f59\u989d'],
+        ['2025-01-31', '\u8bb0-1', '5001', '\u4e3b\u8425\u4e1a\u52a1\u6536\u5165', '\u9500\u552e\u6536\u5165', '', '100', '\u8d37', '100'],
+        ['2025-12-31', '\u8bb0-2', '5001', '\u4e3b\u8425\u4e1a\u52a1\u6536\u5165', '\u9500\u552e\u6536\u5165', '', '200', '\u8d37', '300'],
+      ],
+    }])
+
+    expect(parsed.records.map((record) => [record.periodStart, record.periodEnd])).toEqual([
+      ['2025-01-01', '2025-01-31'],
+      ['2025-12-01', '2025-12-31'],
+    ])
   })
 
   it('extracts client profile facts from tax source headers', () => {

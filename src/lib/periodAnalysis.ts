@@ -33,6 +33,7 @@ export type PeriodEntry<TSnapshot extends PeriodClientFields = PeriodClientField
   comparisonPeriod: string
   months: string[]
   evidencePeriods?: string[]
+  metricCoverage?: string[]
   snapshot: TSnapshot
   savedAt: string
 }
@@ -236,7 +237,7 @@ export function summarizeCanonicalPeriodEntries<TEntry extends PeriodEntry>(clie
     periodEndDate: `${months[months.length - 1]}-31`,
     dataBasis: '标准资料',
     comparisonPeriod: effectiveEntries.length > 1
-      ? `${effectiveEntries.length} 个已上传月份合并分析${missingMonths.length ? `；未提供 ${missingMonths.join('、')}` : ''}`
+      ? `${effectiveEntries.length} 个有独立原始资料的月份合并分析${missingMonths.length ? `；期间内其他月份仅用汇总资料交叉验证` : ''}`
       : first.comparisonPeriod,
     monthlyRevenue: sumRevenue / monthCount,
     monthlyCost: sumCost / monthCount,

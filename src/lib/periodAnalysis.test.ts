@@ -190,7 +190,7 @@ describe('periodAnalysis', () => {
     expect(summary).toMatchObject({
       monthlyRevenue: 200000,
       annualRevenue: 400000,
-      comparisonPeriod: '2 个已上传月份合并分析；未提供 2023-02',
+      comparisonPeriod: '2 个有独立原始资料的月份合并分析；期间内其他月份仅用汇总资料交叉验证',
     })
   })
 

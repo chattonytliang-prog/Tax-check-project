@@ -293,6 +293,13 @@ function ledgerAccountContext(sheetName: string) {
   }
 }
 
+function entryMonthPeriod(entryDate: string, fallback: Period): Period {
+  const match = entryDate.match(/^(20\d{2})-(\d{2})-/)
+  if (!match) return fallback
+  const detected = monthPeriod(match[1], match[2])
+  return detected.periodStart && detected.periodEnd ? detected : fallback
+}
+
 function ledgerAuxiliaryName(accountName: string, parentAccountName: string) {
   const value = clean(accountName)
   if (!value || !parentAccountName) return ''
@@ -325,7 +332,7 @@ function parseLedger(sheet: IntakeSheet, period: Period) {
       summary,
       debitAmount: amount(row[index.debitAmount]), creditAmount: amount(row[index.creditAmount]),
       direction: clean(row[index.direction]), balanceAmount: amount(row[index.balanceAmount]), sourceRowNo: header + offset + 2,
-    }, period)]
+    }, entryMonthPeriod(entryDate, period))]
   })
 }
 
@@ -508,7 +515,7 @@ function parseLedgerCn(sheet: IntakeSheet, period: Period) {
       summary,
       debitAmount: amount(row[index.debitAmount]), creditAmount: amount(row[index.creditAmount]),
       direction: clean(row[index.direction]), balanceAmount: amount(row[index.balanceAmount]), sourceRowNo: header + offset + 2,
-    }, period)]
+    }, entryMonthPeriod(entryDate, period))]
   })
 }
 
@@ -774,7 +781,10 @@ export function parseTaxDataWorkbook(fileName: string, sheets: IntakeSheet[]): P
     mergeProfilePatch(result, extractProfilePatchFromRows(fileName, sheet))
     const documentType = classifySheet(fileName, sheet)
     if (documentType === 'other_material') return
-    const period = detectTaxDataPeriod(`${fileName} ${sheet.rows.slice(0, 6).flat().join(' ')}`)
+    const filePeriod = detectTaxDataPeriod(fileName)
+    const period = filePeriod.periodStart && filePeriod.periodEnd
+      ? filePeriod
+      : detectTaxDataPeriod(`${fileName} ${sheet.rows.slice(0, 6).flat().join(' ')}`)
     let records: StandardTaxRecord[] = []
     if (documentType === 'ledger') records = parseLedgerCn(sheet, period)
     if (documentType === 'account_balance') records = parseAccountBalanceCn(sheet, period)

@@ -91,12 +91,10 @@ import {
   createPeriodEntry,
   findPeriodConsistencyWarnings,
   formatAnalysisPeriod,
-  formatMonthCoverage,
   formatMonthRange,
   getClientPeriodMonths,
   monthFromIndex,
   monthIndex,
-  missingMonthsWithinRange,
   monthsBetween,
   quarterMonths,
   summarizeCanonicalPeriodEntries,
@@ -186,6 +184,7 @@ type Client = {
   dataBasis: DataBasis
   comparisonPeriod: string
   periodEntries: ClientPeriodEntry[]
+  standardMetricCoverage?: string[]
   monthlyRevenue: number
   monthlyInvoice: number
   monthlyCost: number
@@ -516,6 +515,7 @@ type TaxDataStandardPeriod = {
   comparisonPeriod: string
   months: string[]
   evidencePeriods?: string[]
+  metricCoverage?: string[]
   savedAt: string
   sourceKinds: string[]
   metrics: Partial<Client>
@@ -3110,6 +3110,7 @@ function normalizePeriodEntry(entry: Partial<ClientPeriodEntry>): ClientPeriodEn
     comparisonPeriod: String(entry.comparisonPeriod ?? snapshot.comparisonPeriod ?? ''),
     months,
     evidencePeriods: entry.evidencePeriods ? [...entry.evidencePeriods] : undefined,
+    metricCoverage: entry.metricCoverage ? [...entry.metricCoverage] : undefined,
     snapshot,
     savedAt: entry.savedAt || formatDate(),
   }
@@ -3158,16 +3159,22 @@ function validateClientForReport(client: Client): IntakeValidationIssue[] {
     if (missing) issues.push({ field, label, message: `${label}缺失，报告只能作为线索参考` })
   }
 
-  add('monthlyRevenue', '月收入', isMissingPositiveNumber(client.monthlyRevenue))
-  add('monthlyCost', '月成本费用', isMissingPositiveNumber(client.monthlyCost))
-  add('monthlyProfit', '月利润', !Number.isFinite(client.monthlyProfit) || client.monthlyProfit === 0)
-  add('collectionFlow', '收款流水', isMissingPositiveNumber(client.collectionFlow))
-  add('employees', '员工人数', isMissingPositiveNumber(client.employees))
-  add('socialSecurityCount', '社保人数', isMissingPositiveNumber(client.socialSecurityCount))
-  add('salaryDeclaredCount', '工资申报人数', isMissingPositiveNumber(client.salaryDeclaredCount))
-  add('monthlyInvoice', '月开票金额', isMissingPositiveNumber(client.monthlyInvoice))
-  add('consecutive12MonthSales', '连续 12 个月销售额', isMissingPositiveNumber(client.consecutive12MonthSales))
-  add('payrollTotal', '工资薪金总额', isMissingPositiveNumber(client.payrollTotal))
+  const standardCoverage = new Set(client.standardMetricCoverage || [])
+  const sourceBacked = client.dataBasis === '标准资料' && standardCoverage.size > 0
+  const addAvailable = (field: keyof Client, label: string, missing: boolean) => {
+    if (!sourceBacked || standardCoverage.has(String(field))) add(field, label, missing)
+  }
+
+  addAvailable('monthlyRevenue', '月收入', isMissingPositiveNumber(client.monthlyRevenue))
+  addAvailable('monthlyCost', '月成本费用', !Number.isFinite(client.monthlyCost))
+  addAvailable('monthlyProfit', '月利润', !Number.isFinite(client.monthlyProfit))
+  addAvailable('collectionFlow', '收款流水', isMissingPositiveNumber(client.collectionFlow))
+  addAvailable('employees', '员工人数', isMissingPositiveNumber(client.employees))
+  addAvailable('socialSecurityCount', '社保人数', isMissingPositiveNumber(client.socialSecurityCount))
+  addAvailable('salaryDeclaredCount', '工资申报人数', isMissingPositiveNumber(client.salaryDeclaredCount))
+  addAvailable('monthlyInvoice', '月开票金额', isMissingPositiveNumber(client.monthlyInvoice))
+  addAvailable('consecutive12MonthSales', '连续 12 个月销售额', isMissingPositiveNumber(client.consecutive12MonthSales))
+  addAvailable('payrollTotal', '工资薪金总额', isMissingPositiveNumber(client.payrollTotal))
 
   return issues
 }
@@ -3284,6 +3291,7 @@ function standardPeriodEntriesFromSummary(client: Client, summary: TaxDataSummar
       periodEndDate: period.periodEndDate,
       dataBasis: '标准资料',
       comparisonPeriod: period.comparisonPeriod,
+      standardMetricCoverage: period.metricCoverage || [],
       periodEntries: [],
     })
     const entry = normalizePeriodEntry({ ...period, dataBasis: '标准资料', snapshot })
@@ -5062,14 +5070,14 @@ function App() {
     return selected.sort((a, b) => monthIndex(a.months[0] || '') - monthIndex(b.months[0] || ''))
   }, [detectionPeriodEntries, selectedPeriodEntryIdSet])
   const selectedPeriodMonths = useMemo(() => selectedPeriodEntries.flatMap((entry) => entry.months), [selectedPeriodEntries])
-  const selectedMissingMonths = useMemo(() => missingMonthsWithinRange(selectedPeriodMonths), [selectedPeriodMonths])
   const selectedPeriodsContinuous = selectedPeriodEntries.length === 0 || areMonthsContinuous(selectedPeriodMonths)
   const selectedPeriodLabel = selectedPeriodEntries.length
-    ? formatMonthCoverage(selectedPeriodMonths)
+    ? `${formatMonthRange(selectedPeriodMonths)} | 已纳入 ${new Set(selectedPeriodMonths).size} 个有独立月度原始资料的月份`
     : '请选择已有档案期间'
   const selectedDetectionClient = useMemo(() => {
     if (!selectedClient) return null
     if (!selectedPeriodEntries.length) return null
+    const standardMetricCoverage = Array.from(new Set(selectedPeriodEntries.flatMap((entry) => entry.metricCoverage || [])))
     return deriveClientMetrics({
       ...selectedClient,
       ...summarizeCanonicalPeriodEntries(selectedClient, selectedPeriodEntries),
@@ -5083,6 +5091,7 @@ function App() {
       projectScope: selectedClient.projectScope,
       groupName: selectedClient.groupName,
       entityRole: selectedClient.entityRole,
+      standardMetricCoverage,
       periodEntries: detectionPeriodEntries,
     })
   }, [detectionPeriodEntries, selectedClient, selectedPeriodEntries])
@@ -5227,6 +5236,7 @@ function App() {
     if (!selectedClient || !detectionPeriodEntries.length) return selectedClient
     const standardEntries = canonicalPeriodCover(detectionPeriodEntries)
     if (!standardEntries.length) return selectedClient
+    const standardMetricCoverage = Array.from(new Set(standardEntries.flatMap((entry) => entry.metricCoverage || [])))
     return deriveClientMetrics({
       ...selectedClient,
       ...summarizeCanonicalPeriodEntries(selectedClient, standardEntries),
@@ -5240,6 +5250,7 @@ function App() {
       projectScope: selectedClient.projectScope,
       groupName: selectedClient.groupName,
       entityRole: selectedClient.entityRole,
+      standardMetricCoverage,
       periodEntries: detectionPeriodEntries,
     })
   }, [detectionPeriodEntries, selectedClient])
@@ -7560,9 +7571,6 @@ function App() {
                       下一步确认
                     </button>
                   </div>
-                  {selectedMissingMonths.length > 0 && (
-                    <p className="period-warning">已选择全部已上传月份；未提供 {selectedMissingMonths.join('、')}，系统不会补零、平均拆分或假定连续。</p>
-                  )}
                   {selectedClientPeriodWarnings.length > 0 && (
                     <div className="period-warning-list">
                       <strong>数据一致性提示</strong>
@@ -7588,7 +7596,7 @@ function App() {
                     <h3>第三步：确认企业和分析期间</h3>
                     <p className="section-helper">确认无误后开始检测。检测结论只适用于当前企业、所选已上传月份和数据来源。</p>
                   </div>
-                  <span>{selectedPeriodsContinuous ? '月份连续' : `已标注 ${selectedMissingMonths.length} 个缺口`}</span>
+                  <span>{selectedPeriodsContinuous ? '月份连续' : `已按 ${new Set(selectedPeriodMonths).size} 个有原始资料的月份分析`}</span>
                 </div>
                 <div className="confirm-grid">
                   <article>
@@ -7599,7 +7607,7 @@ function App() {
                   <article>
                     <span>分析范围</span>
                     <strong>{selectedPeriodLabel}</strong>
-                  <small>{selectedPeriodEntries.length ? formatMonthCoverage(selectedPeriodMonths) : '未选择归档月份'}</small>
+                  <small>{selectedPeriodEntries.length ? Array.from(new Set(selectedPeriodMonths)).join('、') : '未选择归档月份'}</small>
                   </article>
                   <article>
                     <span>数据来源</span>
@@ -7786,9 +7794,9 @@ function App() {
                   <small>{selectedPeriodEntries.length ? `使用 ${selectedPeriodEntries.length} 个已上传月份` : '未选择归档月份'}</small>
                 </article>
                 <article>
-                  <span>月份连续性</span>
-                  <strong>{selectedPeriodsContinuous ? '连续' : `缺 ${selectedMissingMonths.length} 个月`}</strong>
-                  <small>{selectedPeriodEntries.length ? formatMonthCoverage(selectedPeriodMonths) : '请先选择已有档案数据'}</small>
+                  <span>独立月度资料</span>
+                  <strong>{selectedPeriodEntries.length ? `${new Set(selectedPeriodMonths).size} 个月` : '未选择'}</strong>
+                  <small>{selectedPeriodEntries.length ? '其他汇总期间资料仅用于交叉验证，不拆分造数' : '请先选择已有档案数据'}</small>
                 </article>
                 <article>
                   <span>数据来源</span>
@@ -7796,8 +7804,8 @@ function App() {
                   <small>{selectedDetectionClient?.comparisonPeriod || '未设置对比期间'}</small>
                 </article>
                 <article>
-                  <span>检测缺失</span>
-                  <strong>{currentReportIssues.length} 项</strong>
+                  <span>解析状态</span>
+                  <strong>{currentReportIssues.length ? `${currentReportIssues.length} 项异常` : '已完成'}</strong>
                   <small>{currentReportIssues.length ? validationSummary(currentReportIssues) : '基础检测必填项已补齐'}</small>
                 </article>
               </div>
