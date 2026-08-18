@@ -11,6 +11,7 @@ type CandidateRuleAsset = {
   name: string
   level: string
   conditionJson: RuleCondition
+  requiredFields?: string[]
 }
 
 function readJson<T>(path: string): T {
@@ -50,6 +51,15 @@ describe('rule library assets', () => {
       expect(publicRulesByCode.get(rule.code)?.name).toBe(rule.name)
       expect(publicRulesByCode.get(rule.code)?.level).toBe(rule.level)
     })
+  })
+
+  it('uses主营业务收入和主营业务成本计算 ON-012 毛利率', () => {
+    const rules = readJson<CandidateRuleAsset[]>('public/rule-candidates/tax-warning-candidates.json')
+    const rule = rules.find((item) => item.code === 'ON-012')
+
+    expect(rule?.name).toBe('主营业务毛利率偏低')
+    expect(rule?.requiredFields).toEqual(['mainBusinessRevenue', 'mainBusinessCost'])
+    expect(JSON.stringify(rule?.conditionJson)).not.toContain('ytdProfit')
   })
 
   it('keeps expert review checklist at the target size without scoring impact', () => {

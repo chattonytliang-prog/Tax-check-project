@@ -12,6 +12,7 @@ const structuredReport: CompleteStructuredReportShape = {
   scope: [
     { label: '审阅期间', value: '2025-01 至 2025-03' },
     { label: '数据来源', value: '管理报表' },
+    { label: '规则执行覆盖', value: '已执行 12 / 15 条' },
   ],
   executiveSummary: {
     overallLevel: '高',
@@ -75,7 +76,8 @@ describe('professionalReportDocumentHtml', () => {
     expect(html).toContain('高风险')
     expect(html).toContain('报告编号：')
     expect(html).toContain('生成时间：2026-07-02 10:30:00')
-    expect(html).toContain('银行流水核对（缺少：银行流水）')
+    expect(html).toContain('银行流水核对（尚缺：银行流水）')
+    expect(html).not.toContain('规则执行覆盖')
     expect(html).not.toContain('<draft>')
     expect(html).not.toContain('window.print()')
   })
@@ -134,7 +136,7 @@ describe('professionalReportDocumentHtml', () => {
 
     expect(html).toContain('中风险')
     expect(html).toContain('低风险')
-    expect(html).toContain('标准规则解释')
+    expect(html).toContain('标准分析说明')
     expect(html).toContain('暂无明确补充资料。')
     expect(html).toContain('当前无需要列入整改清单的自动风险事项。')
     expect(html).toContain('<title>历史报告企业涉税风险初筛报告</title>')

@@ -356,21 +356,33 @@
   },
   {
     "code": "ON-012",
-    "name": "主营业务利润率",
+    "name": "主营业务毛利率偏低",
     "taxType": "通用财务/经营",
     "level": "中",
-    "basis": "脱敏税务风险预警指标：主营业务利润率偏低。",
-    "suggestion": "复核主营成本归集、收入确认和关联交易定价，说明低毛利或低利润原因。",
+    "basis": "脱敏税务风险预警指标：主营业务毛利率低于 5%。",
+    "suggestion": "复核主营成本归集、收入确认和关联交易定价，说明主营业务毛利率偏低原因。",
     "enabled": true,
-    "conditionText": "检查清单：主营业务收入、主营业务成本、本年利润。",
+    "conditionText": "检查清单：主营业务收入、主营业务成本。",
     "conditionJson": {
-      "field": "ytdProfit",
-      "operator": "<",
-      "value": 0,
-      "compareField": "mainBusinessRevenue",
-      "multiplier": 0.05
+      "all": [
+        {
+          "field": "mainBusinessRevenue",
+          "operator": ">",
+          "value": 0
+        },
+        {
+          "field": "mainBusinessCost",
+          "operator": ">",
+          "value": 0,
+          "compareField": "mainBusinessRevenue",
+          "multiplier": 0.95
+        }
+      ]
     },
-    "requiredFields": [],
+    "requiredFields": [
+      "mainBusinessRevenue",
+      "mainBusinessCost"
+    ],
     "materials": [
       "主营收入明细",
       "主营成本明细",

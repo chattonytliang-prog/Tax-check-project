@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  customerFacingReportText,
   genericFieldBasedBasis,
   escapeHtml,
+  isCustomerFacingReportFact,
   localizeInternalFieldNames,
   publicRiskBasis,
   publicRiskReason,
@@ -63,6 +65,13 @@ describe('report text sanitizer', () => {
     )
   })
 
+  it('collapses repeated Chinese punctuation in risk reasons and report content', () => {
+    expect(publicRiskReason('本年累计利润为 ¥0。。')).toBe('本年累计利润为 ¥0。')
+    expect(sanitizePublicReportContent('当前发现：本年累计利润为 ¥0。。请复核！！')).toBe(
+      '当前发现：本年累计利润为 ¥0。请复核！',
+    )
+  })
+
   it('removes internal issue ids and simple rule expressions from report content', () => {
     const content = `
       高风险事项（Issue VAT-001）
@@ -74,9 +83,21 @@ describe('report text sanitizer', () => {
     const output = sanitizePublicReportContent(content)
 
     expect(output).toContain('高风险事项')
-    expect(output).toContain('相关规则条件')
+    expect(output).toContain('内部检测条件')
     expect(output).toContain('建议复核。')
     expect(output).not.toMatch(/Issue VAT-001|issueId: VAT-001|outputTax > 100000/)
+  })
+
+  it('removes internal rule execution wording from historical customer reports', () => {
+    const output = customerFacingReportText(`
+      规则执行覆盖：已执行 115 / 150 条。
+      在已提供资料和已执行规则范围内，已执行规则综合等级为中风险。未执行规则不纳入本等级。
+    `)
+
+    expect(output).toBe('在已提供资料和本次检查范围内，本次检查综合等级为中风险。资料不足暂未判断事项不纳入本等级。')
+    expect(output).not.toContain('规则')
+    expect(isCustomerFacingReportFact({ label: '规则执行范围', value: '已执行 115 / 150 条' })).toBe(false)
+    expect(isCustomerFacingReportFact({ label: '工作方法', value: '基于客户资料进行检查' })).toBe(true)
   })
 
   it('escapes HTML special characters for exported reports', () => {

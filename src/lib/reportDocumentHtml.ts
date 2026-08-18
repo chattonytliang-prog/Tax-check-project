@@ -1,6 +1,12 @@
 import { reportDocumentId } from './reportDocumentId'
 import { isCompleteStructuredReport, reportTextContent, type CompleteStructuredReportShape } from './reportCompatibility'
-import { escapeHtml, sanitizePublicReportContent } from './reportTextSanitizer'
+import {
+  customerFacingReportText,
+  escapeHtml,
+  isCustomerFacingReportFact,
+  publicRiskReason,
+  sanitizePublicReportContent,
+} from './reportTextSanitizer'
 import type { RiskLevel } from './ruleEngine'
 
 export type ReportDocumentHtmlInput = {
@@ -40,13 +46,14 @@ function exportList(items: string[], emptyText: string, ordered = false) {
 }
 
 function structuredReportHtml(report: CompleteStructuredReportShape) {
+  const customerScope = report.scope.filter(isCustomerFacingReportFact)
   const keyFindings = report.keyFindings.length
     ? report.keyFindings.map((finding, index) => `
       <tr>
         <td class="index">${index + 1}</td>
         <td>
           <strong>${escapeHtml(finding.title)}</strong>
-          <p>${escapeHtml(finding.currentFinding)}</p>
+          <p>${escapeHtml(publicRiskReason(finding.currentFinding))}</p>
         </td>
         <td>${exportBadgeHtml(finding.level)}</td>
         <td>${escapeHtml(finding.priority)}</td>
@@ -64,19 +71,19 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
         </div>
         <table class="meta-table">
           <tr><th>涉及税种</th><td>${escapeHtml(finding.taxType)}</td><th>整改优先级</th><td>${escapeHtml(finding.priority)}</td></tr>
-          <tr><th>模板深度</th><td colspan="3">${finding.deepTemplate ? '顾问级深度模板' : '标准规则解释'}</td></tr>
+          <tr><th>分析深度</th><td colspan="3">${finding.deepTemplate ? '顾问级深度分析' : '标准分析说明'}</td></tr>
         </table>
         <h4>事项背景</h4>
-        <p>${escapeHtml(finding.scenario)}</p>
+        <p>${escapeHtml(customerFacingReportText(finding.scenario))}</p>
         <h4>当前发现</h4>
-        <p>${escapeHtml(finding.currentFinding)}</p>
+        <p>${escapeHtml(publicRiskReason(finding.currentFinding))}</p>
         <h4>潜在税务风险分析</h4>
-        <p>${escapeHtml(finding.riskAnalysis)}</p>
+        <p>${escapeHtml(customerFacingReportText(finding.riskAnalysis))}</p>
         <h4>测算逻辑</h4>
         <p>${escapeHtml(finding.exposureEstimate)}</p>
         <h4>优化建议</h4>
         <p>${escapeHtml(finding.remediation)}</p>
-        <h4>政策/规则依据</h4>
+        <h4>政策依据</h4>
         <p>${escapeHtml(finding.legalBasis)}</p>
         <h4>建议补充资料</h4>
         ${exportList(finding.materials, '暂无明确补充资料。')}
@@ -89,21 +96,21 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
       <p class="eyebrow">企业涉税风险初筛报告 · 基于已提供资料</p>
       <h1>${escapeHtml(report.title)}</h1>
       <div class="cover-grid">
-        ${report.scope.slice(0, 4).map((item) => `<span>${escapeHtml(item.label)}：${escapeHtml(item.value)}</span>`).join('')}
+        ${customerScope.slice(0, 4).map((item) => `<span>${escapeHtml(item.label)}：${escapeHtml(item.value)}</span>`).join('')}
       </div>
     </section>
 
     <section>
       <h2>一、项目背景及工作范围</h2>
       <table class="fact-table">${exportRows(report.clientProfile)}</table>
-      <table class="fact-table">${exportRows(report.scope)}</table>
+      <table class="fact-table">${exportRows(customerScope)}</table>
     </section>
 
     <section>
       <h2>二、报告摘要：我们的观点</h2>
       <table class="summary-table">
         <tr>
-          <th>已执行规则风险等级</th>
+          <th>综合风险等级</th>
           <th>命中风险事项</th>
           <th>高 / 中 / 低</th>
           <th>基础字段覆盖度</th>
@@ -115,8 +122,8 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
           <td>${report.dataQuality.score}%（${escapeHtml(report.dataQuality.label)}）</td>
         </tr>
       </table>
-      <p class="lead">${escapeHtml(report.executiveSummary.conclusion)}</p>
-      <p>${escapeHtml(report.dataQuality.note)}</p>
+      <p class="lead">${escapeHtml(customerFacingReportText(report.executiveSummary.conclusion))}</p>
+      <p>${escapeHtml(customerFacingReportText(report.dataQuality.note))}</p>
     </section>
 
     <section>
@@ -145,9 +152,9 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
       ${exportList(report.dataQuality.suggestedMaterials, '暂无明确资料缺口。')}
       <h3>基础检测缺失字段</h3>
       ${exportList(report.dataQuality.missingFields, '无。')}
-      <h3>因资料不足未执行的规则</h3>
+      <h3>资料不足暂未判断事项</h3>
       ${exportList(
-        report.dataQuality.unassessedRules?.map((item) => `${item.name}（缺少：${item.missingFields.join('、')}）`) || [],
+        report.dataQuality.unassessedRules?.map((item) => `${item.name}（尚缺：${item.missingFields.join('、')}）`) || [],
         '无。',
       )}
     </section>
@@ -191,7 +198,7 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
 
     <section>
       <h2>十二、责任边界及免责声明</h2>
-      ${exportList(report.disclaimers, '无。', true)}
+      ${exportList(report.disclaimers.map(customerFacingReportText), '无。', true)}
     </section>
   `
 }

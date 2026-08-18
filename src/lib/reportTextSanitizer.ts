@@ -26,10 +26,11 @@ export function publicRiskReason(reason: string) {
   const cleaned = reason
     .replace(/[（(]\s*执行条件\s*[:：][^）)]*[）)]/g, '')
     .replace(/^基于现有字段的自动检测规则\s*[:：]\s*/, '系统检测到')
+    .replace(/([。！？；，、])\1+/g, '$1')
     .replace(/\s+/g, ' ')
     .trim()
 
-  return localizeInternalFieldNames(cleaned)
+  return customerFacingReportText(localizeInternalFieldNames(cleaned))
 }
 
 export function publicRiskBasis(basis: string) {
@@ -39,15 +40,41 @@ export function publicRiskBasis(basis: string) {
   return publicRiskReason(basis)
 }
 
+export function isCustomerFacingReportFact(item: { label: string; value: string }) {
+  return !/(规则执行|已执行规则|未执行规则|规则引擎|规则库|确定性规则)/.test(`${item.label}${item.value}`)
+}
+
+export function customerFacingReportText(text: string) {
+  return String(text || '')
+    .replace(/^[ \t]+|[ \t]+$/gm, '')
+    .replace(/^规则执行覆盖[：:]?[^\n]*(?:\n|$)/gm, '')
+    .replace(/^规则执行情况[：:]?[^\n]*(?:\n|$)/gm, '')
+    .replace(/在已提供资料和已执行规则范围内/g, '在已提供资料和本次检查范围内')
+    .replace(/已执行规则的结论/g, '本次检查结论')
+    .replace(/已执行规则综合等级/g, '本次检查综合等级')
+    .replace(/因资料不足而未执行的规则/g, '资料不足暂未判断的事项')
+    .replace(/因资料不足未执行的规则/g, '资料不足暂未判断的事项')
+    .replace(/未执行规则/g, '资料不足暂未判断事项')
+    .replace(/规则引擎已经命中的风险结论/g, '已识别的风险结论')
+    .replace(/规则引擎/g, '系统检查')
+    .replace(/系统规则库/g, '已选档案数据')
+    .replace(/确定性规则/g, '检查条件')
+    .replace(/系统规则命中原因为/g, '当前发现为')
+    .replace(/^[ \t]+|[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 export function sanitizePublicReportContent(content: string) {
-  return content
+  return customerFacingReportText(content
     .replace(/[（(]\s*Issue\s+[A-Z-]*\d+\s*[)）]/gi, '')
     .replace(/\bIssue\s+[A-Z-]*\d+\b/gi, '风险事项')
     .replace(/\b(issueId|code)\s*[:：=]\s*[A-Z-]*\d+\b/gi, '')
-    .replace(/\b[a-z][A-Za-z0-9_]*(?:\s*[=!<>]=?\s*(?:true|false|\d+(?:\.\d+)?|'[^']*'|"[^"]*"))/g, '相关规则条件')
+    .replace(/\b[a-z][A-Za-z0-9_]*(?:\s*[=!<>]=?\s*(?:true|false|\d+(?:\.\d+)?|'[^']*'|"[^"]*"))/g, '内部检测条件')
+    .replace(/([。！？；，、])\1+/g, '$1')
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
-    .trim()
+    .trim())
 }
 
 export function escapeHtml(value: string) {

@@ -56,7 +56,9 @@ function sanitizeReview(review, establishmentFacts) {
     .replace(/[（(]\s*Issue\s+[A-Z-]*\d+\s*[)）]/gi, '')
     .replace(/\bIssue\s+[A-Z-]*\d+\b/gi, '风险事项')
     .replace(/\b(issueId|code)\s*[:：=]\s*[A-Z-]*\d+\b/gi, '')
-    .replace(/\b[a-z][A-Za-z0-9_]*(?:\s*[=!<>]=?\s*(?:true|false|\d+(?:\.\d+)?|'[^']*'|"[^"]*"))/g, '相关规则条件')
+    .replace(/\b[a-z][A-Za-z0-9_]*(?:\s*[=!<>]=?\s*(?:true|false|\d+(?:\.\d+)?|'[^']*'|"[^"]*"))/g, '内部检测条件')
+    .replace(/规则引擎/g, '系统检查')
+    .replace(/已命中规则/g, '已识别事项')
     .replace(/[ \t]{2,}/g, ' ')
     .trim()
   return {
@@ -67,23 +69,23 @@ function sanitizeReview(review, establishmentFacts) {
 }
 
 function buildPrompt(client, risks, establishmentFacts) {
-  return `请复核以下企业输入数据与规则引擎检测结果的合理性。
+  return `请复核以下企业输入数据与系统检查结果的合理性。
 
 重要边界：
-1. 规则引擎已命中的风险就是“已命中风险”，你不得新增、删除或覆盖命中结论。
+1. 已识别的风险事项就是本次风险结论，你不得新增、删除或覆盖。
 2. 如果发现数据异常、字段冲突、接近阈值、需要复核，只能写入提示项，不能写成已命中风险。
-3. 如果规则未触发，不要把它表述为已触发；只能说“建议复核”或“观察项”。
+3. 未识别的事项不要表述为已发现风险；只能说“建议复核”或“观察项”。
 4. 企业成立时长必须以“系统计算事实”为准，不得自行推断。
 5. 只有当 isEstablishedLessThan12Months 为 true 时，才允许写“成立不足 12 个月 / 成立不足一年 / 不满 12 个月”等表述。
 6. 如果 isEstablishedLessThan12Months 为 false，禁止出现任何“成立不足 12 个月”或同义表述。
 7. 输出必须是严格 JSON，不要 Markdown，不要解释 JSON 之外的内容。
-8. 禁止输出内部规则编号、issueId、code、内部字段名或类似“smallProfitEnjoyed=true”的条件表达式。
+8. 禁止输出内部检测机制、内部编号、issueId、code、内部字段名或类似“smallProfitEnjoyed=true”的条件表达式。
 
 JSON 格式：
 {
   "dataQualityWarnings": ["输入数据疑点，每条一句"],
   "nearThresholdWarnings": ["接近阈值或边界状态提醒，每条一句"],
-  "riskReviewNotes": ["对已命中规则的复核解释，每条一句"]
+  "riskReviewNotes": ["对已识别风险事项的复核解释，每条一句"]
 }
 
 系统计算事实：
@@ -92,7 +94,7 @@ ${JSON.stringify(establishmentFacts, null, 2)}
 企业输入数据：
 ${JSON.stringify(client, null, 2)}
 
-规则引擎已命中风险事项：
+本次已识别风险事项：
 ${JSON.stringify(risks.map(compactRisk), null, 2)}`
 }
 
@@ -152,7 +154,7 @@ export async function onRequestPost({ request, env }) {
         messages: [
           {
             role: 'system',
-            content: '你是企业税务风控数据复核助手，只能复核输入数据和解释规则引擎结果，不得新增或删除风险命中结论。涉及日期、期间、成立时长时，必须服从系统计算事实。',
+            content: '你是企业税务风控数据复核助手，只能复核输入数据和解释已识别风险事项，不得新增或删除风险结论。涉及日期、期间、成立时长时，必须服从系统计算事实。',
           },
           {
             role: 'user',

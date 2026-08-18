@@ -61,7 +61,13 @@ import { reportReviewAction } from './lib/reportReviewAction'
 import { deepReportRuleTemplates } from './lib/reportRuleTemplates'
 import { reportSignOffBlock } from './lib/reportSignOffBlock'
 import { reportScopeSummary } from './lib/reportScopeSummary'
-import { publicRiskBasis, publicRiskReason, sanitizePublicReportContent } from './lib/reportTextSanitizer'
+import {
+  customerFacingReportText,
+  isCustomerFacingReportFact,
+  publicRiskBasis,
+  publicRiskReason,
+  sanitizePublicReportContent,
+} from './lib/reportTextSanitizer'
 import {
   clientImportFieldLabels,
   createClientImportTemplateCsv,
@@ -1708,7 +1714,7 @@ const rules: RiskRule[] = [
     name: '预收款或其他应付款长期挂账未确认收入',
     taxType: '增值税、企业所得税',
     level: '中',
-    basis: '收入确认和税收征管相关规则。',
+    basis: '收入确认和税收征管相关政策要求。',
     caseRef: '预收账款长期挂账隐匿收入风险。',
     trigger: (c) => c.prepaidLongTerm,
     reason: () => '存在预收账款或其他应付款长期挂账，可能已有商品或服务交付。',
@@ -1843,7 +1849,7 @@ const rules: RiskRule[] = [
     name: '非金融企业借款利息扣除异常',
     taxType: '企业所得税',
     level: '中',
-    basis: '企业所得税法实施条例关于非金融企业借款利息扣除规则。',
+    basis: '企业所得税法实施条例关于非金融企业借款利息扣除的相关规定。',
     caseRef: '关联方和民间借贷利息扣除风险。',
     trigger: (c) => c.nonFinancialInterestAbnormal,
     reason: () => '存在非金融企业或个人借款利息异常，可能缺少合同、流水或合理利率依据。',
@@ -2149,15 +2155,26 @@ const candidateRules: RiskRule[] = [
   },
   {
     code: 'ON-012',
-    name: '主营业务利润率',
+    name: '主营业务毛利率偏低',
     taxType: '通用财务/经营',
     level: '中',
-    basis: '脱敏税务风险预警指标：主营业务利润率偏低。',
-    caseRef: '检查清单：主营业务收入、主营业务成本、本年利润。',
-    conditionJson: { field: 'ytdProfit', operator: '<', value: 0, compareField: 'mainBusinessRevenue', multiplier: 0.05 },
-    trigger: (c) => c.ytdProfit < c.mainBusinessRevenue * 0.05,
-    reason: (c) => `本年利润 ${money(c.ytdProfit)}，主营业务收入 ${money(c.mainBusinessRevenue)}。`,
-    suggestion: '复核主营成本归集、收入确认和关联交易定价，说明低毛利或低利润原因。',
+    basis: '脱敏税务风险预警指标：主营业务毛利率低于 5%。',
+    caseRef: '检查清单：主营业务收入、主营业务成本。',
+    conditionJson: {
+      all: [
+        { field: 'mainBusinessRevenue', operator: '>', value: 0 },
+        { field: 'mainBusinessCost', operator: '>', value: 0, compareField: 'mainBusinessRevenue', multiplier: 0.95 },
+      ],
+    },
+    requiredFields: ['mainBusinessRevenue', 'mainBusinessCost'],
+    trigger: (c) => c.mainBusinessRevenue > 0 && c.mainBusinessCost > c.mainBusinessRevenue * 0.95,
+    reason: (c) => {
+      const grossMargin = c.mainBusinessRevenue > 0
+        ? ((c.mainBusinessRevenue - c.mainBusinessCost) / c.mainBusinessRevenue) * 100
+        : 0
+      return `主营业务收入 ${money(c.mainBusinessRevenue)}，主营业务成本 ${money(c.mainBusinessCost)}，主营业务毛利率 ${grossMargin.toFixed(2)}%。`
+    },
+    suggestion: '复核主营成本归集、收入确认和关联交易定价，说明主营业务毛利率偏低原因。',
     materials: ['主营收入明细', '主营成本明细', '利润表'],
   },
   {
@@ -2798,8 +2815,8 @@ function getDataCompleteness(client: Client, risks: RiskResult[] = []) {
   const note = score >= 85
     ? '当前基础检测字段覆盖较高，可支持风险初筛；该比例不代表账套、凭证、合同、流水或申报资料已经完整。'
     : score >= 55
-      ? '当前基础检测字段仅部分覆盖，已执行规则的结论可作为风险线索；未覆盖事项不作判断。'
-      : '当前基础检测字段覆盖不足，只能对具备证据的规则进行初筛；未执行规则不得解读为低风险。'
+      ? '当前基础检测字段仅部分覆盖，本次检查结论可作为风险线索；未覆盖事项不作判断。'
+      : '当前基础检测字段覆盖不足，只能对具备证据的事项进行初筛；资料不足的事项不得解读为低风险。'
   const suggestedMaterials = Array.from(new Set(risks.flatMap((risk) => risk.materials))).slice(0, 12)
 
   return { score, label, note, suggestedMaterials, covered, total }
@@ -2839,7 +2856,7 @@ function filingChecklistForClient(client: Client): FilingChecklistItem[] {
       item: '纳税人类型、行业、地区、检查期间',
       status: profileMissing.size ? 'manual' : 'ready',
       handling: 'manual_confirm',
-      note: '这些字段关系到规则口径，营业执照或报表通常不能完全判断，需要人工确认。',
+      note: '这些字段关系到检查口径，营业执照或报表通常不能完全判断，需要人工确认。',
     },
     {
       group: '财务报表',
@@ -3504,7 +3521,7 @@ function managedRuleToRisk(rule: ManagedRule): RiskRule {
     caseRef: rule.conditionText,
     trigger: (client) => evaluateCondition(toClientSnapshot(client), rule.conditionJson),
     reason: builtInRule?.reason || (() => {
-      return '该事项符合规则库配置的触发口径，建议结合录入数据和原始资料进一步复核。'
+      return '当前数据符合该事项的提示口径，建议结合录入数据和原始资料进一步复核。'
     }),
     suggestion: rule.suggestion,
     materials: rule.materials,
@@ -3536,20 +3553,28 @@ function riskRuleCondition(rule: RiskRule) {
 function hydrateManagedRules(managed: ManagedRule[] = []) {
   const existingByCode = new Map(managed.map((rule) => [rule.code, rule]))
   const builtInCodes = new Set(allBuiltInRules.map((rule) => rule.code))
+  const correctedBuiltInRuleCodes = new Set(['ON-012'])
   const hydratedBuiltIns = allBuiltInRules.map((builtInRule) => {
     const fallback = riskRuleToManaged(builtInRule)
     const existing = existingByCode.get(builtInRule.code)
     if (!existing) return fallback
 
-    const shouldUseFallbackCondition = !isExecutableCondition(existing.conditionJson) && isExecutableCondition(fallback.conditionJson)
+    const shouldUseCorrectedDefinition = correctedBuiltInRuleCodes.has(builtInRule.code)
+    const shouldUseFallbackCondition = shouldUseCorrectedDefinition
+      || (!isExecutableCondition(existing.conditionJson) && isExecutableCondition(fallback.conditionJson))
     return {
       ...fallback,
       ...existing,
+      name: shouldUseCorrectedDefinition ? fallback.name : existing.name,
+      basis: shouldUseCorrectedDefinition ? fallback.basis : existing.basis,
+      suggestion: shouldUseCorrectedDefinition ? fallback.suggestion : existing.suggestion,
       enabled: shouldUseFallbackCondition ? true : existing.enabled,
       conditionText: shouldUseFallbackCondition ? fallback.conditionText : existing.conditionText,
       conditionJson: shouldUseFallbackCondition ? fallback.conditionJson : existing.conditionJson,
       requiredFields: shouldUseFallbackCondition ? fallback.requiredFields : existing.requiredFields,
-      materials: existing.materials.length ? existing.materials : fallback.materials,
+      materials: shouldUseCorrectedDefinition
+        ? fallback.materials
+        : existing.materials.length ? existing.materials : fallback.materials,
     }
   })
   const customRules = managed.filter((rule) => !builtInCodes.has(rule.code))
@@ -4032,8 +4057,8 @@ function exposureEstimateForRisk(client: Client, risk: RiskResult) {
 }
 
 function findingAnalysisForRisk(client: Client, risk: RiskResult) {
-  const reason = riskReasonForReport(client, risk)
-  return `系统规则命中原因为：${reason}。该事项不直接等同于税务机关最终认定，但说明当前数据或业务安排存在需要复核的异常信号，应结合原始凭证、申报表和业务实质进一步确认。`
+  const reason = riskReasonForReport(client, risk).replace(/[。！？；]+$/g, '')
+  return `当前发现为：${reason}。该事项不直接等同于税务机关最终认定，但说明当前数据或业务安排存在需要复核的异常信号，应结合原始凭证、申报表和业务实质进一步确认。`
 }
 
 function buildStructuredRiskFinding(client: Client, risk: RiskResult): StructuredRiskFinding {
@@ -4064,7 +4089,7 @@ function buildStructuredRiskFinding(client: Client, risk: RiskResult): Structure
     level: risk.level,
     taxType: risk.taxType,
     priority: riskPriority(risk),
-    scenario: '该事项由系统规则命中，说明当前录入数据存在需要进一步复核的异常信号。',
+    scenario: '本次检查识别到该事项，说明当前录入数据存在需要进一步复核的异常信号。',
     currentFinding: riskReasonForReport(client, risk),
     riskAnalysis: findingAnalysisForRisk(client, risk),
     exposureEstimate: exposureEstimateForRisk(client, risk),
@@ -4136,8 +4161,7 @@ function buildStructuredReport(
       { label: '复核建议', value: reportReviewAction({ totalRisks: risks.length, highRisks, mediumRisks }) },
       { label: '生成时间', value: formatDate() },
       { label: '资料覆盖口径', value: `基础检测字段 ${completeness.covered}/${completeness.total}；不代表全部账套、凭证、合同、流水或申报资料完整` },
-      { label: '规则执行范围', value: `${risks.length} 条命中，${skippedRules.length} 条因资料不足未执行` },
-      { label: '工作方法', value: '基于已提供标准资料、所选连续期间和确定性规则进行自动初筛；AI 仅作表达润色和数据复核提示。' },
+      { label: '工作方法', value: '基于已提供标准资料和所选连续期间进行自动初筛；AI 仅作表达润色和数据复核提示。' },
       { label: '工作限制', value: '未提供证据的事项不作判断；本次初筛不替代原始凭证穿行测试、完整账套复核、税务机关沟通、专项鉴证或法律意见。' },
     ],
     executiveSummary: {
@@ -4147,8 +4171,8 @@ function buildStructuredReport(
       mediumRisks,
       lowRisks,
       conclusion: risks.length
-        ? `在已提供资料和已执行规则范围内，共识别 ${risks.length} 项风险提示，其中高风险 ${highRisks} 项、中风险 ${mediumRisks} 项、低风险 ${lowRisks} 项，已执行规则综合等级为${plainRiskLevel(level)}。未执行规则不纳入本等级。`
-        : '本次在已提供资料和已执行规则范围内未识别明显风险事项；该结论不覆盖因资料不足而未执行的规则。',
+        ? `在已提供资料和本次检查范围内，共识别 ${risks.length} 项风险提示，其中高风险 ${highRisks} 项、中风险 ${mediumRisks} 项、低风险 ${lowRisks} 项，综合等级为${plainRiskLevel(level)}。资料不足暂未判断的事项不纳入本等级。`
+        : '本次在已提供资料和检查范围内未识别明显风险事项；该结论不覆盖资料不足暂未判断的事项。',
     },
     dataQuality: {
       score: completeness.score,
@@ -4179,10 +4203,10 @@ function buildStructuredReport(
     }),
     signOffBlock: reportSignOffBlock(),
     disclaimers: [
-      '本报告基于企业提供资料、系统录入数据及规则库进行风险提示，不构成税务机关认定、税务鉴证结论或法律意见。',
+      '本报告基于企业提供资料及系统录入数据进行风险提示，不构成税务机关认定、税务鉴证结论或法律意见。',
       '资料覆盖度仅反映系统基础检测字段覆盖情况，不代表原始凭证、账套、合同、资金流水和全部申报资料完整。',
-      '因资料不足未执行的规则不参与风险等级计算，也不代表相关事项不存在风险。',
-      'AI 仅用于数据复核提示和报告表达润色，不得新增、删除或覆盖规则引擎已经命中的风险结论。',
+      '资料不足暂未判断的事项不参与风险等级计算，也不代表相关事项不存在风险。',
+      'AI 仅用于数据复核提示和报告表达润色，不得新增、删除或覆盖已识别的风险结论。',
       '若审阅期间、数据来源、申报口径或原始凭证发生变化，应重新检测并生成报告。',
       '涉及具体补税、滞纳金、罚款或整改方案的事项，应结合完整账套、申报表、发票、合同、付款流水及当地税务实践进一步确认。',
     ],
@@ -4191,7 +4215,7 @@ function buildStructuredReport(
 
 function buildProfessionalReportContent(report: StructuredReport) {
   const profile = report.clientProfile.map((item) => `${item.label}：${item.value}`).join('\n')
-  const scope = report.scope.map((item) => `${item.label}：${item.value}`).join('\n')
+  const scope = report.scope.filter(isCustomerFacingReportFact).map((item) => `${item.label}：${item.value}`).join('\n')
   const keyFindings = report.keyFindings.length
     ? report.keyFindings.map((item, index) => `${index + 1}. 【${plainRiskLevel(item.level)}风险】${item.title}：${item.currentFinding}`).join('\n')
     : '当前未形成需要在摘要中重点列示的风险事项。'
@@ -4204,7 +4228,7 @@ function buildProfessionalReportContent(report: StructuredReport) {
 当前发现：${item.currentFinding}
 潜在税务风险分析：${item.riskAnalysis}
 测算逻辑：${item.exposureEstimate}
-政策/规则依据：${item.legalBasis}
+政策依据：${item.legalBasis}
 优化建议：${item.remediation}
 建议补充资料：${item.materials.join('、') || '暂无'}
 `).join('\n')
@@ -4218,13 +4242,12 @@ ${profile}
 ${scope}
 
 二、报告摘要：我们的观点
-${report.executiveSummary.conclusion}
+${customerFacingReportText(report.executiveSummary.conclusion)}
 
 基础字段覆盖度：${report.dataQuality.score}%（${report.dataQuality.label}）
-${report.dataQuality.note}
+${customerFacingReportText(report.dataQuality.note)}
 
-规则执行情况：已执行 ${report.dataQuality.assessedRuleCount ?? '未记录'} / ${report.dataQuality.totalRuleCount ?? '未记录'} 条。
-未执行规则：${report.dataQuality.unassessedRules?.length ? report.dataQuality.unassessedRules.map((item) => `${item.name}（缺少：${item.missingFields.join('、')}）`).join('；') : '无。'}
+资料不足暂未判断事项：${report.dataQuality.unassessedRules?.length ? report.dataQuality.unassessedRules.map((item) => `${item.name}（尚缺：${item.missingFields.join('、')}）`).join('；') : '无。'}
 
 三、重要事项汇总
 ${keyFindings}
@@ -4258,7 +4281,7 @@ ${report.signOffBlock.map((item) => `${item.label}：${item.value}`).join('\n')}
 建议补充资料：${report.dataQuality.suggestedMaterials.length ? report.dataQuality.suggestedMaterials.join('、') : '暂无'}
 
 十三、责任边界及免责声明
-${report.disclaimers.map((item, index) => `${index + 1}. ${item}`).join('\n')}`
+${report.disclaimers.map((item, index) => `${index + 1}. ${customerFacingReportText(item)}`).join('\n')}`
 }
 
 function buildReportContent(client: Client, risks: RiskResult[]) {
@@ -4299,7 +4322,7 @@ ${groupName ? `所属集团项目：${groupName}\n主体角色：${getEntityRole
 二、综合风险结论
 本次系统共命中 ${risks.length} 项风险提示，其中高风险 ${highCount} 项，中风险 ${mediumCount} 项，综合风险等级为【${level}】。
 ${reportMissingFields.length ? `本次基础检测资料仍缺少：${validationSummary(reportMissingFields)}。报告结论应作为风险线索参考，补齐资料后建议重新生成。` : '本次基础检测必填资料已补齐，可支持初步风险判断。'}
-本结论基于已选档案期间数据和系统规则库生成，建议由财税专业人员结合原始凭证、账套、申报表、合同、资金流水进一步复核。
+本结论基于已选档案期间数据生成，建议由财税专业人员结合原始凭证、账套、申报表、合同、资金流水进一步复核。
 本报告仅适用于上述数据期间和数据来源；期间或数据来源变化后，建议重新生成报告。
 
 三、资料覆盖范围说明
@@ -4345,7 +4368,7 @@ ${risks.length
 4. 对涉及发票、收入、个人账户和优惠政策的事项优先处理。
 
 十、免责声明
-本报告基于企业提供资料及系统规则进行辅助分析，仅供经营和税务风险管理参考。具体税务处理应结合完整原始资料、适用地区口径及最新政策，并由专业人员进一步复核确认。`
+本报告基于企业提供资料进行辅助分析，仅供经营和税务风险管理参考。具体税务处理应结合完整原始资料、适用地区口径及最新政策，并由专业人员进一步复核确认。`
 }
 
 
@@ -5390,7 +5413,7 @@ function App() {
           : `${row.client.name} / 缺 ${row.missingMonths.slice(0, 2).join('、')}`
         if (!current.examples.includes(example) && current.examples.length < 2) current.examples.push(example)
         if (!current.sources.includes(issue.source)) current.sources.push(issue.source)
-        const blockedRules = skippedRuleNamesByField.get(issue.label) || (row.periodComplete ? [] : ['当前期间规则检测'])
+        const blockedRules = skippedRuleNamesByField.get(issue.label) || (row.periodComplete ? [] : ['当前期间检查'])
         blockedRules.forEach((ruleName) => {
           if (!current.blockedRules.includes(ruleName) && current.blockedRules.length < 2) current.blockedRules.push(ruleName)
         })
@@ -5940,7 +5963,7 @@ function App() {
             conflicts: offset === 0 ? intake.conflicts : [],
             summary: { totalRecordCount: intake.records.length, recordCounts: intake.recordCounts, warnings: intake.warnings, source: 'direct_tax_data_import' },
           },
-          reason: `标准资料导入入口按模板规则入库：${file.name}`,
+          reason: `标准资料导入入口按固定模板入库：${file.name}`,
           requiresConfirmation: false,
         }],
         allowSave: true,
@@ -5956,7 +5979,7 @@ function App() {
     const files = Array.from(fileList || [])
     if (!files.length || taxDataDirectImporting) return
     setTaxDataDirectImporting(true)
-    setTaxDataDirectImportMessage(`正在按固定模板规则解析 ${files.length} 个文件...`)
+    setTaxDataDirectImportMessage(`正在按固定模板解析 ${files.length} 个文件...`)
     const results: string[] = []
     let savedCount = 0
     let recordCount = 0
@@ -6011,9 +6034,9 @@ function App() {
         const refreshed = await apiGet<TaxDataSummary>(`/api/tax-data/summary?clientId=${encodeURIComponent(currentClient.id)}`)
         setTaxDataSummary(refreshed)
       }
-      setTaxDataDirectImportMessage(`规则导入完成：已入库 ${savedCount}/${files.length} 个文件，共 ${recordCount} 条标准记录。\n${results.join('\n')}`)
+      setTaxDataDirectImportMessage(`标准资料导入完成：已入库 ${savedCount}/${files.length} 个文件，共 ${recordCount} 条标准记录。\n${results.join('\n')}`)
     } catch (error) {
-      setTaxDataDirectImportMessage(`规则导入失败：${error instanceof Error ? error.message : String(error)}`)
+      setTaxDataDirectImportMessage(`标准资料导入失败：${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setTaxDataDirectImporting(false)
       if (taxDataDirectImportInputRef.current) taxDataDirectImportInputRef.current.value = ''
@@ -6399,7 +6422,7 @@ function App() {
       console.warn('AI report generation failed, using local report template.', error)
       report = {
         ...baseReport,
-        content: sanitizePublicReportContent(`${baseReport.content}\n\nAI 处理提示：本次 AI 数据复核或报告生成失败，系统已使用本地规则模板生成报告。`),
+        content: sanitizePublicReportContent(`${baseReport.content}\n\nAI 处理提示：本次 AI 数据复核或报告生成失败，系统已使用本地标准模板生成报告。`),
         aiGenerated: false,
       }
       setDataStatus('fallback')
@@ -6601,7 +6624,7 @@ function App() {
           </div>
           <p className="eyebrow">内部税务风控工作台</p>
           <h1>合耀税务风控工作台</h1>
-          <p className="login-copy">导入企业真实财税资料，按证据范围执行规则，生成可复核、可流转的涉税风险初筛报告。</p>
+          <p className="login-copy">导入企业真实财税资料，按证据范围完成检查，生成可复核、可流转的涉税风险初筛报告。</p>
           <form className="login-card" onSubmit={handleAuthSubmit}>
             <div className="auth-switch">
               <button type="button" className={authMode === 'login' ? 'active' : ''} onClick={() => setAuthMode('login')}>
@@ -6641,7 +6664,7 @@ function App() {
             <span>合耀科技 HY AI</span>
             <strong>把税务经验沉淀成可复核的风控流程</strong>
           </div>
-          <p>围绕企业财税画像、风险规则检测和报告流转，帮助财务负责人更快完成税务风险初筛。</p>
+          <p>围绕企业财税画像、风险检查和报告流转，帮助财务负责人更快完成税务风险初筛。</p>
         </aside>
       </main>
     )
@@ -6810,7 +6833,7 @@ function App() {
             <div className="analytics-grid executive-analytics">
               <EChartPanel
                 title="企业风险等级分布"
-                subtitle="按当前规则引擎检测结果统计"
+                subtitle="按当前检查结果统计"
                 option={dashboardLevelOption}
                 rows={dashboardLevelRows}
               />
@@ -6828,7 +6851,7 @@ function App() {
             </div>
             <section className={`boss-dashboard level-${bossDashboard.level === '高' ? 'high' : bossDashboard.level === '中' ? 'medium' : 'low'}`}>
               <div className="boss-summary">
-                <span>已执行规则风险等级</span>
+                <span>综合风险等级</span>
                 <strong>{plainRiskLevel(bossDashboard.level)}风险</strong>
                 <p>{bossDashboard.conclusion}</p>
                 <div className="boss-delivery-checks" aria-label="试点交付状态">
@@ -6934,7 +6957,7 @@ function App() {
               <section className="panel dark-panel">
                 <Sparkles />
                 <h3>涉税风险初筛流程</h3>
-                <p>从企业财税画像出发，先用规则引擎完成确定性检测，再由 AI 辅助复核数据疑点并生成可流转报告。</p>
+                <p>从企业财税画像出发，先完成基础检查，再由 AI 辅助复核数据疑点并生成可流转报告。</p>
                 <ul>
                   <li>录入企业基础、经营、发票和人员数据</li>
                   <li>集团项目按主体分别建档，汇总查看多主体风险</li>
@@ -7004,7 +7027,7 @@ function App() {
                   onClick={() => taxDataDirectImportInputRef.current?.click()}
                   disabled={taxDataDirectImporting}
                 >
-                  <FileText /> {taxDataDirectImporting ? '规则导入中' : '标准资料导入'}
+                  <FileText /> {taxDataDirectImporting ? '标准解析中' : '标准资料导入'}
                 </button>
                 <button
                   className="primary-button"
@@ -7098,7 +7121,7 @@ function App() {
                         onClick={() => taxDataDirectImportInputRef.current?.click()}
                         disabled={taxDataDirectImporting || !selectedClient}
                       >
-                        <FileText /> {taxDataDirectImporting ? '规则导入中' : '标准资料导入'}
+                        <FileText /> {taxDataDirectImporting ? '标准解析中' : '标准资料导入'}
                       </button>
                     </div>
                   </div>
@@ -7713,7 +7736,7 @@ function App() {
               <section className="panel skipped-rules-panel">
                 <div className="panel-title">
                   <div>
-                    <p className="eyebrow">资料不足未执行规则</p>
+                    <p className="eyebrow">资料不足暂未判断事项</p>
                     <h3>补齐资料后自动纳入检测</h3>
                   </div>
                   <span>{currentSkippedRules.length} 条</span>
@@ -7738,7 +7761,7 @@ function App() {
                     </article>
                   ))}
                 </div>
-                {currentSkippedRules.length > 8 && <p className="section-helper">还有 {currentSkippedRules.length - 8} 条规则因资料不足暂未展开。</p>}
+                {currentSkippedRules.length > 8 && <p className="section-helper">还有 {currentSkippedRules.length - 8} 项因资料不足暂未展开。</p>}
               </section>
             )}
             <div className="risk-list">
@@ -8633,7 +8656,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         ? `资料缺口：仍有 ${missingTotal} 项待补齐，保存或检测前需完成复核。`
         : '资料缺口：建档和基础检测必填项已补齐。',
       `人工确认：${importReviewConfirmed ? '已确认预填字段和源文件一致。' : '待确认，保存前需由财务勾选确认。'}`,
-      '交付结论：本次导入仅作为预填和资料留痕，规则引擎结论不被导入记录或 AI 覆盖。',
+      '交付结论：本次导入仅作为预填和资料留痕，风险结论不被导入记录或 AI 覆盖。',
     ].join('\n')
     try {
       await navigator.clipboard.writeText(content)
@@ -9476,7 +9499,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         <div className="section-title-row">
           <div>
             <h3>趋势与预算数据</h3>
-            <p className="section-helper">用于执行同比、环比、预实差异、主体利润率和有费用无收入类规则。</p>
+            <p className="section-helper">用于判断同比、环比、预实差异、主体利润率和有费用无收入等事项。</p>
             {renderUnitNote(['金额单位：元', '人数单位：人'])}
           </div>
           {renderSectionActions('趋势数据', '趋势', clearTrendSection)}
@@ -9506,7 +9529,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         <div className="section-title-row">
           <div>
             <h3>房租装修与人员费用</h3>
-            <p className="section-helper">用于执行无人员有费用、人均租房面积、福利性质餐费和装修费用合理性规则。</p>
+            <p className="section-helper">用于判断无人员有费用、人均租房面积、福利性质餐费和装修费用合理性等事项。</p>
             {renderUnitNote(['金额单位：元', '面积单位：平方米'])}
           </div>
           {renderSectionActions('费用数据', '费用', clearCostSection)}
@@ -9626,7 +9649,7 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
         <p className="eyebrow">企业涉税风险初筛报告 · 基于已提供资料</p>
         <h1>{report.title}</h1>
         <div className="report-cover-meta">
-          {report.scope.slice(0, 4).map((item) => (
+          {report.scope.filter(isCustomerFacingReportFact).slice(0, 4).map((item) => (
             <span key={item.label}>{item.label}：{item.value}</span>
           ))}
         </div>
@@ -9646,7 +9669,7 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
           ))}
         </div>
         <div className="report-scope-list">
-          {report.scope.map((item) => (
+          {report.scope.filter(isCustomerFacingReportFact).map((item) => (
             <p key={item.label}><strong>{item.label}：</strong>{item.value}</p>
           ))}
         </div>
@@ -9658,13 +9681,13 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
           <h3>报告摘要：我们的观点</h3>
         </div>
         <div className="executive-summary">
-          <div><span>已执行规则风险等级</span><strong>{plainRiskLevel(report.executiveSummary.overallLevel)}风险</strong></div>
+          <div><span>综合风险等级</span><strong>{plainRiskLevel(report.executiveSummary.overallLevel)}风险</strong></div>
           <div><span>命中风险事项</span><strong>{report.executiveSummary.totalRisks} 项</strong></div>
           <div><span>高 / 中 / 低</span><strong>{report.executiveSummary.highRisks} / {report.executiveSummary.mediumRisks} / {report.executiveSummary.lowRisks}</strong></div>
           <div><span>基础字段覆盖度</span><strong>{report.dataQuality.score}%</strong></div>
         </div>
-        <p className="report-lead">{report.executiveSummary.conclusion}</p>
-        <p className="report-note">{report.dataQuality.note}</p>
+        <p className="report-lead">{customerFacingReportText(report.executiveSummary.conclusion)}</p>
+        <p className="report-note">{customerFacingReportText(report.dataQuality.note)}</p>
       </section>
 
       <section className="report-section">
@@ -9679,7 +9702,7 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
                 <span>{index + 1}</span>
                 <div>
                   <strong>{finding.title}</strong>
-                  <p>{finding.currentFinding}</p>
+                  <p>{publicRiskReason(finding.currentFinding)}</p>
                 </div>
                 <LevelBadge level={finding.level} />
               </article>
@@ -9721,16 +9744,16 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
                 {finding.deepTemplate && <span>顾问级深度模板</span>}
               </div>
               <h5>事项背景</h5>
-              <p>{finding.scenario}</p>
+              <p>{customerFacingReportText(finding.scenario)}</p>
               <h5>当前发现</h5>
-              <p>{finding.currentFinding}</p>
+              <p>{publicRiskReason(finding.currentFinding)}</p>
               <h5>潜在税务风险分析</h5>
-              <p>{finding.riskAnalysis}</p>
+              <p>{customerFacingReportText(finding.riskAnalysis)}</p>
               <h5>测算逻辑</h5>
               <p>{finding.exposureEstimate}</p>
               <h5>优化建议</h5>
               <p>{finding.remediation}</p>
-              <h5>政策/规则依据</h5>
+              <h5>政策依据</h5>
               <p>{finding.legalBasis}</p>
               <div className="chips">{finding.materials.map((item) => <span key={item}>{item}</span>)}</div>
             </article>
@@ -9762,11 +9785,10 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
           </article>
         </div>
         <div className="report-scope-list">
-          <p><strong>规则执行覆盖：</strong>已执行 {report.dataQuality.assessedRuleCount ?? '未记录'} / {report.dataQuality.totalRuleCount ?? '未记录'} 条。</p>
-          <p><strong>不可检测项：</strong>{report.dataQuality.unassessedRules?.length
-            ? report.dataQuality.unassessedRules.slice(0, 12).map((item) => `${item.name}（缺少：${item.missingFields.join('、')}）`).join('；')
+          <p><strong>资料不足暂未判断事项：</strong>{report.dataQuality.unassessedRules?.length
+            ? report.dataQuality.unassessedRules.slice(0, 12).map((item) => `${item.name}（尚缺：${item.missingFields.join('、')}）`).join('；')
             : '无。'}</p>
-          {(report.dataQuality.unassessedRules?.length || 0) > 12 && <p>另有 {(report.dataQuality.unassessedRules?.length || 0) - 12} 条规则因资料不足未执行，补齐资料后应重新检测。</p>}
+          {(report.dataQuality.unassessedRules?.length || 0) > 12 && <p>另有 {(report.dataQuality.unassessedRules?.length || 0) - 12} 项因资料不足暂未判断，补齐资料后建议重新检测。</p>}
         </div>
       </section>
 
@@ -9818,7 +9840,7 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
           <h3>责任边界及免责声明</h3>
         </div>
         <ol className="disclaimer-list">
-          {report.disclaimers.map((item) => <li key={item}>{item}</li>)}
+          {report.disclaimers.map((item) => <li key={item}>{customerFacingReportText(item)}</li>)}
         </ol>
       </section>
     </div>
@@ -11060,14 +11082,14 @@ function AiAssistantPage({
   }
   const runAssistantRiskDetection = () => {
     if (!risks.length) {
-      appendAssistantSystemMessage('专业风险检测已运行：当前已录入资料下未命中中高风险规则。若资料不完整，仍建议先补充申报表、发票汇总、工资社保个税和往来明细后复核。')
+      appendAssistantSystemMessage('专业风险检测已运行：当前已录入资料下未识别中高风险事项。若资料不完整，仍建议先补充申报表、发票汇总、工资社保个税和往来明细后复核。')
       return
     }
     const lines = risks.slice(0, 8).map((risk) => `- ${plainRiskLevel(risk.level)}风险｜${risk.name}：${risk.reason(selectedClient)}`)
     appendAssistantSystemMessage(`专业风险检测已运行，当前命中 ${risks.length} 项，综合等级为${plainRiskLevel(getOverallLevel(risks))}风险。\n\n${lines.join('\n')}${risks.length > 8 ? '\n- 其余风险请在报告或风险检测页查看。' : ''}`)
   }
   const runAssistantReportGeneration = async () => {
-    appendAssistantSystemMessage('我已收到生成报告指令，正在调用系统报告生成流程。报告仍基于已保存期间数据、连续期间选择和规则引擎结果生成。')
+    appendAssistantSystemMessage('我已收到生成报告指令，正在调用系统报告生成流程。报告仍基于已保存期间数据、连续期间选择和检查结果生成。')
     await onGenerateReport()
   }
   const executeAssistantToolCalls = async (response: AiAssistantResponse) => {
@@ -11139,7 +11161,7 @@ function AiAssistantPage({
         await runAssistantReportGeneration()
       } else if (toolCall.name === 'explain_current_report') {
         results.push(report
-          ? `当前报告综合等级为${plainRiskLevel(report.riskLevel)}风险，包含 ${report.risks.length} 项规则命中。你可以继续问我某一项风险的依据、需要补充的资料或整改顺序。`
+          ? `当前报告综合等级为${plainRiskLevel(report.riskLevel)}风险，包含 ${report.risks.length} 项风险提示。你可以继续问我某一项风险的依据、需要补充的资料或整改顺序。`
           : '当前还没有已生成报告。可以先保存期间数据，再让我生成报告。')
       }
     }
@@ -11677,8 +11699,8 @@ function ReportPage({
       ? 'AI 正在生成报告...'
       : ''
   const aiStepText = aiStage === 'reviewing'
-    ? '正在比对企业输入数据、规则条件和命中结果，识别字段冲突、边界值和需要人工复核的事项。'
-    : '正在把确定性规则结果、资料覆盖范围和未执行事项整合成涉税风险初筛报告。'
+    ? '正在比对企业输入数据和检查结果，识别字段冲突、边界值和需要人工复核的事项。'
+    : '正在把风险事项、资料覆盖范围和暂未判断事项整合成涉税风险初筛报告。'
   const [assistantInput, setAssistantInput] = useState('')
   const [assistantResponse, setAssistantResponse] = useState<AiAssistantResponse | null>(null)
   const [assistantLoading, setAssistantLoading] = useState(false)
@@ -11768,7 +11790,7 @@ function ReportPage({
           <h3>{aiMessage}</h3>
           <p>{aiStepText}</p>
           <div className="ai-process-steps">
-            <span className="done">规则引擎检测完成</span>
+            <span className="done">基础检查完成</span>
             <span className={aiStage === 'reviewing' ? 'active' : 'done'}>AI 复核数据</span>
             <span className={aiStage === 'generating' ? 'active' : ''}>AI 生成报告</span>
           </div>
