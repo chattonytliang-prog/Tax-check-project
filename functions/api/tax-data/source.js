@@ -30,10 +30,20 @@ export async function onRequestGet({ request, env }) {
       if (!/^[a-f0-9]{64}$/.test(fileHash)) return badRequest('fileHash must be a SHA-256 digest')
       await ensureTaxDataIntakeTables(db)
       const match = await db.prepare(
-        `SELECT id FROM tax_data_source_files
+        `SELECT id, file_name, storage_key FROM tax_data_source_files
          WHERE owner_user_id = ? AND client_id = ? AND file_hash = ? LIMIT 1`,
       ).bind(auth.user.id, clientId, fileHash).first()
-      return json({ duplicate: Boolean(match) }, { headers: { 'cache-control': 'no-store' } })
+      const record = match ? await db.prepare(
+        `SELECT COUNT(*) AS count FROM tax_data_standard_records
+         WHERE owner_user_id = ? AND client_id = ? AND source_file_id = ?`,
+      ).bind(auth.user.id, clientId, match.id).first() : null
+      return json({
+        duplicate: Boolean(match),
+        sourceFileId: match?.id || null,
+        fileName: match?.file_name || null,
+        stored: Boolean(match?.storage_key),
+        recordCount: Number(record?.count) || 0,
+      }, { headers: { 'cache-control': 'no-store' } })
     }
     if (!sourceFileId) return badRequest('sourceFileId is required')
     await ensureTaxDataIntakeTables(db)
@@ -73,17 +83,23 @@ export async function onRequestPost({ request, env }) {
     if (file.size > 8 * 1024 * 1024) return badRequest('File is too large')
     await ensureTaxDataIntakeTables(db)
     const row = await db.prepare(
-      `SELECT id, client_id, file_name FROM tax_data_source_files
+      `SELECT id, client_id, file_name, file_hash FROM tax_data_source_files
        WHERE id = ? AND owner_user_id = ? LIMIT 1`,
     ).bind(sourceFileId, auth.user.id).first()
     if (!row) return new Response('Source file not found', { status: 404 })
     if (String(submittedFileName || file.name) !== String(row.file_name)) return badRequest('File name does not match the archived source')
     const bucket = getMaterialsBucket(env)
     if (!bucket) return new Response('Material storage is unavailable', { status: 503 })
+    const fileBytes = await file.arrayBuffer()
+    if (row.file_hash) {
+      const digest = await crypto.subtle.digest('SHA-256', fileBytes)
+      const actualHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+      if (actualHash !== String(row.file_hash).toLowerCase()) return badRequest('File content does not match the archived source')
+    }
     const safeName = String(row.file_name).replace(/[\\/:*?"<>|]/g, '_').slice(0, 160)
     const objectKey = `${auth.user.id}/archive/${row.client_id || 'unassigned'}/${row.id}/${safeName}`
     const contentType = contentTypeForFile(row.file_name, file.type)
-    await bucket.put(objectKey, await file.arrayBuffer(), {
+    await bucket.put(objectKey, fileBytes, {
       httpMetadata: { contentType },
       customMetadata: { ownerUserId: auth.user.id, clientId: row.client_id || '', sourceFileId: row.id },
     })

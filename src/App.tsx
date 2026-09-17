@@ -510,6 +510,8 @@ type TaxDataSummary = {
     collectedSlotCount: number
     totalSlotCount: number
     sourceFileCount?: number
+    storedSourceFileCount?: number
+    linkedSourceFileCount?: number
     recordCount: number
   }
 }
@@ -5904,7 +5906,11 @@ function App() {
     try {
       const formData = new FormData()
       formData.append('file', file)
+      formData.append('requireStorage', 'true')
       const response = await apiUpload<{ material: AssistantRawMaterial }>('/api/assistant/materials', formData)
+      if (response.material.storageStatus !== 'stored' || !response.material.objectKey) {
+        throw new Error('原件未保存到文件存储，已停止入库；请联系管理员检查 R2 配置后重试')
+      }
       return {
         ...fallback,
         ...response.material,
@@ -6131,13 +6137,38 @@ function App() {
           const knownClient = currentClient || (profilePatch.name && !isInvalidImportedCompanyName(profilePatch.name)
             ? findExistingImportClient(clients, { name: profilePatch.name, creditCode: profilePatch.creditCode })
             : undefined)
+          let restoredMaterial: AssistantRawMaterial | null = null
           if (knownClient) {
-            const archived = await apiGet<{ duplicate: boolean }>(`/api/tax-data/source?clientId=${encodeURIComponent(knownClient.id)}&fileHash=${digest}`)
+            const archived = await apiGet<{ duplicate: boolean; sourceFileId: string | null; fileName: string | null; stored: boolean; recordCount: number }>(`/api/tax-data/source?clientId=${encodeURIComponent(knownClient.id)}&fileHash=${digest}`)
             if (archived.duplicate) {
               currentClient = knownClient
               setSelectedClientId(knownClient.id)
-              addItem({ name: file.name, status: 'duplicate', records: 0, detail: '同一文件已在该企业归档，未重复入库' })
-              return
+              if (!archived.sourceFileId) throw new Error('来源文件登记不完整，请联系管理员')
+              if (!archived.stored) {
+                const formData = new FormData()
+                formData.append('sourceFileId', archived.sourceFileId)
+                formData.append('fileName', archived.fileName || file.name)
+                formData.append('file', file)
+                await apiUpload('/api/tax-data/source', formData)
+              }
+              if (archived.recordCount > 0) {
+                addItem({
+                  name: file.name,
+                  status: archived.stored ? 'duplicate' : 'repaired',
+                  records: 0,
+                  detail: archived.stored ? '同一文件已有标准记录，未重复入库' : '已补存原件，沿用原有标准记录',
+                })
+                return
+              }
+              restoredMaterial = {
+                id: archived.sourceFileId,
+                name: archived.fileName || file.name,
+                size: file.size,
+                contentType: file.type || 'application/octet-stream',
+                sourceType: '标准资料导入',
+                storageStatus: 'stored',
+                uploadedAt: formatDate(),
+              }
             }
           }
           const intake = parsedImport.taxDataIntake
@@ -6163,7 +6194,7 @@ function App() {
               return
             }
           }
-          const material = await uploadTaxDataDirectMaterial(file)
+          const material = restoredMaterial || await uploadTaxDataDirectMaterial(file)
           currentClient = await resolveClientForTaxDataDirectImport(currentClient, parsedImport, file.name)
           const savedRecords = await saveTaxDataDirectImport(file, parsedImport, material, currentClient, digest)
           currentClient = standardClientFromIntake(currentClient, parsedImport.taxDataIntake!)
@@ -7037,6 +7068,7 @@ function App() {
             clients={clients.map((client) => ({ id: client.id, name: client.name, creditCode: client.creditCode }))}
             selectedClientId={selectedClient?.id || ''}
             sourceFileCount={activeTaxDataSummary?.stats.sourceFileCount || 0}
+            storedSourceFileCount={activeTaxDataSummary?.stats.storedSourceFileCount || 0}
             recordCount={activeTaxDataSummary?.stats.recordCount || 0}
             months={journeyMonths}
             selectedMonthId={journeySelectedMonthId}
@@ -7484,8 +7516,12 @@ function App() {
                         : `${displayedTaxDataStats.collectedCategoryCount}/${displayedTaxDataStats.totalCategoryCount || 18}`}</strong>
                     </div>
                     <div>
-                      <span>已入库源文件</span>
+                      <span>{taxDataViewMode === 'overview' ? '已登记源文件' : '本期有记录的来源文件'}</span>
                       <strong>{displayedTaxDataStats.sourceFileCount} 个</strong>
+                    </div>
+                    <div>
+                      <span>原件已保存（全部期间）</span>
+                      <strong>{activeTaxDataSummary?.stats.storedSourceFileCount || 0} 个</strong>
                     </div>
                     <div>
                       <span>标准记录</span>

@@ -399,8 +399,17 @@ export async function onRequestGet({ request, env }) {
 
     const missingSlots = slots.filter((slot) => slot.status === 'missing').map((slot) => slot.name)
     const collectedSlotIds = new Set(slots.filter((slot) => slot.status === 'collected').map((slot) => slot.slotId))
-    const [pendingConfirmationCount, sourceCountRows, standardRecordCountRows, standardRecordRows] = await Promise.all([
+    const [pendingConfirmationCount, sourceCountRows, linkedSourceRows, standardRecordCountRows, standardRecordRows] = await Promise.all([
       openIssueCount(db, auth.user.id, clientId),
+      all(
+        db,
+        `SELECT COUNT(*) AS count,
+                SUM(CASE WHEN COALESCE(storage_key, '') <> '' THEN 1 ELSE 0 END) AS stored_count
+         FROM tax_data_source_files
+         WHERE owner_user_id = ? AND client_id = ?`,
+        auth.user.id,
+        clientId,
+      ),
       all(
         db,
         `SELECT COUNT(DISTINCT source_file_id) AS count
@@ -440,6 +449,8 @@ export async function onRequestGet({ request, env }) {
         collectedSlotCount: collectedSlotIds.size,
         totalSlotCount: SLOT_CATALOG.length,
         sourceFileCount: Number(sourceCountRows[0]?.count) || 0,
+        storedSourceFileCount: Number(sourceCountRows[0]?.stored_count) || 0,
+        linkedSourceFileCount: Number(linkedSourceRows[0]?.count) || 0,
         recordCount: Number(standardRecordCountRows[0]?.count) || 0,
       },
       standardTemplates: {

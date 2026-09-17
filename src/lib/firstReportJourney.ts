@@ -1,6 +1,6 @@
 export type DirectImportItem = {
   name: string
-  status: 'saved' | 'duplicate' | 'failed'
+  status: 'saved' | 'repaired' | 'duplicate' | 'failed'
   records: number
   detail: string
 }
@@ -18,7 +18,7 @@ export function summarizeDirectImport(batch: DirectImportBatch) {
     summary[item.status] += 1
     summary.records += item.records
     return summary
-  }, { saved: 0, duplicate: 0, failed: 0, records: 0 })
+  }, { saved: 0, repaired: 0, duplicate: 0, failed: 0, records: 0 })
 }
 
 function normalizedName(value: string) {

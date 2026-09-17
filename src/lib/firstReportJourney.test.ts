@@ -13,7 +13,16 @@ describe('direct import journey', () => {
         { name: 'a-copy.pdf', status: 'duplicate', records: 0, detail: '' },
         { name: 'bad.pdf', status: 'failed', records: 0, detail: '' },
       ],
-    })).toEqual({ saved: 2, duplicate: 1, failed: 1, records: 47 })
+    })).toEqual({ saved: 2, repaired: 0, duplicate: 1, failed: 1, records: 47 })
+  })
+
+  it('reports a restored original without claiming new standard records', () => {
+    expect(summarizeDirectImport({
+      total: 1,
+      processed: 1,
+      clientId: 'a',
+      items: [{ name: 'return.pdf', status: 'repaired', records: 0, detail: '已补存原件' }],
+    })).toEqual({ saved: 0, repaired: 1, duplicate: 0, failed: 0, records: 0 })
   })
 
   it('accepts the same company with harmless spacing and case differences', () => {

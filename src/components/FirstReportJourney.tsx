@@ -8,6 +8,7 @@ type Props = {
   clients: JourneyClient[]
   selectedClientId: string
   sourceFileCount: number
+  storedSourceFileCount: number
   recordCount: number
   months: JourneyMonth[]
   selectedMonthId: string
@@ -30,12 +31,12 @@ export function DirectImportReceipt({ batch }: { batch: DirectImportBatch }) {
   return (
     <div className="journey-import-receipt" aria-live="polite">
       <strong>本次上传：已处理 {batch.processed}/{batch.total} 份</strong>
-      <p>入库 {counts.saved} · 重复跳过 {counts.duplicate} · 未入库 {counts.failed} · 标准记录 {counts.records} 条</p>
+      <p>入库 {counts.saved} · 原件补存 {counts.repaired} · 重复跳过 {counts.duplicate} · 未入库 {counts.failed} · 标准记录 {counts.records} 条</p>
       {batch.error && <p className="journey-warning" role="alert">{batch.error}</p>}
       <ul>
         {batch.items.map((item, index) => (
           <li key={`${item.name}-${index}`} className={item.status}>
-            {item.status === 'saved' ? <CheckCircle2 aria-hidden="true" /> : <AlertTriangle aria-hidden="true" />}
+            {item.status === 'saved' || item.status === 'repaired' ? <CheckCircle2 aria-hidden="true" /> : <AlertTriangle aria-hidden="true" />}
             <span><strong>{item.name}</strong><small>{item.status === 'saved' ? `入库 ${item.records} 条` : item.detail}</small></span>
           </li>
         ))}
@@ -45,7 +46,7 @@ export function DirectImportReceipt({ batch }: { batch: DirectImportBatch }) {
 }
 
 export function FirstReportJourney({
-  clients, selectedClientId, sourceFileCount, recordCount, months, selectedMonthId,
+  clients, selectedClientId, sourceFileCount, storedSourceFileCount, recordCount, months, selectedMonthId,
   summaryLoading, summaryError, batch, importing, reportPrice,
   onSelectClient, onUploadCurrent, onUploadNew, onInspect, onSelectMonth,
   onStartDetection, onRetrySummary,
@@ -80,13 +81,15 @@ export function FirstReportJourney({
           <div className="journey-step-body">
             <div className="journey-step-heading">
               <div>
-                <h3>上传资料</h3>
+                <h3>准备资料</h3>
                 <p>选择这家企业的 Excel 或 PDF，可一次上传多份。</p>
               </div>
-              <span className="journey-step-status">{summaryLoading ? '读取中' : counts?.failed ? hasFiles ? `${counts.failed}份未入库` : '上传失败' : hasFiles ? '已入库' : '待开始'}</span>
+              <span className="journey-step-status">{summaryLoading ? '读取中' : counts?.failed ? hasFiles ? `${counts.failed}份未入库` : '上传失败' : storedSourceFileCount > 0 ? '原件已保存' : hasFiles ? '待补原件' : '待开始'}</span>
             </div>
             {client && <p className="journey-client-name">当前企业：<strong>{client.name}</strong></p>}
-            {hasFiles && !summaryLoading && <p className="journey-facts">已入库 {sourceFileCount} 份源文件 · {recordCount} 条标准记录</p>}
+            {hasFiles && !summaryLoading && <p className="journey-facts">已登记 {sourceFileCount} 份源文件 · 原件已保存 {storedSourceFileCount} 份 · {recordCount} 条标准记录</p>}
+            {hasFiles && !summaryLoading && storedSourceFileCount < sourceFileCount && <p className="journey-warning">{sourceFileCount - storedSourceFileCount} 份文件仅有登记信息，缺少可查看的原件。</p>}
+            {hasFiles && !summaryLoading && sourceFileCount === 0 && <p className="journey-warning">已有期间数据，但尚未保存原始文件；报告中的依据需要人工核对。</p>}
             <div className="journey-actions">
               <button type="button" className="primary-button" onClick={client ? onUploadCurrent : onUploadNew} disabled={importing}>
                 <Upload /> {importing ? '正在解析...' : client ? '补充当前企业资料' : '上传资料'}

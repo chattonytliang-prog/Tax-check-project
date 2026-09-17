@@ -46,6 +46,7 @@ export async function onRequestPost({ request, env }) {
     const file = formData.get('file')
     if (!(file instanceof File)) return badRequest('File is required')
     if (file.size > maxUploadBytes) return badRequest('File is too large')
+    const requireStorage = formData.get('requireStorage') === 'true'
 
     const threadId = String(formData.get('threadId') || '').trim().slice(0, 80)
     const fileName = cleanFileName(file.name)
@@ -54,6 +55,9 @@ export async function onRequestPost({ request, env }) {
     const createdAt = nowIso()
     const objectKey = `${auth.user.id}/${threadId || 'unassigned'}/${id}/${fileName}`
     const bucket = getMaterialsBucket(env)
+    if (requireStorage && !bucket) {
+      return json({ error: 'Source file storage is unavailable; nothing was archived' }, { status: 503 })
+    }
     let storageStatus = 'metadata_only'
     let storedObjectKey = ''
 
