@@ -1458,6 +1458,82 @@ td small,
   font-size: 22px;
 }
 
+.tax-data-file-ledger {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 10px 0;
+}
+
+.tax-data-file-ledger summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.tax-data-file-ledger summary small {
+  margin-left: 12px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.tax-data-file-ledger > p,
+.tax-data-file-ledger-row small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tax-data-file-ledger-list {
+  display: grid;
+  gap: 0;
+}
+
+.tax-data-file-ledger-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 100px 110px 70px;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 4px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.tax-data-file-ledger-name {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.tax-data-file-ledger-name strong {
+  overflow-wrap: anywhere;
+}
+
+.tax-data-file-ledger-row .tax-data-file-ledger-note {
+  grid-column: 1 / -1;
+}
+
+.tax-data-file-stored {
+  color: #08705f;
+}
+
+.tax-data-file-pending {
+  color: #9d522a;
+}
+
+@media (max-width: 680px) {
+  .tax-data-file-ledger summary small {
+    display: block;
+    margin: 4px 0 0 20px;
+  }
+
+  .tax-data-file-ledger-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .tax-data-file-ledger-name,
+  .tax-data-file-ledger-row .tax-data-file-ledger-note {
+    grid-column: 1 / -1;
+  }
+}
+
 .tax-data-slot-groups {
   display: grid;
   gap: 12px;

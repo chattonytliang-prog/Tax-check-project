@@ -131,6 +131,41 @@ function parseSourceFileIds(value) {
   return String(value || '').split(',').map((item) => item.trim()).filter(Boolean)
 }
 
+function sourceFileReviewNote(row, recordCount) {
+  if (recordCount > 0) return row.storage_key ? '' : '标准记录已入库，但原件未保存，无法在线核对。'
+  let evidence = {}
+  try { evidence = JSON.parse(row.evidence_json || '{}') } catch { evidence = {} }
+  if (!evidence || typeof evidence !== 'object') evidence = {}
+  const blockingChecks = (Array.isArray(evidence.templateMatches) ? evidence.templateMatches : [])
+    .flatMap((match) => match && Array.isArray(match.validations) ? match.validations : [])
+    .filter((check) => check && check.blocking === true && check.status === 'failed')
+    .map((check) => String(check.detail || check.label || '').trim().slice(0, 240))
+    .filter(Boolean)
+  if (blockingChecks.length) return blockingChecks.slice(0, 2).join('；')
+  if (row.parse_status === 'needs_confirmation') return '解析结果待人工确认，尚无标准记录。'
+  if (row.parse_status === 'failed') return '解析失败；系统未保存更具体的失败原因。'
+  return '尚无标准记录；登记或识别文件不等于已完成入库，系统未保存具体原因。'
+}
+
+function sourceFileLedger(rows, recordCountRows) {
+  const counts = new Map(recordCountRows.map((row) => [row.source_file_id, Number(row.count) || 0]))
+  return rows.map((row) => {
+    const recordCount = counts.get(row.id) || 0
+    return {
+      id: row.id,
+      fileName: row.file_name,
+      documentType: row.document_type,
+      periodStart: row.period_start || '',
+      periodEnd: row.period_end || '',
+      parseStatus: row.parse_status,
+      stored: Boolean(row.storage_key),
+      recordCount,
+      reviewNote: sourceFileReviewNote(row, recordCount),
+      createdAt: row.created_at,
+    }
+  })
+}
+
 async function sourceFilesByIds(db, ownerUserId, ids) {
   const cleanIds = Array.from(new Set(ids.filter(Boolean))).slice(0, 100)
   if (!cleanIds.length) return new Map()
@@ -399,22 +434,24 @@ export async function onRequestGet({ request, env }) {
 
     const missingSlots = slots.filter((slot) => slot.status === 'missing').map((slot) => slot.name)
     const collectedSlotIds = new Set(slots.filter((slot) => slot.status === 'collected').map((slot) => slot.slotId))
-    const [pendingConfirmationCount, sourceCountRows, linkedSourceRows, standardRecordCountRows, standardRecordRows] = await Promise.all([
+    const [pendingConfirmationCount, sourceRows, linkedSourceRows, standardRecordCountRows, standardRecordRows] = await Promise.all([
       openIssueCount(db, auth.user.id, clientId),
       all(
         db,
-        `SELECT COUNT(*) AS count,
-                SUM(CASE WHEN COALESCE(storage_key, '') <> '' THEN 1 ELSE 0 END) AS stored_count
+        `SELECT id, file_name, document_type, period_start, period_end, parse_status,
+                storage_key, evidence_json, created_at
          FROM tax_data_source_files
-         WHERE owner_user_id = ? AND client_id = ?`,
+         WHERE owner_user_id = ? AND client_id = ?
+         ORDER BY created_at DESC, id DESC`,
         auth.user.id,
         clientId,
       ),
       all(
         db,
-        `SELECT COUNT(DISTINCT source_file_id) AS count
+        `SELECT source_file_id, COUNT(*) AS count
          FROM tax_data_standard_records
-         WHERE owner_user_id = ? AND client_id = ? AND COALESCE(source_file_id, '') <> ''`,
+         WHERE owner_user_id = ? AND client_id = ? AND COALESCE(source_file_id, '') <> ''
+         GROUP BY source_file_id`,
         auth.user.id,
         clientId,
       ),
@@ -436,10 +473,12 @@ export async function onRequestGet({ request, env }) {
       ),
     ])
     const standardPeriodResult = buildStandardPeriods(standardRecordRows)
+    const sourceFiles = sourceFileLedger(sourceRows, linkedSourceRows)
 
     return json({
       clientId,
       slots,
+      sourceFiles,
       standardPeriods: standardPeriodResult.periods,
       crossValidation: standardPeriodResult.crossValidation,
       slotCatalog: SLOT_CATALOG,
@@ -448,9 +487,9 @@ export async function onRequestGet({ request, env }) {
       stats: {
         collectedSlotCount: collectedSlotIds.size,
         totalSlotCount: SLOT_CATALOG.length,
-        sourceFileCount: Number(sourceCountRows[0]?.count) || 0,
-        storedSourceFileCount: Number(sourceCountRows[0]?.stored_count) || 0,
-        linkedSourceFileCount: Number(linkedSourceRows[0]?.count) || 0,
+        sourceFileCount: sourceFiles.length,
+        storedSourceFileCount: sourceFiles.filter((source) => source.stored).length,
+        linkedSourceFileCount: sourceFiles.filter((source) => source.recordCount > 0).length,
         recordCount: Number(standardRecordCountRows[0]?.count) || 0,
       },
       standardTemplates: {

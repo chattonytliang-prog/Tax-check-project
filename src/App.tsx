@@ -499,6 +499,18 @@ type TaxDataSlot = {
 type TaxDataSummary = {
   clientId: string
   slots: TaxDataSlot[]
+  sourceFiles?: Array<{
+    id: string
+    fileName: string
+    documentType: string
+    periodStart: string
+    periodEnd: string
+    parseStatus: string
+    stored: boolean
+    recordCount: number
+    reviewNote: string
+    createdAt: string
+  }>
   standardPeriods?: TaxDataStandardPeriod[]
   crossValidation?: {
     messages: string[]
@@ -5167,6 +5179,7 @@ function App() {
 
   const selectedReport = reports.find((report) => report.id === selectedReportId)
   const activeTaxDataSummary = taxDataSummary?.clientId === selectedClient?.id ? taxDataSummary : null
+  const archivedSourceFiles = activeTaxDataSummary?.sourceFiles || []
   const activeTaxDataSummaryError = taxDataSummaryError && taxDataSummaryError.clientId === selectedClient?.id
     ? taxDataSummaryError.message : ''
   const detectionPeriodEntries = useMemo(() => {
@@ -7538,6 +7551,31 @@ function App() {
                       <strong>{displayedTaxDataStats.missingCount} 类</strong>
                     </div>
                   </div>
+                  {archivedSourceFiles.length > 0 ? (
+                    <details className="tax-data-file-ledger">
+                      <summary>
+                        <span>逐文件入库核对</span>
+                        <small>{archivedSourceFiles.length} 个已登记文件 · {archivedSourceFiles.filter((source) => source.recordCount === 0).length} 个未形成标准记录</small>
+                      </summary>
+                      <p>文件登记、原件保存、标准记录入库是三个不同环节；下表覆盖该企业全部期间的已登记文件。</p>
+                      <div className="tax-data-file-ledger-list">
+                        {archivedSourceFiles.map((source) => (
+                          <div className="tax-data-file-ledger-row" key={source.id}>
+                            <div className="tax-data-file-ledger-name">
+                              <strong>{source.fileName}</strong>
+                              <small>{source.periodStart && source.periodEnd ? `${source.periodStart} 至 ${source.periodEnd}` : '期间待确认'}</small>
+                            </div>
+                            <span>{source.stored ? '原件已保存' : '仅登记索引'}</span>
+                            <span className={source.recordCount > 0 ? 'tax-data-file-stored' : 'tax-data-file-pending'}>
+                              {source.recordCount > 0 ? `已入库 ${source.recordCount} 条` : '未入标准库'}
+                            </span>
+                            {source.stored ? <a href={`/api/tax-data/source?sourceFileId=${encodeURIComponent(source.id)}`} target="_blank" rel="noreferrer">查看原件</a> : <span />}
+                            {source.reviewNote ? <small className="tax-data-file-ledger-note">{source.reviewNote}</small> : null}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ) : null}
                   {taxDataFolderSummaries.length ? (
                     <>
                       <div className="tax-data-folder-grid" aria-label="资料分类">
