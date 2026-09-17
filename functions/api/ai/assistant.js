@@ -1,5 +1,6 @@
-import { badRequest, json, readJson, requireDb, serverError } from '../_utils.js'
+import { badRequest, json, requireDb, serverError } from '../_utils.js'
 import { requireUser } from '../auth/_auth.js'
+import { readAiRequest, reserveAiCall } from '../_ai_budget.js'
 
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
 const DEFAULT_MODEL = 'deepseek-v4-pro'
@@ -979,12 +980,14 @@ export async function onRequestPost({ request, env }) {
     const auth = await requireUser(request, db)
     if (auth.response) return auth.response
 
-    const { message = '', history = [], client = null, risks = [], report = null, assistantContext = null, images = [] } = await readJson(request)
+    const parsedRequest = await readAiRequest(request, 16_777_216)
+    if (parsedRequest.response) return parsedRequest.response
+    const { message = '', history = [], client = null, risks = [], report = null, assistantContext = null, images = [] } = parsedRequest.data
     const cleanMessage = String(message || '').trim()
     const cleanHistory = normalizeHistory(history)
     const cleanAssistantContext = normalizeAssistantContext(assistantContext)
     const cleanImages = normalizeImageInputs(images)
-    if (!cleanMessage) return badRequest('Message is required')
+    if (!cleanMessage || cleanMessage.length > 4000) return badRequest('请输入 1-4000 字的问题')
     if (!client?.id || !client?.name) return badRequest('Client id and name are required')
 
     const ownedClient = await resolveReadableClient(db, auth, client)
@@ -1021,6 +1024,8 @@ export async function onRequestPost({ request, env }) {
       }
     }
 
+    const quotaResponse = await reserveAiCall(db, auth.user, env)
+    if (quotaResponse) return quotaResponse
     const model = env.DEEPSEEK_MODEL || DEFAULT_MODEL
     const reasoning = reasoningConfig(cleanMessage)
     const isReadOnlyQuestion = isReadOnlyBusinessQuestion(cleanMessage)

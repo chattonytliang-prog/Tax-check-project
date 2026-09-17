@@ -9,10 +9,13 @@
     "lint": "eslint .",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
+    "coverage:billing": "vitest run --config vitest.billing.config.ts --coverage",
     "preview": "vite preview",
     "d1:list": "wrangler d1 list",
     "d1:migrate:assistant": "wrangler d1 execute tax-check-db --remote --file=migrations/0007_assistant_business_tools.sql",
-    "d1:migrate:intake": "wrangler d1 execute tax-check-db --remote --file=migrations/0008_full_tax_data_intake.sql"
+    "d1:migrate:intake": "wrangler d1 execute tax-check-db --remote --file=migrations/0008_full_tax_data_intake.sql",
+    "d1:migrate:points": "wrangler d1 execute tax-check-db --remote --file=migrations/0009_report_points.sql",
+    "d1:migrate:ai-budget": "wrangler d1 execute tax-check-db --remote --file=migrations/0010_ai_daily_usage.sql"
   },
   "dependencies": {
     "@e965/xlsx": "^0.20.3",

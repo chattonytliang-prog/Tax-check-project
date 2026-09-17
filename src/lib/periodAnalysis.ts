@@ -50,6 +50,12 @@ export function monthFromIndex(index: number) {
   return `${year}-${String(month).padStart(2, '0')}`
 }
 
+function monthEndDate(month: string) {
+  const [year, number] = month.split('-').map(Number)
+  const day = new Date(Date.UTC(year, number, 0)).getUTCDate()
+  return `${month}-${String(day).padStart(2, '0')}`
+}
+
 export function monthsBetween(startMonth: string, endMonth: string) {
   const start = monthIndex(startMonth)
   const end = monthIndex(endMonth)
@@ -196,7 +202,7 @@ export function summarizePeriodEntries<TEntry extends PeriodEntry>(client: Perio
     analysisMonth: monthCount === 1 ? months[0] : '',
     analysisQuarter: '',
     periodStartDate: `${months[0]}-01`,
-    periodEndDate: `${months[months.length - 1]}-31`,
+    periodEndDate: monthEndDate(months[months.length - 1]),
     dataBasis: entries.every((entry) => entry.dataBasis === first.dataBasis) ? first.dataBasis : '混合口径',
     comparisonPeriod: entries.length > 1 ? `${entries.length} 期合并分析` : first.comparisonPeriod,
     monthlyRevenue: Math.round(sumRevenue / monthCount),
@@ -209,7 +215,7 @@ export function summarizePeriodEntries<TEntry extends PeriodEntry>(client: Perio
   }
 }
 
-export function summarizeCanonicalPeriodEntries<TEntry extends PeriodEntry>(client: PeriodClientFields, entries: TEntry[]) {
+export function summarizeCanonicalPeriodEntries<TEntry extends PeriodEntry>(_client: PeriodClientFields, entries: TEntry[]) {
   const effectiveEntries = canonicalPeriodCover(entries)
   const months = Array.from(new Set(effectiveEntries.flatMap((entry) => entry.months))).sort((a, b) => monthIndex(a) - monthIndex(b))
   if (!effectiveEntries.length || !months.length) return {}
@@ -220,6 +226,11 @@ export function summarizeCanonicalPeriodEntries<TEntry extends PeriodEntry>(clie
   const sumCost = effectiveEntries.reduce((sum, entry) => sum + periodCostTotal(entry), 0)
   const sumProfit = effectiveEntries.reduce((sum, entry) => sum + periodProfitTotal(entry), 0)
   const sumInvoice = effectiveEntries.reduce((sum, entry) => sum + periodInvoiceTotal(entry), 0)
+  const allMonthsHaveRevenue = effectiveEntries.every((entry) => (
+    entry.months.length === 1 && entry.metricCoverage?.includes('monthlyRevenue')
+  ))
+  const hasFullCalendarYear = monthCount === 12 && months[0]?.endsWith('-01') && areMonthsContinuous(months) && allMonthsHaveRevenue
+  const hasConsecutiveYear = monthCount === 12 && areMonthsContinuous(months) && allMonthsHaveRevenue
   const numericValue = (entry: TEntry, field: string) => Number((entry.snapshot as unknown as Record<string, unknown>)[field] || 0)
   const maxValue = (field: string) => effectiveEntries.reduce((maximum, entry) => Math.max(maximum, numericValue(entry, field)), 0)
   const sumValue = (field: string) => effectiveEntries.reduce((sum, entry) => sum + numericValue(entry, field), 0)
@@ -229,12 +240,12 @@ export function summarizeCanonicalPeriodEntries<TEntry extends PeriodEntry>(clie
     .find((value) => value !== 0) || 0
   return {
     ...first.snapshot,
-    analysisPeriodType: monthCount === 1 ? '月度' : monthCount === 12 && months[0].endsWith('-01') ? '年度' : '自定义期间',
+    analysisPeriodType: monthCount === 1 ? '月度' : hasFullCalendarYear ? '年度' : '自定义期间',
     analysisYear: months[0]?.slice(0, 4) || first.analysisYear,
     analysisMonth: monthCount === 1 ? months[0] : '',
     analysisQuarter: '',
     periodStartDate: `${months[0]}-01`,
-    periodEndDate: `${months[months.length - 1]}-31`,
+    periodEndDate: monthEndDate(months[months.length - 1]),
     dataBasis: '标准资料',
     comparisonPeriod: effectiveEntries.length > 1
       ? `${effectiveEntries.length} 个有独立原始资料的月份合并分析${missingMonths.length ? `；期间内其他月份仅用汇总资料交叉验证` : ''}`
@@ -243,8 +254,8 @@ export function summarizeCanonicalPeriodEntries<TEntry extends PeriodEntry>(clie
     monthlyCost: sumCost / monthCount,
     monthlyProfit: sumProfit / monthCount,
     monthlyInvoice: sumInvoice / monthCount,
-    annualRevenue: sumRevenue,
-    consecutive12MonthSales: monthCount >= 12 ? sumRevenue : client.consecutive12MonthSales,
+    annualRevenue: hasFullCalendarYear ? sumRevenue : 0,
+    consecutive12MonthSales: hasConsecutiveYear ? sumRevenue : 0,
     collectionFlow: effectiveEntries.reduce((sum, entry) => sum + Number(entry.snapshot.collectionFlow || 0), 0),
     employees: maxValue('employees'),
     employeeAnnualAvg: maxValue('employeeAnnualAvg') || maxValue('employees'),
@@ -256,7 +267,7 @@ export function summarizeCanonicalPeriodEntries<TEntry extends PeriodEntry>(clie
     inputTax: sumValue('inputTax'),
     vatTaxPayable: sumValue('vatTaxPayable'),
     endingVatCredit: latestValue('endingVatCredit'),
-    taxableSales: sumValue('taxableSales') || sumRevenue,
+    taxableSales: sumValue('taxableSales'),
   }
 }
 

@@ -15,6 +15,7 @@ export async function onRequestGet({ request, env }) {
           users.role,
           users.disabled_at,
           users.created_at,
+          COALESCE((SELECT balance FROM point_wallets WHERE user_id = users.id), 0) AS point_balance,
           COUNT(DISTINCT clients.id) AS clients_count,
           COUNT(DISTINCT reports.id) AS reports_count
          FROM users
@@ -33,6 +34,7 @@ export async function onRequestGet({ request, env }) {
       createdAt: user.created_at,
       clientsCount: user.clients_count || 0,
       reportsCount: user.reports_count || 0,
+      pointBalance: user.point_balance || 0,
     }))
 
     return json({ users })

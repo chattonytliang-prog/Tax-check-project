@@ -1,5 +1,6 @@
-import { badRequest, json, readJson, requireDb, serverError } from '../_utils.js'
+import { badRequest, json, requireDb, serverError } from '../_utils.js'
 import { requireUser } from '../auth/_auth.js'
+import { readAiRequest, reserveAiCall } from '../_ai_budget.js'
 
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
 const DEFAULT_MODEL = 'deepseek-v4-pro'
@@ -19,11 +20,11 @@ function compactRisk(risk) {
 }
 
 function calculateEstablishmentFacts(client, now = new Date()) {
-  const establishedAt = client?.establishedAt ? new Date(`${client.establishedAt}T00:00:00Z`) : null
+  const establishedAt = client.establishedAt ? new Date(`${client.establishedAt}T00:00:00Z`) : null
   if (!establishedAt || Number.isNaN(establishedAt.getTime())) {
     return {
       asOfDate: now.toISOString().slice(0, 10),
-      establishedAt: client?.establishedAt || '',
+      establishedAt: client.establishedAt || '',
       monthsSinceEstablished: null,
       isEstablishedLessThan12Months: null,
     }
@@ -109,7 +110,7 @@ Structured professional report object. Follow this structure first; polish wordi
 ${JSON.stringify(structuredReport || {}, null, 2)}
 
 原始报告：
-${content || ''}`
+${content}`
 }
 
 export async function onRequestPost({ request, env }) {
@@ -122,18 +123,32 @@ export async function onRequestPost({ request, env }) {
     const auth = await requireUser(request, db)
     if (auth.response) return auth.response
 
-    const { client, risks = [], content = '', aiReview = null, structuredReport = null } = await readJson(request)
-    if (!client?.id || !client?.name) {
-      return badRequest('Client id and name are required')
+    const parsedRequest = await readAiRequest(request)
+    if (parsedRequest.response) return parsedRequest.response
+    const body = parsedRequest.data
+    const reportId = body?.reportId
+    const aiReview = body?.aiReview ?? null
+    if (typeof reportId !== 'string' || !reportId.trim()) {
+      return badRequest('Report id is required')
     }
 
-    const ownedClient = await db
-      .prepare('SELECT id FROM clients WHERE id = ? AND owner_user_id = ?')
-      .bind(client.id, auth.user.id)
+    const savedRow = await db
+      .prepare('SELECT payload_json FROM reports WHERE id = ? AND owner_user_id = ?')
+      .bind(reportId, auth.user.id)
       .first()
-    if (!ownedClient) {
-      return json({ error: 'Client not found' }, { status: 404 })
+    if (!savedRow) {
+      return json({ error: '请先保存并授权报告' }, { status: 403 })
     }
+    const savedReport = JSON.parse(savedRow.payload_json)
+    const { client, risks } = savedReport.aiSource || {}
+    if (savedReport.aiGenerated || client?.id !== savedReport.clientId
+      || client?.name !== savedReport.clientName || !Array.isArray(risks)
+      || risks.some((risk) => !risk || typeof risk !== 'object')) {
+      return json({ error: '报告没有可复核的原始输入，或已完成 AI 生成' }, { status: 409 })
+    }
+
+    const quotaResponse = await reserveAiCall(db, auth.user, env)
+    if (quotaResponse) return quotaResponse
 
     const establishmentFacts = calculateEstablishmentFacts(client)
     const model = env.DEEPSEEK_MODEL || DEFAULT_MODEL
@@ -152,7 +167,7 @@ export async function onRequestPost({ request, env }) {
           },
           {
             role: 'user',
-            content: buildPrompt(client, risks, content, aiReview, establishmentFacts, structuredReport),
+            content: buildPrompt(client, risks, savedReport.content, aiReview, establishmentFacts, savedReport.structured),
           },
         ],
         temperature: 0.2,

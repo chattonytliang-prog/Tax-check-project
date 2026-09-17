@@ -129,7 +129,7 @@ describe('periodAnalysis', () => {
       analysisPeriodType: '自定义期间',
       analysisYear: '2023',
       periodStartDate: '2023-01-01',
-      periodEndDate: '2023-02-31',
+      periodEndDate: '2023-02-28',
       monthlyRevenue: 150000,
       annualRevenue: 300000,
       collectionFlow: 270000,
@@ -175,7 +175,7 @@ describe('periodAnalysis', () => {
     expect(canonicalPeriodCover([jan, feb, quarter]).map((item) => item.id)).toEqual([jan.id, feb.id])
     expect(summarizeCanonicalPeriodEntries(baseClient, [jan, feb, quarter])).toMatchObject({
       dataBasis: '标准资料',
-      annualRevenue: 300000,
+      annualRevenue: 0,
       payrollTotal: 30000,
       employees: 3,
       assetsTotal: 600000,
@@ -189,8 +189,55 @@ describe('periodAnalysis', () => {
 
     expect(summary).toMatchObject({
       monthlyRevenue: 200000,
-      annualRevenue: 400000,
+      annualRevenue: 0,
       comparisonPeriod: '2 个有独立原始资料的月份合并分析；期间内其他月份仅用汇总资料交叉验证',
+    })
+  })
+
+  it('keeps source-backed tax amounts in their actual period', () => {
+    const oneMonth = entry({ analysisMonth: '2024-02', monthlyRevenue: 100000 })
+    const february = summarizeCanonicalPeriodEntries(baseClient, [{
+      ...oneMonth,
+      snapshot: { ...oneMonth.snapshot, taxableSales: 85000 },
+    }])
+    expect(february).toMatchObject({
+      periodEndDate: '2024-02-29',
+      annualRevenue: 0,
+      consecutive12MonthSales: 0,
+      taxableSales: 85000,
+    })
+
+    const calendarYear = Array.from({ length: 12 }, (_, index) => ({
+      ...entry({
+        analysisMonth: `2025-${String(index + 1).padStart(2, '0')}`,
+        monthlyRevenue: 100000,
+      }),
+      metricCoverage: ['monthlyRevenue'],
+    }))
+    expect(summarizeCanonicalPeriodEntries(baseClient, calendarYear)).toMatchObject({
+      analysisPeriodType: '年度',
+      annualRevenue: 1200000,
+      consecutive12MonthSales: 1200000,
+    })
+    const rollingYear = Array.from({ length: 12 }, (_, index) => ({
+      ...entry({
+        analysisMonth: monthFromIndex(2024 * 12 + 8 + index),
+        monthlyRevenue: 100000,
+      }),
+      metricCoverage: ['monthlyRevenue'],
+    }))
+    expect(summarizeCanonicalPeriodEntries(baseClient, rollingYear)).toMatchObject({
+      analysisPeriodType: '自定义期间',
+      annualRevenue: 0,
+      consecutive12MonthSales: 1200000,
+    })
+    expect(summarizeCanonicalPeriodEntries(baseClient, [...calendarYear, entry({ analysisMonth: '2026-01', monthlyRevenue: 100000 })])).toMatchObject({
+      annualRevenue: 0,
+      consecutive12MonthSales: 0,
+    })
+    expect(summarizeCanonicalPeriodEntries(baseClient, calendarYear.map((month, index) => index === 6 ? { ...month, metricCoverage: [] } : month))).toMatchObject({
+      annualRevenue: 0,
+      consecutive12MonthSales: 0,
     })
   })
 

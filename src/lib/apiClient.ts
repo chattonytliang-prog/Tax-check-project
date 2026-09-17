@@ -12,7 +12,7 @@ async function apiError(response: Response) {
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   let response = await fetch(url, init)
-  if ([502, 503, 504].includes(response.status)) {
+  if ((!init?.method || init.method === 'GET') && [502, 503, 504].includes(response.status)) {
     await new Promise((resolve) => setTimeout(resolve, 800))
     response = await fetch(url, init)
   }
@@ -28,7 +28,7 @@ export function apiSend<T>(url: string, method: 'POST' | 'PUT', body: unknown, i
   return requestJson<T>(url, {
     ...init,
     method,
-    headers: { ...init?.headers, 'content-type': 'application/json' },
+    headers: { ...init?.headers, 'content-type': 'application/json', 'x-requested-with': 'tax-workspace' },
     body: JSON.stringify(body),
   })
 }

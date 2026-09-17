@@ -27,6 +27,8 @@ import {
   Trash2,
   UserCog,
   Printer,
+  Coins,
+  QrCode,
 } from 'lucide-react'
 import {
   builtInRuleConditions,
@@ -115,7 +117,7 @@ import { apiDelete, apiGet, apiSend, apiUpload } from './lib/apiClient'
 import { explicitDerivedMetadata } from './lib/explicitDerivedFields'
 import './App.css'
 
-type Page = 'dashboard' | 'assistant' | 'clients' | 'form' | 'result' | 'report' | 'reports' | 'rules' | 'admin'
+type Page = 'dashboard' | 'assistant' | 'clients' | 'form' | 'result' | 'report' | 'reports' | 'wallet' | 'rules' | 'admin'
 type RiskDetectionStep = 'client' | 'period' | 'confirm' | 'result'
 type TaxpayerType = '' | '小规模纳税人' | '一般纳税人' | '个体工商户'
 type ProjectScope = '单主体' | '集团项目'
@@ -1101,6 +1103,7 @@ type Report = {
   risks: RiskResult[]
   content: string
   structured?: StructuredReport
+  aiSource?: { client: Client; risks: Array<Record<string, unknown>> }
   aiReview?: AiReview
   aiGenerated?: boolean
   aiModel?: string
@@ -1125,6 +1128,42 @@ type AdminUser = {
   createdAt: string
   clientsCount: number
   reportsCount: number
+  pointBalance: number
+}
+
+type PointTransaction = {
+  id: string
+  delta: number
+  source: 'report' | 'admin_adjustment'
+  reportId: string | null
+  actorUserId: string | null
+  note: string
+  createdAt: string
+}
+
+type PointWallet = {
+  balance: number
+  freeReportAvailable: boolean
+  adminUnlimited: boolean
+  reportCost: number
+  transactions: PointTransaction[]
+}
+
+const paymentQrImageUrl = import.meta.env.VITE_PAYMENT_QR_IMAGE_URL as string | undefined
+
+function formatPointTime(value: string) {
+  const date = new Date(value.includes('T') ? value : `${value.replace(' ', 'T')}Z`)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(date)
 }
 
 const emptyClient: Client = {
@@ -3276,6 +3315,8 @@ function deriveClientMetrics(client: Client): Client {
     manualDerivedReasons: { ...(normalized.manualDerivedReasons || {}) },
   }
 
+  if (derived.dataBasis === '标准资料') return derived
+
   autoDerivedFieldConfigs.forEach((field) => {
     if (!isManualDerivedField(derived, field.key)) {
       derived[field.key] = field.calculate(derived) as never
@@ -4738,7 +4779,14 @@ function App() {
   const [selectedReportId, setSelectedReportId] = useState('')
   const [editingClient, setEditingClient] = useState<Client>(blankDraftClient())
   const [reports, setReports] = useState<Report[]>([])
+  const [pointWallet, setPointWallet] = useState<PointWallet | null>(null)
+  const [pointWalletError, setPointWalletError] = useState('')
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
+  const [adjustingPointsUser, setAdjustingPointsUser] = useState<AdminUser | null>(null)
+  const [pointAdjustment, setPointAdjustment] = useState('200')
+  const [pointAdjustmentNote, setPointAdjustmentNote] = useState('')
+  const [pointAdjustmentBusy, setPointAdjustmentBusy] = useState(false)
+  const pointAdjustmentRequest = useRef<{ userId: string; delta: number; note: string; requestId: string } | null>(null)
   const [managedRules, setManagedRules] = useState<ManagedRule[]>([])
   const [restrictedRuleCount, setRestrictedRuleCount] = useState(0)
   const [ruleDraft, setRuleDraft] = useState<ManagedRule>(emptyManagedRule)
@@ -4759,8 +4807,12 @@ function App() {
   const [rulePageSize, setRulePageSize] = useState<RulePageSize>(50)
   const [rulePage, setRulePage] = useState(1)
   const [, setDataStatus] = useState<'loading' | 'connected' | 'fallback'>('loading')
-  const [aiReportStage, setAiReportStage] = useState<'reviewing' | 'generating' | null>(null)
+  const [aiReportStage, setAiReportStage] = useState<'saving' | 'reviewing' | 'generating' | null>(null)
+  const reportInFlight = useRef(false)
+  const reportRetryDraft = useRef<{ fingerprint: string; report: Report } | null>(null)
   const [taxDataSummary, setTaxDataSummary] = useState<TaxDataSummary | null>(null)
+  const [taxDataSummaryError, setTaxDataSummaryError] = useState<{ clientId: string; message: string } | null>(null)
+  const [taxDataSummaryReload, setTaxDataSummaryReload] = useState(0)
   const [taxDataDetailSlot, setTaxDataDetailSlot] = useState<TaxDataSlot | null>(null)
   const [taxDataDetail, setTaxDataDetail] = useState<TaxDataDetail | null>(null)
   const [taxDataDetailLoading, setTaxDataDetailLoading] = useState(false)
@@ -4813,6 +4865,20 @@ function App() {
       active = false
     }
   }, [])
+
+  useEffect(() => {
+    if (!loggedIn || !authUser) return
+    let active = true
+    apiGet<PointWallet>('/api/points').then((wallet) => {
+      if (active) {
+        setPointWallet(wallet)
+        setPointWalletError('')
+      }
+    }).catch(() => {
+      if (active) setPointWalletError('积分数据暂不可用，请稍后刷新。')
+    })
+    return () => { active = false }
+  }, [loggedIn, authUser])
 
   useEffect(() => {
     if (!loggedIn || !authUser) return
@@ -5067,20 +5133,28 @@ function App() {
     async function loadTaxDataSummary() {
       try {
         const response = await apiGet<TaxDataSummary>(`/api/tax-data/summary?clientId=${encodeURIComponent(selectedClient.id)}`)
-        if (active) setTaxDataSummary(response)
+        if (active) {
+          setTaxDataSummary(response)
+          setTaxDataSummaryError(null)
+        }
       } catch (error) {
         console.warn('Failed to load tax data summary.', error)
-        if (active) setTaxDataSummary(null)
+        if (active) {
+          setTaxDataSummary(null)
+          setTaxDataSummaryError({ clientId: selectedClient.id, message: '资料汇总读取失败，请重试。' })
+        }
       }
     }
     loadTaxDataSummary()
     return () => {
       active = false
     }
-  }, [loggedIn, selectedClient?.id])
+  }, [loggedIn, selectedClient?.id, taxDataSummaryReload])
 
   const selectedReport = reports.find((report) => report.id === selectedReportId)
   const activeTaxDataSummary = taxDataSummary?.clientId === selectedClient?.id ? taxDataSummary : null
+  const activeTaxDataSummaryError = taxDataSummaryError && taxDataSummaryError.clientId === selectedClient?.id
+    ? taxDataSummaryError.message : ''
   const detectionPeriodEntries = useMemo(() => {
     if (!selectedClient) return []
     const sourceBacked = standardPeriodEntriesFromSummary(selectedClient, activeTaxDataSummary)
@@ -6150,6 +6224,53 @@ function App() {
     setAdminUsers(response.users)
   }
 
+  const refreshPointWallet = async () => {
+    try {
+      setPointWallet(await apiGet<PointWallet>('/api/points'))
+      setPointWalletError('')
+    } catch {
+      setPointWalletError('积分数据暂不可用，请稍后刷新。')
+    }
+  }
+
+  const submitPointAdjustment = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!adjustingPointsUser || pointAdjustmentBusy) return
+    const delta = Number(pointAdjustment)
+    if (!Number.isSafeInteger(delta) || delta === 0 || Math.abs(delta) > 100000 || !pointAdjustmentNote.trim()) {
+      window.alert('请输入非零整数积分和调整原因。')
+      return
+    }
+    if (!window.confirm(`确认将「${adjustingPointsUser.username}」的积分调整 ${delta > 0 ? '+' : ''}${delta} 吗？`)) return
+    const note = pointAdjustmentNote.trim()
+    const pending = pointAdjustmentRequest.current
+    const requestId = pending?.userId === adjustingPointsUser.id && pending.delta === delta && pending.note === note
+      ? pending.requestId
+      : crypto.randomUUID()
+    pointAdjustmentRequest.current = { userId: adjustingPointsUser.id, delta, note, requestId }
+    setPointAdjustmentBusy(true)
+    try {
+      await apiSend<{ ok: true }>(`/api/admin/users/${adjustingPointsUser.id}/points`, 'POST', {
+        delta,
+        note,
+        requestId,
+      })
+      pointAdjustmentRequest.current = null
+      try {
+        await refreshAdminUsers()
+      } catch {
+        window.alert('积分已调整，但用户列表刷新失败，请手动刷新。')
+      }
+      if (adjustingPointsUser.id === authUser?.id) await refreshPointWallet()
+      setAdjustingPointsUser(null)
+      setPointAdjustmentNote('')
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : '调整积分失败')
+    } finally {
+      setPointAdjustmentBusy(false)
+    }
+  }
+
   const refreshRules = async () => {
     const response = await apiGet<{ rules: ManagedRule[]; restrictedCount?: number }>('/api/rules')
     setManagedRules(hydrateManagedRules(response.rules))
@@ -6345,8 +6466,36 @@ function App() {
     setEditingClient({ ...blankClient, id: editingClient.id || crypto.randomUUID() })
   }
 
+  const saveAiEnrichment = async (baseReport: Report, aiReview: AiReview | null, reviewModel = '') => {
+    const response = await apiSend<{ content: string; model: string }>('/api/ai/report', 'POST', {
+      reportId: baseReport.id,
+      aiReview,
+    })
+    const enhanced: Report = {
+      ...baseReport,
+      content: sanitizePublicReportContent(response.content),
+      ...(aiReview ? { aiReview } : {}),
+      aiGenerated: true,
+      aiModel: response.model || reviewModel,
+    }
+    let saved = enhanced
+    try {
+      await apiSend<{ report: Report }>('/api/reports', 'POST', enhanced)
+    } catch (error) {
+      try {
+        const current = await apiGet<{ report: Report }>(`/api/reports/${encodeURIComponent(baseReport.id)}`)
+        if (!current.report.aiGenerated) throw error
+        saved = current.report
+      } catch {
+        throw error
+      }
+    }
+    setReports((current) => current.map((item) => item.id === saved.id ? saved : item))
+    return saved
+  }
+
   const createReport = async (confirmed = false) => {
-    if (!selectedClient || aiReportStage) return
+    if (!selectedClient || reportInFlight.current) return
     if (!detectionPeriodEntries.length) {
       window.alert('请先导入并解析原始标准资料，再基于标准资料生成报告。')
       return
@@ -6356,9 +6505,14 @@ function App() {
       return
     }
     if (!confirmed) {
+      setPointWallet(null)
+      setPointWalletError('')
       setReportConfirmOpen(true)
+      void refreshPointWallet()
       return
     }
+    if (!pointWallet) return
+    const expectedCostPoints = pointWallet.adminUnlimited || pointWallet.freeReportAvailable ? 0 : pointWallet.reportCost
     setReportConfirmOpen(false)
 
     const reportClient = deriveClientMetrics({ ...(selectedDetectionClient || selectedClient), periodEntries: [] })
@@ -6367,26 +6521,53 @@ function App() {
     const skippedRules = getSkippedRules(reportClient, managedRules)
     const evaluatedRuleCount = getSourceRules(managedRules).length
     const structuredReport = buildStructuredReport(reportClient, risks, skippedRules, evaluatedRuleCount)
-    const baseReport: Report = {
-      id: crypto.randomUUID(),
-      clientId: reportClient.id,
-      clientName: reportClient.name,
-      riskLevel: getOverallLevel(risks),
-      createdAt: formatDate(),
-      risks,
-      content: buildProfessionalReportContent(structuredReport),
-      structured: structuredReport,
-    }
-    setSelectedReportId('')
-    setPage('report')
-
-    let report = baseReport
     const risksForAi = risks.map((risk, index) => ({
       ...risk,
       displayOrder: index + 1,
       priority: riskPriority(risk),
       reason: risk.reason(reportClient),
     }))
+    const draft = {
+      clientId: reportClient.id,
+      clientName: reportClient.name,
+      riskLevel: getOverallLevel(risks),
+      risks,
+      content: sanitizePublicReportContent(buildProfessionalReportContent(structuredReport)),
+      structured: structuredReport,
+      aiSource: { client: reportClient, risks: risksForAi },
+    }
+    const fingerprint = JSON.stringify({ ownerUserId: authUser?.id, draft })
+    const baseReport: Report = reportRetryDraft.current?.fingerprint === fingerprint
+      ? reportRetryDraft.current.report
+      : { ...draft, id: crypto.randomUUID(), createdAt: formatDate() }
+    reportRetryDraft.current = { fingerprint, report: baseReport }
+    reportInFlight.current = true
+    setAiReportStage('saving')
+    try {
+      await apiSend<{ report: Report }>('/api/reports', 'POST', baseReport, {
+        headers: { 'x-expected-report-cost': String(expectedCostPoints) },
+      })
+      reportRetryDraft.current = null
+      setReports((current) => [baseReport, ...current])
+      setSelectedReportId(baseReport.id)
+      setPage('report')
+      setDataStatus('connected')
+      apiGet<PointWallet>('/api/points').then(setPointWallet).catch(() => undefined)
+    } catch (error) {
+      reportInFlight.current = false
+      setAiReportStage(null)
+      const message = error instanceof Error ? error.message : '报告保存失败'
+      if (message.includes('积分不足')) setPage('wallet')
+      if (message.includes('免费名额或本次费用已变化')) {
+        setPointWallet(null)
+        setPointWalletError('')
+        setReportConfirmOpen(true)
+        void refreshPointWallet()
+      }
+      window.alert(message)
+      return
+    }
+
     try {
       setAiReportStage('reviewing')
       const [reviewResponse] = await Promise.all([
@@ -6398,51 +6579,41 @@ function App() {
       ])
 
       setAiReportStage('generating')
-      const [reportResponse] = await Promise.all([
-        apiSend<{ content: string; model: string; usage?: unknown }>('/api/ai/report', 'POST', {
-          client: reportClient,
-          risks: risksForAi,
-          content: baseReport.content,
-          structuredReport,
-          aiReview: reviewResponse.review,
-        }),
+      await Promise.all([
+        saveAiEnrichment(baseReport, reviewResponse.review, reviewResponse.model),
         wait(2000),
       ])
-      const reviewedStructuredReport = buildStructuredReport(reportClient, risks, skippedRules, evaluatedRuleCount)
-
-      report = {
-        ...baseReport,
-        content: sanitizePublicReportContent(reportResponse.content),
-        structured: reviewedStructuredReport,
-        aiReview: reviewResponse.review,
-        aiGenerated: true,
-        aiModel: reportResponse.model || reviewResponse.model,
-      }
     } catch (error) {
-      console.warn('AI report generation failed, using local report template.', error)
-      report = {
-        ...baseReport,
-        content: sanitizePublicReportContent(`${baseReport.content}\n\nAI 处理提示：本次 AI 数据复核或报告生成失败，系统已使用本地标准模板生成报告。`),
-        aiGenerated: false,
-      }
-      setDataStatus('fallback')
+      console.warn('AI report generation failed, keeping the saved standard report.', error)
+      window.alert('AI 润色暂未完成，标准报告已保存。可在报告页重试 AI 润色，同一份报告不会再次扣积分。')
     } finally {
       const elapsed = Date.now() - startedAt
       if (elapsed < 6000) {
         await wait(6000 - elapsed)
       }
       setAiReportStage(null)
+      reportInFlight.current = false
     }
 
-    setReports((current) => [report, ...current])
-    setSelectedReportId(report.id)
+  }
 
+  const retryAiReport = async (report: Report) => {
+    if (!report.aiSource || report.aiGenerated || reportInFlight.current) return
+    reportInFlight.current = true
+    setAiReportStage('generating')
     try {
-      await apiSend<{ report: Report }>('/api/reports', 'POST', report)
-      setDataStatus('connected')
+      await saveAiEnrichment(report, report.aiReview || null)
     } catch (error) {
-      console.warn('Report saved locally only.', error)
-      setDataStatus('fallback')
+      try {
+        const current = await apiGet<{ report: Report }>(`/api/reports/${encodeURIComponent(report.id)}`)
+        if (!current.report.aiGenerated) throw error
+        setReports((items) => items.map((item) => item.id === report.id ? current.report : item))
+      } catch {
+        window.alert(error instanceof Error ? error.message : 'AI 润色失败，请稍后重试。')
+      }
+    } finally {
+      setAiReportStage(null)
+      reportInFlight.current = false
     }
   }
 
@@ -6509,6 +6680,8 @@ function App() {
         },
       )
       setAuthUser(response.user)
+      setPointWallet(null)
+      setPointWalletError('')
       if (!(response.user.username.trim().toLowerCase() === 'test1' && response.user.role === 'admin' && !response.user.actor)) {
         setManagedRules([])
         setRestrictedRuleCount(0)
@@ -6535,6 +6708,8 @@ function App() {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
     setLoggedIn(false)
     setAuthUser(null)
+    setPointWallet(null)
+    setPointWalletError('')
     setManagedRules([])
     setRestrictedRuleCount(0)
     setAuthPassword('')
@@ -6578,6 +6753,8 @@ function App() {
     try {
       const response = await apiSend<{ user: AuthUser }>('/api/admin/impersonate', 'POST', { userId: user.id })
       setAuthUser(response.user)
+      setPointWallet(null)
+      setPointWalletError('')
       setClients([])
       setReports([])
       setManagedRules([])
@@ -6594,6 +6771,8 @@ function App() {
     try {
       const response = await apiSend<{ user: AuthUser }>('/api/admin/stop-impersonation', 'POST', {})
       setAuthUser(response.user)
+      setPointWallet(null)
+      setPointWalletError('')
       setClients([])
       setReports([])
       setPage('admin')
@@ -6705,6 +6884,9 @@ function App() {
             </button>
             <button className={page === 'reports' || page === 'report' ? 'active' : ''} onClick={() => setPage('reports')}>
               <FileText /> 报告
+            </button>
+            <button className={page === 'wallet' ? 'active' : ''} onClick={() => setPage('wallet')}>
+              <Coins /> 积分
             </button>
             {canViewRuleLibrary && (
               <button className={page === 'rules' ? 'active' : ''} onClick={() => setPage('rules')}>
@@ -7000,7 +7182,7 @@ function App() {
             taxDataSummary={activeTaxDataSummary}
             taxDataMonth={effectiveTaxDataMonth}
             onApplyClientDraft={(draftClient) => applyAssistantClientDraft(draftClient)}
-            onGenerateReport={() => createReport(true)}
+            onGenerateReport={() => createReport()}
             onTaxDataSummaryUpdate={setTaxDataSummary}
           />
         </div>
@@ -7079,6 +7261,13 @@ function App() {
                   </div>
                 </div>
                 <section className="tax-data-board" aria-label="企业资料覆盖看板">
+                  {!activeTaxDataSummary ? (
+                    <div className="tax-data-empty" role="status">
+                      <strong>{activeTaxDataSummaryError || '正在读取资料汇总...'}</strong>
+                      {activeTaxDataSummaryError ? <button type="button" className="secondary-button compact-button" onClick={() => { setTaxDataSummaryError(null); setTaxDataSummaryReload((value) => value + 1) }}>重试</button> : null}
+                    </div>
+                  ) : (
+                  <>
                   <div className="tax-data-period-nav">
                     <div>
                       <span>{taxDataViewMode === 'overview' ? '企业资料' : '查看资料期间'}</span>
@@ -7283,6 +7472,8 @@ function App() {
                       <p>在 AI 财税助手上传并确认导入后，增值税申报表、附表四、工资表、科目余额表等会自动出现在这里。</p>
                     </div>
                   )}
+                  </>
+                  )}
                 </section>
                 {selectedClient.periodEntries.length > 0 && (
                   <div className="archive-period-list">
@@ -7411,7 +7602,7 @@ function App() {
                   <RefreshCcw /> 编辑资料
                 </button>
                 <button className="primary-button" onClick={() => createReport()} disabled={riskDetectionStep !== 'result' || Boolean(aiReportStage)}>
-                  <Sparkles /> {aiReportStage === 'reviewing' ? 'AI 正在复核数据...' : aiReportStage === 'generating' ? 'AI 正在生成报告...' : '生成报告'}
+                  <Sparkles /> {aiReportStage === 'saving' ? '正在核验积分并保存...' : aiReportStage === 'reviewing' ? 'AI 正在复核数据...' : aiReportStage === 'generating' ? 'AI 正在生成报告...' : '生成报告'}
                 </button>
               </div>
             </header>
@@ -7841,9 +8032,26 @@ function App() {
               {currentReportIssues.length > 0 && (
                 <p className="period-warning">当前仍有检测必填字段缺失，可以继续生成报告，但报告会标记为资料不足，仅供线索参考。</p>
               )}
+              <p className="report-price-note">
+                {!pointWallet
+                  ? pointWalletError || '正在核对积分账户，暂不能确认生成费用。'
+                  : pointWallet.adminUnlimited
+                  ? '管理员生成报告不扣积分。'
+                  : pointWallet.freeReportAvailable
+                    ? '本账号首份报告免费，本次不扣积分。'
+                    : `本次生成将扣除 200 积分，当前余额 ${pointWallet.balance} 积分。`}
+              </p>
+              {pointWalletError && (
+                <button type="button" className="secondary-button" onClick={() => { setPointWalletError(''); void refreshPointWallet() }}>
+                  <RefreshCcw /> 重新查询积分
+                </button>
+              )}
               <div className="modal-actions">
                 <button type="button" className="secondary-button" onClick={() => setReportConfirmOpen(false)}>返回检查</button>
-                <button type="button" className="primary-button" disabled={!selectedDetectionClient || Boolean(aiReportStage)} onClick={() => void createReport(true)}>
+                {pointWallet && !pointWallet.adminUnlimited && !pointWallet.freeReportAvailable && pointWallet.balance < pointWallet.reportCost && (
+                  <button type="button" className="secondary-button" onClick={() => { setReportConfirmOpen(false); setPage('wallet') }}>查看充值方式</button>
+                )}
+                <button type="button" className="primary-button" disabled={!selectedDetectionClient || !pointWallet || (!pointWallet.adminUnlimited && !pointWallet.freeReportAvailable && pointWallet.balance < pointWallet.reportCost) || Boolean(aiReportStage)} onClick={() => void createReport(true)}>
                   确认生成报告
                 </button>
               </div>
@@ -7863,6 +8071,7 @@ function App() {
               }
               createReport()
             }}
+            onRetryAi={retryAiReport}
             aiStage={aiReportStage}
             onUpdate={(content) =>
               setReports((current) =>
@@ -7986,12 +8195,77 @@ function App() {
           </section>
         )}
 
+        {page === 'wallet' && (
+          <section className="page">
+            <header className="page-header">
+              <div>
+                <p className="eyebrow">报告积分</p>
+                <h2>积分账户</h2>
+              </div>
+              <button className="secondary-button" onClick={() => void refreshPointWallet()}>
+                <RefreshCcw /> 刷新
+              </button>
+            </header>
+            <div className="wallet-overview">
+              <div>
+                <span>可用积分</span>
+                <strong>{pointWallet?.adminUnlimited ? '管理员免费' : pointWallet ? pointWallet.balance : '—'}</strong>
+              </div>
+              <div>
+                <span>本次报告</span>
+                <strong>{!pointWallet ? '查询中' : pointWallet.adminUnlimited || pointWallet.freeReportAvailable ? '免费' : '200 积分'}</strong>
+              </div>
+              <div>
+                <span>兑换规则</span>
+                <strong>1 元 = 1 积分</strong>
+              </div>
+            </div>
+            {pointWalletError && <p className="period-warning">{pointWalletError}</p>}
+            <div className="wallet-layout">
+              <div className="wallet-rules">
+                <h3>使用规则</h3>
+                <p>每个普通账号的首份报告免费，之后每生成一份新报告扣 200 积分；查看和重新导出已有报告不扣分。</p>
+                <p>删除报告不会返还已使用的免费次数或积分。管理员账号生成报告免费；管理员代入普通用户时，按该用户账户计费。</p>
+                <p>充值 200 元对应 200 积分，刚好可生成一份付费报告。积分到账由管理员核实后手动调整，并记录操作原因。</p>
+              </div>
+              {!pointWallet?.adminUnlimited && (
+                <div className="payment-code-panel">
+                  <h3>充值 200 元</h3>
+                  <div className="payment-code-placeholder" aria-label={paymentQrImageUrl ? '收款二维码' : '扫码支付演示位置'}>
+                    {paymentQrImageUrl ? <img src={paymentQrImageUrl} alt="收款二维码" /> : <QrCode aria-hidden="true" />}
+                  </div>
+                  <p>{paymentQrImageUrl ? '付款时备注用户名，联系管理员核实到账后加分。扫码不会自动到账。' : '演示扫码支付位置，当前没有可付款的二维码。请联系管理员充值。'}</p>
+                </div>
+              )}
+            </div>
+            <div className="table-panel wallet-history">
+              <h3>积分流水</h3>
+              <table>
+                <thead><tr><th>时间</th><th>类型</th><th>变动</th><th>说明</th></tr></thead>
+                <tbody>
+                  {pointWallet?.transactions.map((entry) => (
+                    <tr key={entry.id}>
+                      <td>{formatPointTime(entry.createdAt)}</td>
+                      <td>{entry.source === 'report' ? '报告扣分' : '管理员调整'}</td>
+                      <td className={entry.delta > 0 ? 'point-positive' : 'point-negative'}>{entry.delta > 0 ? '+' : ''}{entry.delta}</td>
+                      <td>{entry.note}</td>
+                    </tr>
+                  ))}
+                  {pointWallet && !pointWallet.transactions.length && (
+                    <tr><td colSpan={4}>暂无积分流水</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
         {page === 'admin' && canUseAdmin && (
           <section className="page">
             <header className="page-header">
               <div>
                 <p className="eyebrow">账号管理</p>
-                <h2>测试用户后台</h2>
+                <h2>用户与积分管理</h2>
               </div>
               <button className="secondary-button" onClick={refreshAdminUsers}>
                 <RefreshCcw /> 刷新
@@ -8006,6 +8280,7 @@ function App() {
                     <th>状态</th>
                     <th>企业</th>
                     <th>报告</th>
+                    <th>积分</th>
                     <th>注册时间</th>
                     <th>操作</th>
                   </tr>
@@ -8021,8 +8296,18 @@ function App() {
                       <td>{user.disabledAt ? '已禁用' : '正常'}</td>
                       <td>{user.clientsCount}</td>
                       <td>{user.reportsCount}</td>
+                      <td>{user.role === 'admin' ? '免费' : user.pointBalance}</td>
                       <td>{user.createdAt}</td>
                       <td className="row-actions admin-actions">
+                        {user.role !== 'admin' && (
+                          <button onClick={() => {
+                            setAdjustingPointsUser(user)
+                            setPointAdjustment('200')
+                            setPointAdjustmentNote('')
+                          }}>
+                            <Coins /> 调整积分
+                          </button>
+                        )}
                         <button onClick={() => impersonateUser(user)}>
                           <UserCog /> 进入
                         </button>
@@ -8044,6 +8329,33 @@ function App() {
               </div>
             )}
           </section>
+        )}
+
+        {adjustingPointsUser && canUseAdmin && (
+          <div className="modal-backdrop" role="presentation" onClick={() => !pointAdjustmentBusy && setAdjustingPointsUser(null)}>
+            <form className="confirm-modal point-adjust-modal" role="dialog" aria-modal="true" aria-labelledby="point-adjust-title" onSubmit={(event) => void submitPointAdjustment(event)} onClick={(event) => event.stopPropagation()}>
+              <div className="modal-title-row">
+                <div>
+                  <p className="eyebrow">管理员操作</p>
+                  <h3 id="point-adjust-title">调整 {adjustingPointsUser.username} 的积分</h3>
+                </div>
+                <button type="button" className="icon-text-button" onClick={() => setAdjustingPointsUser(null)} disabled={pointAdjustmentBusy}>关闭</button>
+              </div>
+              <p>当前余额 {adjustingPointsUser.pointBalance} 积分。正数为增加，负数为扣减；每次最多调整 100000 积分。</p>
+              <label className="point-adjust-field">
+                <span>积分变动</span>
+                <input type="number" step="1" required value={pointAdjustment} onChange={(event) => setPointAdjustment(event.target.value)} />
+              </label>
+              <label className="point-adjust-field">
+                <span>调整原因</span>
+                <input type="text" maxLength={200} required value={pointAdjustmentNote} onChange={(event) => setPointAdjustmentNote(event.target.value)} placeholder="例如：核实收到 200 元充值" />
+              </label>
+              <div className="modal-actions">
+                <button type="button" className="secondary-button" onClick={() => setAdjustingPointsUser(null)} disabled={pointAdjustmentBusy}>取消</button>
+                <button type="submit" className="primary-button" disabled={pointAdjustmentBusy}>{pointAdjustmentBusy ? '处理中...' : '确认调整'}</button>
+              </div>
+            </form>
+          </div>
         )}
 
         {page === 'rules' && canViewRuleLibrary && (
@@ -11089,7 +11401,7 @@ function AiAssistantPage({
     appendAssistantSystemMessage(`专业风险检测已运行，当前命中 ${risks.length} 项，综合等级为${plainRiskLevel(getOverallLevel(risks))}风险。\n\n${lines.join('\n')}${risks.length > 8 ? '\n- 其余风险请在报告或风险检测页查看。' : ''}`)
   }
   const runAssistantReportGeneration = async () => {
-    appendAssistantSystemMessage('我已收到生成报告指令，正在调用系统报告生成流程。报告仍基于已保存期间数据、连续期间选择和检查结果生成。')
+    appendAssistantSystemMessage('我已收到生成报告指令。请先确认分析范围与本次积分费用，确认后才会生成。')
     await onGenerateReport()
   }
   const executeAssistantToolCalls = async (response: AiAssistantResponse) => {
@@ -11675,6 +11987,7 @@ function ReportPage({
   client,
   risks,
   onGenerate,
+  onRetryAi,
   aiStage,
   onUpdate,
 }: {
@@ -11682,7 +11995,8 @@ function ReportPage({
   client: Client
   risks: RiskResult[]
   onGenerate: () => void
-  aiStage: 'reviewing' | 'generating' | null
+  onRetryAi: (report: Report) => void
+  aiStage: 'saving' | 'reviewing' | 'generating' | null
   onUpdate: (content: string) => void
 }) {
   const safeRisks = Array.isArray(risks) ? risks : []
@@ -11693,14 +12007,18 @@ function ReportPage({
   const legacyMethodology = Boolean(report) && structured.methodology !== 'source-backed-v2'
   const fallbackContent = report ? reportTextContent(report) : buildProfessionalReportContent(structured)
   const draft = sanitizePublicReportContent(fallbackContent || buildReportContent(client, safeRisks))
-  const aiMessage = aiStage === 'reviewing'
-    ? 'AI 正在复核数据...'
+  const aiMessage = aiStage === 'saving'
+    ? '正在保存报告...'
+    : aiStage === 'reviewing'
+      ? 'AI 正在复核数据...'
     : aiStage === 'generating'
       ? 'AI 正在生成报告...'
       : ''
-  const aiStepText = aiStage === 'reviewing'
-    ? '正在比对企业输入数据和检查结果，识别字段冲突、边界值和需要人工复核的事项。'
-    : '正在把风险事项、资料覆盖范围和暂未判断事项整合成涉税风险初筛报告。'
+  const aiStepText = aiStage === 'saving'
+    ? '正在核验免费名额或积分，并将报告保存到企业档案。'
+    : aiStage === 'reviewing'
+      ? '正在比对企业输入数据和检查结果，识别字段冲突、边界值和需要人工复核的事项。'
+      : '正在把风险事项、资料覆盖范围和暂未判断事项整合成涉税风险初筛报告。'
   const [assistantInput, setAssistantInput] = useState('')
   const [assistantResponse, setAssistantResponse] = useState<AiAssistantResponse | null>(null)
   const [assistantLoading, setAssistantLoading] = useState(false)
@@ -11730,6 +12048,18 @@ function ReportPage({
       setAssistantLoading(false)
     }
   }
+  if (!report) {
+    return (
+      <section className="page">
+        <div className="empty-state wide">
+          <FileText />
+          <h3>尚未生成报告</h3>
+          <p>保存并完成积分核验后，报告才会在这里展示和导出。</p>
+          <button className="primary-button" onClick={onGenerate}>生成报告</button>
+        </div>
+      </section>
+    )
+  }
   return (
     <section className="page">
       <header className="page-header">
@@ -11738,43 +12068,33 @@ function ReportPage({
           <h2>{client.name}</h2>
         </div>
         <div className="header-actions">
+          {report.aiSource && !report.aiGenerated && (
+            <button className="secondary-button" onClick={() => onRetryAi(report)} disabled={Boolean(aiStage)}>
+              <Sparkles /> 重试 AI 润色
+            </button>
+          )}
           <button className="secondary-button" onClick={onGenerate} disabled={Boolean(aiStage)}>
             <Sparkles /> {aiMessage || '重新生成'}
           </button>
           <button
             className="primary-button"
             disabled={Boolean(aiStage)}
-            onClick={() => downloadWord(report || {
-              id: crypto.randomUUID(),
-              clientId: client.id,
-              clientName: client.name,
-              riskLevel: getOverallLevel(safeRisks),
-              createdAt: formatDate(),
-              risks: safeRisks,
-              content: draft,
-              structured,
-            })}
+            onClick={() => downloadWord(report)}
           >
             <Download /> 导出 Word
           </button>
           <button
             className="secondary-button"
             disabled={Boolean(aiStage)}
-            onClick={() => printReportPdf(report || {
-              id: crypto.randomUUID(),
-              clientId: client.id,
-              clientName: client.name,
-              riskLevel: getOverallLevel(safeRisks),
-              createdAt: formatDate(),
-              risks: safeRisks,
-              content: draft,
-              structured,
-            })}
+            onClick={() => printReportPdf(report)}
           >
             <Printer /> 打印 / PDF
           </button>
         </div>
       </header>
+      {!aiStage && report.aiSource && !report.aiGenerated && (
+        <p className="period-warning">当前展示已保存的标准报告。AI 润色未完成，重试不会再次扣积分。</p>
+      )}
       {legacyMethodology && (
         <div className="period-warning-list">
           <strong>历史口径报告</strong>
@@ -11791,7 +12111,7 @@ function ReportPage({
           <p>{aiStepText}</p>
           <div className="ai-process-steps">
             <span className="done">基础检查完成</span>
-            <span className={aiStage === 'reviewing' ? 'active' : 'done'}>AI 复核数据</span>
+            <span className={aiStage === 'reviewing' ? 'active' : aiStage === 'saving' ? '' : 'done'}>AI 复核数据</span>
             <span className={aiStage === 'generating' ? 'active' : ''}>AI 生成报告</span>
           </div>
           <small>在 AI 完成复核和生成前，系统不会展示未经核对的模板报告。</small>

@@ -257,5 +257,7 @@ describe('buildStandardPeriods', () => {
       'employees', 'socialSecurityCount', 'salaryDeclaredCount', 'payrollTotal',
     ]))
     expect(month.sourceMetrics.inputInvoiceAmount).toBe(800)
+    expect(month.metrics.taxableSales).toBe(0)
+    expect(month.metricCoverage).not.toContain('taxableSales')
   })
 })

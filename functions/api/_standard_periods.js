@@ -234,6 +234,7 @@ function buildPeriod(group) {
   const assetsTotal = group.financial.assetsEnding ?? group.cit.assetsAverage ?? 0
   const metricCoverage = []
   if (group.vatMain.currentSales !== undefined || group.ledgerRecordCount || group.financial.revenueCurrent !== undefined || group.cit.revenueCumulative !== undefined) metricCoverage.push('monthlyRevenue')
+  if (group.vatMain.currentSales !== undefined || scheduleSales(group) !== null) metricCoverage.push('taxableSales')
   if (group.ledgerRecordCount || group.financial.costCurrent !== undefined || group.cit.costCumulative !== undefined) metricCoverage.push('monthlyCost')
   if (group.ledgerRecordCount || group.financial.profitCurrent !== undefined || group.cit.profitCumulative !== undefined) metricCoverage.push('monthlyProfit')
   if (group.outputInvoiceCount) metricCoverage.push('monthlyInvoice')
@@ -258,7 +259,7 @@ function buildPeriod(group) {
       monthlyProfit: totals.profit / monthCount,
       annualRevenue: metadata.analysisPeriodType === '年度' ? totals.revenue : 0,
       consecutive12MonthSales: metadata.analysisPeriodType === '年度' ? totals.revenue : 0,
-      taxableSales: metadata.analysisPeriodType === '月度' ? totals.revenue : 0,
+      taxableSales: metadata.analysisPeriodType === '月度' ? group.vatMain.currentSales ?? scheduleSales(group) ?? 0 : 0,
       outputTax: group.vatMain.outputTax || 0,
       inputTax: group.vatMain.inputTax || 0,
       vatTaxPayable: group.vatMain.taxPayable || 0,

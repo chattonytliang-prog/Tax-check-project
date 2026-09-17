@@ -1,5 +1,6 @@
-import { badRequest, json, readJson, requireDb, serverError } from '../_utils.js'
+import { badRequest, json, requireDb, serverError } from '../_utils.js'
 import { requireUser } from '../auth/_auth.js'
+import { readAiRequest, reserveAiCall } from '../_ai_budget.js'
 
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
 const DEFAULT_MODEL = 'deepseek-v4-pro'
@@ -128,7 +129,9 @@ export async function onRequestPost({ request, env }) {
     const auth = await requireUser(request, db)
     if (auth.response) return auth.response
 
-    const { client, risks = [] } = await readJson(request)
+    const parsedRequest = await readAiRequest(request)
+    if (parsedRequest.response) return parsedRequest.response
+    const { client, risks = [] } = parsedRequest.data
     if (!client?.id || !client?.name) {
       return badRequest('Client id and name are required')
     }
@@ -140,6 +143,12 @@ export async function onRequestPost({ request, env }) {
     if (!ownedClient) {
       return json({ error: 'Client not found' }, { status: 404 })
     }
+
+    if (!Array.isArray(risks) || risks.length > 100 || risks.some((risk) => !risk || typeof risk !== 'object' || Array.isArray(risk))) {
+      return badRequest('风险事项格式不正确或数量过多')
+    }
+    const quotaResponse = await reserveAiCall(db, auth.user, env)
+    if (quotaResponse) return quotaResponse
 
     const establishmentFacts = calculateEstablishmentFacts(client)
     const model = env.DEEPSEEK_MODEL || DEFAULT_MODEL

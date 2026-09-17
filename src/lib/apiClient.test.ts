@@ -31,7 +31,7 @@ describe('apiClient', () => {
     await expect(apiSend('/api/items', 'POST', { name: '测试' })).resolves.toEqual({ id: 'created' })
     expect(fetchMock).toHaveBeenCalledWith('/api/items', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-requested-with': 'tax-workspace' },
       body: JSON.stringify({ name: '测试' }),
     })
   })
@@ -81,6 +81,13 @@ describe('apiClient', () => {
 
     await expect(request).resolves.toEqual({ recovered: true })
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not automatically retry a write request after a gateway failure', async () => {
+    const fetchMock = mockFetch({ ok: false, status: 503, jsonBody: { error: '临时不可用' } })
+
+    await expect(apiSend('/api/admin/users/1/points', 'POST', { delta: 200 })).rejects.toThrow('临时不可用')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('uses server detail when a transient retry still fails with a server error wrapper', async () => {

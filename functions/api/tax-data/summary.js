@@ -179,9 +179,9 @@ function vatValidationMessages(row) {
   return messages
 }
 
-function classifyVatSlot(returnType) {
+export function classifyVatSlot(returnType) {
   if (/附列资料（四）|附表四|税额抵减/.test(returnType || '')) return 'vat-schedule-4'
-  if (/附列资料|附表|附加|减免/.test(returnType || '')) return 'vat-other-schedules'
+  if (/附列资料|附表|减免/.test(returnType || '')) return 'vat-other-schedules'
   return 'vat-return-main'
 }
 
