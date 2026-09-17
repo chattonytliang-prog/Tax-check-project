@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import { readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'vitest'
-import { readAiRequest, reserveAiCall } from '../_ai_budget.js'
+import { aiUpstreamFailure, readAiRequest, reserveAiCall } from '../_ai_budget.js'
 
 const opened = []
 afterEach(() => {
@@ -29,6 +29,16 @@ function database() {
 }
 
 describe('AI request budget', () => {
+  it.each([
+    [401, '密钥无效'],
+    [402, '服务账户余额不足'],
+    [429, '过于频繁'],
+    [503, '暂不可用'],
+  ])('explains provider status %s without exposing raw responses', async (status, reason) => {
+    const response = aiUpstreamFailure(status)
+    expect(response.status).toBe(502)
+    expect((await response.json()).error).toContain(reason)
+  })
   it('rejects oversized and malformed JSON without invoking a model', async () => {
     const declared = await readAiRequest(new Request('https://test.local', {
       method: 'POST', headers: { 'content-length': '99' }, body: '{}',

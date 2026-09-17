@@ -57,3 +57,13 @@ npm run build
 npm run lint
 git diff --check
 ```
+
+## Production Release
+
+GitHub `main` is the release source. Do not deploy uncommitted local files directly to production.
+
+1. Run tests, lint, build, and `git diff --check`.
+2. Stage only reviewed application code and tests. Do not commit customer materials, local runtime files, credentials, or database exports.
+3. Commit and push to `origin/main`; confirm the remote commit matches the local commit.
+4. Let Cloudflare Pages deploy that commit, then verify the production deployment ID, site asset version, and `/api/health`.
+5. Keep production D1 backups outside this repository before any database-changing release.

@@ -22,7 +22,19 @@ export async function onRequestGet({ request, env }) {
     const db = requireDb(env)
     const auth = await requireUser(request, db)
     if (auth.response) return auth.response
-    const sourceFileId = String(new URL(request.url).searchParams.get('sourceFileId') || '').trim()
+    const searchParams = new URL(request.url).searchParams
+    const sourceFileId = String(searchParams.get('sourceFileId') || '').trim()
+    const clientId = String(searchParams.get('clientId') || '').trim()
+    const fileHash = String(searchParams.get('fileHash') || '').trim().toLowerCase()
+    if (clientId && fileHash) {
+      if (!/^[a-f0-9]{64}$/.test(fileHash)) return badRequest('fileHash must be a SHA-256 digest')
+      await ensureTaxDataIntakeTables(db)
+      const match = await db.prepare(
+        `SELECT id FROM tax_data_source_files
+         WHERE owner_user_id = ? AND client_id = ? AND file_hash = ? LIMIT 1`,
+      ).bind(auth.user.id, clientId, fileHash).first()
+      return json({ duplicate: Boolean(match) }, { headers: { 'cache-control': 'no-store' } })
+    }
     if (!sourceFileId) return badRequest('sourceFileId is required')
     await ensureTaxDataIntakeTables(db)
     const row = await db.prepare(

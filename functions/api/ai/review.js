@@ -1,6 +1,6 @@
 import { badRequest, json, requireDb, serverError } from '../_utils.js'
 import { requireUser } from '../auth/_auth.js'
-import { readAiRequest, reserveAiCall } from '../_ai_budget.js'
+import { aiUpstreamFailure, readAiRequest, reserveAiCall } from '../_ai_budget.js'
 
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
 const DEFAULT_MODEL = 'deepseek-v4-pro'
@@ -122,7 +122,7 @@ function normalizeStringArray(value) {
 export async function onRequestPost({ request, env }) {
   try {
     if (!env.DEEPSEEK_API_KEY) {
-      return json({ error: 'DeepSeek API key is not configured' }, { status: 503 })
+      return json({ error: 'AI 服务未配置，请联系管理员' }, { status: 503 })
     }
 
     const db = requireDb(env)
@@ -171,27 +171,26 @@ export async function onRequestPost({ request, env }) {
           },
         ],
         temperature: 0.1,
-        max_tokens: 1800,
+        thinking: { type: 'disabled' },
+        max_tokens: 2400,
         response_format: { type: 'json_object' },
       }),
-    })
+    }).catch(() => null)
+
+    if (!response) return json({ error: '无法连接 AI 服务，请稍后重试' }, { status: 502 })
 
     if (!response.ok) {
-      const detail = await response.text()
-      return json(
-        {
-          error: 'DeepSeek review request failed',
-          detail: detail.slice(0, 500),
-        },
-        { status: 502 },
-      )
+      return aiUpstreamFailure(response.status)
     }
 
     const data = await response.json()
+    if (data?.choices?.[0]?.finish_reason === 'length') {
+      return json({ error: 'AI 复核输出被截断，请重试' }, { status: 502 })
+    }
     const content = data?.choices?.[0]?.message?.content?.trim() || ''
     const parsed = parseJsonObject(content)
     if (!parsed) {
-      return json({ error: 'DeepSeek returned invalid review JSON' }, { status: 502 })
+      return json({ error: 'AI 复核结果格式不完整，请重试' }, { status: 502 })
     }
 
     const review = sanitizeReview({

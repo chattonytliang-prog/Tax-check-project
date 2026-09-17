@@ -16,6 +16,7 @@ import {
   Gauge,
   LayoutDashboard,
   LogOut,
+  Menu,
   Plus,
   Pencil,
   RefreshCcw,
@@ -27,6 +28,7 @@ import {
   Trash2,
   UserCog,
   Printer,
+  X,
   Coins,
   QrCode,
 } from 'lucide-react'
@@ -115,6 +117,8 @@ import {
 } from './lib/periodAnalysis'
 import { apiDelete, apiGet, apiSend, apiUpload } from './lib/apiClient'
 import { explicitDerivedMetadata } from './lib/explicitDerivedFields'
+import { assertSameImportClient, findExistingImportClient, type DirectImportBatch, type DirectImportItem } from './lib/firstReportJourney'
+import { DirectImportReceipt, FirstReportJourney } from './components/FirstReportJourney'
 import './App.css'
 
 type Page = 'dashboard' | 'assistant' | 'clients' | 'form' | 'result' | 'report' | 'reports' | 'wallet' | 'rules' | 'admin'
@@ -4436,12 +4440,6 @@ function printReportPdf(report: Report) {
   printWindow.document.close()
 }
 
-function wait(ms: number) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms)
-  })
-}
-
 function StatCard({
   label,
   value,
@@ -4774,6 +4772,7 @@ function App() {
   const [authError, setAuthError] = useState('')
   const [authLoading, setAuthLoading] = useState(true)
   const [page, setPage] = useState<Page>('dashboard')
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [clients, setClients] = useState<Client[]>([])
   const [selectedClientId, setSelectedClientId] = useState('')
   const [selectedReportId, setSelectedReportId] = useState('')
@@ -4806,8 +4805,9 @@ function App() {
   const [ruleTaxFilter, setRuleTaxFilter] = useState('all')
   const [rulePageSize, setRulePageSize] = useState<RulePageSize>(50)
   const [rulePage, setRulePage] = useState(1)
-  const [, setDataStatus] = useState<'loading' | 'connected' | 'fallback'>('loading')
+  const [dataStatus, setDataStatus] = useState<'loading' | 'connected' | 'fallback'>('loading')
   const [aiReportStage, setAiReportStage] = useState<'saving' | 'reviewing' | 'generating' | null>(null)
+  const [aiReportFailure, setAiReportFailure] = useState<{ reportId: string; message: string } | null>(null)
   const reportInFlight = useRef(false)
   const reportRetryDraft = useRef<{ fingerprint: string; report: Report } | null>(null)
   const [taxDataSummary, setTaxDataSummary] = useState<TaxDataSummary | null>(null)
@@ -4818,8 +4818,9 @@ function App() {
   const [taxDataDetailLoading, setTaxDataDetailLoading] = useState(false)
   const [taxDataDetailError, setTaxDataDetailError] = useState('')
   const [taxDataDirectImporting, setTaxDataDirectImporting] = useState(false)
-  const [taxDataDirectImportMessage, setTaxDataDirectImportMessage] = useState('')
+  const [directImportBatch, setDirectImportBatch] = useState<DirectImportBatch | null>(null)
   const taxDataDirectImportInputRef = useRef<HTMLInputElement>(null)
+  const directImportTargetRef = useRef<Client | null>(null)
   const taxDataDetailCache = useRef(new Map<string, TaxDataDetail>())
   const canViewRuleLibrary = Boolean(
     authUser
@@ -4869,15 +4870,25 @@ function App() {
   useEffect(() => {
     if (!loggedIn || !authUser) return
     let active = true
-    apiGet<PointWallet>('/api/points').then((wallet) => {
-      if (active) {
-        setPointWallet(wallet)
-        setPointWalletError('')
-      }
-    }).catch(() => {
-      if (active) setPointWalletError('积分数据暂不可用，请稍后刷新。')
-    })
-    return () => { active = false }
+    const loadWallet = () => {
+      apiGet<PointWallet>('/api/points').then((wallet) => {
+        if (active) {
+          setPointWallet(wallet)
+          setPointWalletError('')
+        }
+      }).catch(() => {
+        if (active) setPointWalletError('积分数据暂不可用，请稍后刷新。')
+      })
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') loadWallet()
+    }
+    loadWallet()
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      active = false
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
   }, [loggedIn, authUser])
 
   useEffect(() => {
@@ -5161,6 +5172,12 @@ function App() {
     if (sourceBacked.length) return sourceBacked
     return selectedClient.periodEntries.filter((entry) => entry.dataBasis === '标准资料')
   }, [activeTaxDataSummary, selectedClient])
+  const journeyMonths = useMemo(() => detectionPeriodEntries
+    .filter((entry) => entry.months.length === 1)
+    .map((entry) => ({ id: entry.id, label: entry.months[0], month: entry.months[0] }))
+    .sort((a, b) => b.month.localeCompare(a.month)), [detectionPeriodEntries])
+  const journeySelectedMonthId = selectedPeriodEntryIds.length === 1
+    && journeyMonths.some((month) => month.id === selectedPeriodEntryIds[0]) ? selectedPeriodEntryIds[0] : ''
   const selectedPeriodEntryIdSet = useMemo(() => new Set(selectedPeriodEntryIds), [selectedPeriodEntryIds])
   const selectedPeriodEntries = useMemo(() => {
     const selected = detectionPeriodEntries.filter((entry) => selectedPeriodEntryIdSet.has(entry.id))
@@ -5948,6 +5965,11 @@ function App() {
       if (!profilePatch.name || isInvalidImportedCompanyName(profilePatch.name)) {
         throw new Error('没有选中企业，且文件里没有识别到可建档的企业名称')
       }
+      const existing = findExistingImportClient(clients, { name: profilePatch.name, creditCode: profilePatch.creditCode })
+      if (existing) {
+        setSelectedClientId(existing.id)
+        return existing
+      }
       const records = parsedImport.taxDataIntake?.records || []
       const periodStarts = records.map((record) => record.periodStart).filter(Boolean).sort()
       const periodEnds = records.map((record) => record.periodEnd).filter(Boolean).sort()
@@ -5962,6 +5984,12 @@ function App() {
       setClients((current) => current.some((client) => client.id === created.id) ? current : [created, ...current])
       setSelectedClientId(created.id)
       return created
+    }
+    if (!isInvalidImportedCompanyName(baseClient.name)) {
+      assertSameImportClient(baseClient, {
+        name: profilePatch.name && !isInvalidImportedCompanyName(profilePatch.name) ? profilePatch.name : undefined,
+        creditCode: profilePatch.creditCode,
+      })
     }
     const patch: Partial<Client> = {}
     if (isInvalidImportedCompanyName(baseClient.name) && profilePatch.name && !isInvalidImportedCompanyName(profilePatch.name)) {
@@ -5979,7 +6007,7 @@ function App() {
     return updated
   }
 
-  const saveTaxDataDirectImport = async (file: File, parsedImport: ParsedClientImport, material: AssistantRawMaterial, client: Client) => {
+  const saveTaxDataDirectImport = async (file: File, parsedImport: ParsedClientImport, material: AssistantRawMaterial, client: Client, fileHash: string) => {
     const intake = parsedImport.taxDataIntake
     if (!intake?.records.length) throw new Error('未解析出可入库标准记录')
     if (!intake.autoImportEligible) {
@@ -5998,6 +6026,7 @@ function App() {
       materialId: material.id,
       clientId: client.id,
       fileName: material.name || file.name,
+      fileHash,
       contentType: material.contentType || file.type || 'application/octet-stream',
       fileSize: material.size || file.size,
       documentType: intake.documentTypes[0] || 'other_material',
@@ -6049,35 +6078,78 @@ function App() {
     return intake.records.length
   }
 
-  const handleTaxDataDirectImport = async (fileList: FileList | null) => {
+  const openDirectImport = (client: Client | null) => {
+    directImportTargetRef.current = client
+    taxDataDirectImportInputRef.current?.click()
+  }
+
+  const handleTaxDataDirectImport = async (fileList: FileList | null, targetClient: Client | null) => {
     const files = Array.from(fileList || [])
     if (!files.length || taxDataDirectImporting) return
     setTaxDataDirectImporting(true)
-    setTaxDataDirectImportMessage(`正在按固定模板解析 ${files.length} 个文件...`)
-    const results: string[] = []
+    setSelectedPeriodEntryIds([])
     let savedCount = 0
-    let recordCount = 0
-    let currentClient: Client | null = selectedClient || null
+    let currentClient: Client | null = targetClient
+    let items: DirectImportItem[] = []
+    setDirectImportBatch({ total: files.length, processed: 0, clientId: currentClient?.id || null, items: [] })
+    const addItem = (item: DirectImportItem) => {
+      items = [...items, item]
+      setDirectImportBatch({ total: files.length, processed: items.length, clientId: currentClient?.id || null, items })
+    }
     const seenFileHashes = new Set<string>()
     const seenRecordFingerprints = new Set<string>()
+    const deferredFiles: File[] = []
     try {
-      for (const file of files) {
+      const processFile = async (file: File, deferUnknownIdentity: boolean) => {
         try {
           const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer())))
             .map((byte) => byte.toString(16).padStart(2, '0')).join('')
           if (seenFileHashes.has(digest)) {
-            results.push(`已跳过重复文件：${file.name}`)
-            continue
+            addItem({ name: file.name, status: 'duplicate', records: 0, detail: '与本次上传的另一份文件完全相同' })
+            return
+          }
+          const parsedImport = await parseTaxDataDirectFile(file)
+          const profilePatch = coerceImportedClientPatch({
+            ...inferClientPatchFromFileName(file.name),
+            ...(parsedImport.patch || {}),
+            ...(parsedImport.taxDataIntake?.profilePatch || {}),
+          })
+          if (!currentClient && (!profilePatch.name || isInvalidImportedCompanyName(profilePatch.name))) {
+            if (deferUnknownIdentity) {
+              deferredFiles.push(file)
+              return
+            }
+            throw new Error('文件里没有识别到可建档的企业名称，请选择已有企业后重试')
           }
           seenFileHashes.add(digest)
-          const parsedImport = await parseTaxDataDirectFile(file)
+          if (currentClient && !isInvalidImportedCompanyName(currentClient.name)) {
+            assertSameImportClient(currentClient, {
+              name: profilePatch.name && !isInvalidImportedCompanyName(profilePatch.name) ? profilePatch.name : undefined,
+              creditCode: profilePatch.creditCode,
+            })
+          }
+          const knownClient = currentClient || (profilePatch.name && !isInvalidImportedCompanyName(profilePatch.name)
+            ? findExistingImportClient(clients, { name: profilePatch.name, creditCode: profilePatch.creditCode })
+            : undefined)
+          if (knownClient) {
+            const archived = await apiGet<{ duplicate: boolean }>(`/api/tax-data/source?clientId=${encodeURIComponent(knownClient.id)}&fileHash=${digest}`)
+            if (archived.duplicate) {
+              currentClient = knownClient
+              setSelectedClientId(knownClient.id)
+              addItem({ name: file.name, status: 'duplicate', records: 0, detail: '同一文件已在该企业归档，未重复入库' })
+              return
+            }
+          }
           const intake = parsedImport.taxDataIntake
+          if (!intake?.records.length) throw new Error('未解析出可入库标准记录')
+          if (!intake.autoImportEligible) throw new Error('模板校验未通过，请核对文件类型、期间和表头')
+          const fileFingerprints = new Set<string>()
           if (intake) {
             const retainedIds = new Set<string>()
             intake.records = intake.records.filter((record) => {
               const fingerprint = taxRecordFingerprint(record)
-              if (seenRecordFingerprints.has(fingerprint)) return false
-              seenRecordFingerprints.add(fingerprint)
+              if (seenRecordFingerprints.has(fingerprint) || fileFingerprints.has(fingerprint)) return false
+              fileFingerprints.add(fingerprint)
               retainedIds.add(record.id)
               return true
             })
@@ -6087,30 +6159,36 @@ function App() {
               return counts
             }, {})
             if (!intake.records.length) {
-              results.push(`已跳过重复内容：${file.name}`)
-              continue
+              addItem({ name: file.name, status: 'duplicate', records: 0, detail: '标准记录与本次已入库资料重复' })
+              return
             }
           }
           const material = await uploadTaxDataDirectMaterial(file)
           currentClient = await resolveClientForTaxDataDirectImport(currentClient, parsedImport, file.name)
-          const savedRecords = await saveTaxDataDirectImport(file, parsedImport, material, currentClient)
+          const savedRecords = await saveTaxDataDirectImport(file, parsedImport, material, currentClient, digest)
           currentClient = standardClientFromIntake(currentClient, parsedImport.taxDataIntake!)
           await persistClientUpdate(currentClient)
+          for (const fingerprint of fileFingerprints) seenRecordFingerprints.add(fingerprint)
           savedCount += 1
-          recordCount += savedRecords
-          results.push(`已入库：${file.name}（${savedRecords} 条）`)
+          addItem({ name: file.name, status: 'saved', records: savedRecords, detail: '' })
         } catch (error) {
-          results.push(`未入库：${file.name}（${error instanceof Error ? error.message : String(error)}）`)
+          addItem({ name: file.name, status: 'failed', records: 0, detail: error instanceof Error ? error.message : String(error) })
         }
       }
+      for (const file of files) await processFile(file, true)
+      for (const file of deferredFiles) await processFile(file, false)
       taxDataDetailCache.current.clear()
       if (currentClient?.id) {
         const refreshed = await apiGet<TaxDataSummary>(`/api/tax-data/summary?clientId=${encodeURIComponent(currentClient.id)}`)
         setTaxDataSummary(refreshed)
       }
-      setTaxDataDirectImportMessage(`标准资料导入完成：已入库 ${savedCount}/${files.length} 个文件，共 ${recordCount} 条标准记录。\n${results.join('\n')}`)
+      const importedClientId = currentClient?.id
+      if (savedCount && importedClientId && !reports.some((report) => report.clientId === importedClientId)) setPage('dashboard')
     } catch (error) {
-      setTaxDataDirectImportMessage(`标准资料导入失败：${error instanceof Error ? error.message : String(error)}`)
+      setDirectImportBatch((current) => current ? {
+        ...current,
+        error: `资料汇总读取失败，已入库文件不会丢失：${error instanceof Error ? error.message : String(error)}`,
+      } : current)
     } finally {
       setTaxDataDirectImporting(false)
       if (taxDataDirectImportInputRef.current) taxDataDirectImportInputRef.current.value = ''
@@ -6516,7 +6594,6 @@ function App() {
     setReportConfirmOpen(false)
 
     const reportClient = deriveClientMetrics({ ...(selectedDetectionClient || selectedClient), periodEntries: [] })
-    const startedAt = Date.now()
     const risks = detectRisks(reportClient, managedRules)
     const skippedRules = getSkippedRules(reportClient, managedRules)
     const evaluatedRuleCount = getSourceRules(managedRules).length
@@ -6542,6 +6619,7 @@ function App() {
       : { ...draft, id: crypto.randomUUID(), createdAt: formatDate() }
     reportRetryDraft.current = { fingerprint, report: baseReport }
     reportInFlight.current = true
+    setAiReportFailure(null)
     setAiReportStage('saving')
     try {
       await apiSend<{ report: Report }>('/api/reports', 'POST', baseReport, {
@@ -6570,27 +6648,27 @@ function App() {
 
     try {
       setAiReportStage('reviewing')
-      const [reviewResponse] = await Promise.all([
-        apiSend<{ review: AiReview; model: string; usage?: unknown }>('/api/ai/review', 'POST', {
+      let aiReview: AiReview | null = null
+      let reviewModel = ''
+      try {
+        const reviewResponse = await apiSend<{ review: AiReview; model: string; usage?: unknown }>('/api/ai/review', 'POST', {
           client: reportClient,
           risks: risksForAi,
-        }),
-        wait(2000),
-      ])
+        })
+        aiReview = reviewResponse.review
+        reviewModel = reviewResponse.model
+      } catch (error) {
+        console.warn('AI data review failed; continuing with report wording.', error)
+      }
 
       setAiReportStage('generating')
-      await Promise.all([
-        saveAiEnrichment(baseReport, reviewResponse.review, reviewResponse.model),
-        wait(2000),
-      ])
+      await saveAiEnrichment(baseReport, aiReview, reviewModel)
+      setAiReportFailure(null)
     } catch (error) {
       console.warn('AI report generation failed, keeping the saved standard report.', error)
-      window.alert('AI 润色暂未完成，标准报告已保存。可在报告页重试 AI 润色，同一份报告不会再次扣积分。')
+      const message = error instanceof Error ? error.message : 'AI 服务暂不可用，请稍后重试'
+      setAiReportFailure({ reportId: baseReport.id, message })
     } finally {
-      const elapsed = Date.now() - startedAt
-      if (elapsed < 6000) {
-        await wait(6000 - elapsed)
-      }
       setAiReportStage(null)
       reportInFlight.current = false
     }
@@ -6600,16 +6678,19 @@ function App() {
   const retryAiReport = async (report: Report) => {
     if (!report.aiSource || report.aiGenerated || reportInFlight.current) return
     reportInFlight.current = true
+    setAiReportFailure(null)
     setAiReportStage('generating')
     try {
       await saveAiEnrichment(report, report.aiReview || null)
+      setAiReportFailure(null)
     } catch (error) {
       try {
         const current = await apiGet<{ report: Report }>(`/api/reports/${encodeURIComponent(report.id)}`)
         if (!current.report.aiGenerated) throw error
         setReports((items) => items.map((item) => item.id === report.id ? current.report : item))
       } catch {
-        window.alert(error instanceof Error ? error.message : 'AI 润色失败，请稍后重试。')
+        const message = error instanceof Error ? error.message : 'AI 润色失败，请稍后重试'
+        setAiReportFailure({ reportId: report.id, message })
       }
     } finally {
       setAiReportStage(null)
@@ -6851,7 +6932,7 @@ function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <aside className={`sidebar${mobileMenuOpen ? ' mobile-menu-open' : ''}`}>
         <div className="sidebar-brand">
           <img src="/heyao-logo.jpg" alt="合耀科技" />
           <div>
@@ -6859,13 +6940,37 @@ function App() {
             <span>税务风控工作台</span>
           </div>
         </div>
+        <button
+          type="button"
+          className="mobile-menu-toggle"
+          aria-label={mobileMenuOpen ? '收起菜单' : '打开菜单'}
+          aria-expanded={mobileMenuOpen}
+          aria-controls="app-navigation"
+          title={mobileMenuOpen ? '收起菜单' : '打开菜单'}
+          onClick={() => setMobileMenuOpen((open) => !open)}
+        >
+          {mobileMenuOpen ? <X /> : <Menu />}
+        </button>
         {authUser && (
           <div className="sidebar-user">
             <span>当前用户：{authUser.username}</span>
             {authUser.actor && <span>管理员代入：{authUser.actor.username}</span>}
+            <button
+              type="button"
+              className="sidebar-points"
+              title="查看积分明细并刷新余额"
+              onClick={() => { setPage('wallet'); setMobileMenuOpen(false); window.scrollTo(0, 0); void refreshPointWallet() }}
+            >
+              <Coins aria-hidden="true" />
+              <span>
+                <small>积分余额</small>
+                <strong>{pointWalletError ? '暂不可用' : !pointWallet ? '查询中' : pointWallet.adminUnlimited ? '管理员免费' : `${pointWallet.balance} 积分`}</strong>
+                {pointWallet?.freeReportAvailable && !pointWalletError && <small>首份报告免费</small>}
+              </span>
+            </button>
           </div>
         )}
-        <nav className="sidebar-nav">
+        <nav id="app-navigation" className="sidebar-nav" onClick={() => { setMobileMenuOpen(false); window.scrollTo(0, 0) }}>
           <div className="nav-group">
             <button className={page === 'dashboard' ? 'active' : ''} onClick={() => setPage('dashboard')}>
               <LayoutDashboard /> 涉税风险总览
@@ -6898,20 +7003,57 @@ function App() {
                 <UserCog /> 管理员
               </button>
             )}
+            <div className="sidebar-session-actions">
+              {authUser?.actor && (
+                <button className="ghost-button logout" onClick={stopImpersonation}>
+                  <UserCog /> 退出代入
+                </button>
+              )}
+              <button className="ghost-button logout" onClick={handleLogout}>
+                <LogOut /> 退出
+              </button>
+            </div>
           </div>
         </nav>
-        {authUser?.actor && (
-          <button className="ghost-button logout" onClick={stopImpersonation}>
-            <UserCog /> 退出代入
-          </button>
-        )}
-        <button className="ghost-button logout" onClick={handleLogout}>
-          <LogOut /> 退出
-        </button>
       </aside>
 
       <main className="workspace">
-        {page === 'dashboard' && (
+        <input
+          ref={taxDataDirectImportInputRef}
+          type="file"
+          multiple
+          accept=".xls,.xlsx,.pdf,.zip,.csv,.tsv,.txt,.json"
+          className="assistant-hidden-file-input"
+          onChange={(event) => void handleTaxDataDirectImport(event.target.files, directImportTargetRef.current)}
+        />
+        {page === 'dashboard' && (dataStatus === 'loading' ? (
+          <section className="page journey-loading" role="status">正在读取企业和报告...</section>
+        ) : dataStatus === 'fallback' ? (
+          <section className="page journey-loading" role="alert">
+            企业和报告暂时无法读取。<button type="button" className="secondary-button" onClick={() => window.location.reload()}>重试</button>
+          </section>
+        ) : !selectedClient || !reports.some((report) => report.clientId === selectedClient.id) ? (
+          <FirstReportJourney
+            clients={clients.map((client) => ({ id: client.id, name: client.name, creditCode: client.creditCode }))}
+            selectedClientId={selectedClient?.id || ''}
+            sourceFileCount={activeTaxDataSummary?.stats.sourceFileCount || 0}
+            recordCount={activeTaxDataSummary?.stats.recordCount || 0}
+            months={journeyMonths}
+            selectedMonthId={journeySelectedMonthId}
+            summaryLoading={Boolean(selectedClient && !activeTaxDataSummary && !activeTaxDataSummaryError)}
+            summaryError={activeTaxDataSummaryError}
+            batch={directImportBatch}
+            importing={taxDataDirectImporting}
+            reportPrice={!pointWallet ? '正在查询本次报告费用' : pointWallet.adminUnlimited ? '管理员生成报告免费' : pointWallet.freeReportAvailable ? '本账号首份报告免费' : `保存新报告需要 ${pointWallet.reportCost} 积分`}
+            onSelectClient={(id) => { setSelectedClientId(id); setSelectedPeriodEntryIds([]) }}
+            onUploadCurrent={() => openDirectImport(selectedClient || null)}
+            onUploadNew={() => openDirectImport(null)}
+            onInspect={() => { setTaxDataViewMode('month'); setPage('clients') }}
+            onSelectMonth={(id) => setSelectedPeriodEntryIds(id ? [id] : [])}
+            onStartDetection={() => { setRiskDetectionStep('confirm'); setPage('result') }}
+            onRetrySummary={() => { setTaxDataSummaryError(null); setTaxDataSummaryReload((value) => value + 1) }}
+          />
+        ) : (
           <section className="page">
             <header className="page-header">
               <div>
@@ -6924,12 +7066,9 @@ function App() {
                 </button>
                 <button
                   className="primary-button"
-                  onClick={() => {
-                    setEditingClient(blankDraftClient())
-                    setPage('form')
-                  }}
+                  onClick={() => openDirectImport(null)}
                 >
-                  <Plus /> 导入财务数据
+                  <Plus /> 上传新企业资料
                 </button>
               </div>
             </header>
@@ -7171,7 +7310,7 @@ function App() {
               </section>
             )}
           </section>
-        )}
+        ))}
 
         <div style={page === 'assistant' ? { display: 'contents' } : { display: 'none' }} aria-hidden={page !== 'assistant'}>
           <AiAssistantPage
@@ -7195,30 +7334,23 @@ function App() {
                 <h2>企业档案与期间数据</h2>
               </div>
               <div className="header-actions">
-                <input
-                  ref={taxDataDirectImportInputRef}
-                  type="file"
-                  multiple
-                  accept=".xls,.xlsx,.pdf,.zip,.csv,.tsv,.txt,.json"
-                  className="assistant-hidden-file-input"
-                  onChange={(event) => void handleTaxDataDirectImport(event.target.files)}
-                />
                 <button
                   type="button"
                   className="secondary-button"
-                  onClick={() => taxDataDirectImportInputRef.current?.click()}
+                  onClick={() => openDirectImport(null)}
                   disabled={taxDataDirectImporting}
                 >
-                  <FileText /> {taxDataDirectImporting ? '标准解析中' : '标准资料导入'}
+                  <FileText /> 上传新企业资料
                 </button>
                 <button
                   className="primary-button"
-                  onClick={() => {
-                    setEditingClient(blankDraftClient())
-                    setPage('form')
-                  }}
+                  onClick={() => openDirectImport(selectedClient || null)}
+                  disabled={taxDataDirectImporting}
                 >
-                  <Plus /> 新建企业
+                  <Plus /> {taxDataDirectImporting ? '正在解析...' : selectedClient ? '补充当前企业资料' : '上传资料'}
+                </button>
+                <button className="ghost-button" title="手工档案不参与原始资料风险检测" onClick={() => { setEditingClient(blankDraftClient()); setPage('form') }}>
+                  手工建档
                 </button>
               </div>
             </header>
@@ -7226,7 +7358,7 @@ function App() {
               <Search />
               <input placeholder="搜索企业名称、统一社会信用代码或集团项目" value={query} onChange={(event) => setQuery(event.target.value)} />
             </div>
-            {taxDataDirectImportMessage && !selectedClient ? <pre className="tax-data-direct-import-result">{taxDataDirectImportMessage}</pre> : null}
+            {directImportBatch && (!directImportBatch.clientId || directImportBatch.clientId === selectedClient?.id) && <DirectImportReceipt batch={directImportBatch} />}
             {selectedClient && (
               <section className="panel archive-overview-panel">
                 <div className="panel-title">
@@ -7234,7 +7366,7 @@ function App() {
                     <p className="eyebrow">当前企业</p>
                     <h3>{selectedClient.name}</h3>
                     <p className="section-helper">
-                      已归档 {selectedClient.periodEntries.length} 期数据。先保存企业和期间数据，再进入风险检测选择连续月份分析。
+                      已归档 {selectedClient.periodEntries.length} 期数据。风险检测使用已入库的原始标准资料。
                     </p>
                   </div>
                   <div className="header-actions">
@@ -7256,7 +7388,7 @@ function App() {
                         setPage('form')
                       }}
                     >
-                      新增期间数据
+                      手工记录期间
                     </button>
                   </div>
                 </div>
@@ -7307,14 +7439,13 @@ function App() {
                       <button
                         type="button"
                         className="primary-button compact-button"
-                        onClick={() => taxDataDirectImportInputRef.current?.click()}
+                        onClick={() => openDirectImport(selectedClient)}
                         disabled={taxDataDirectImporting || !selectedClient}
                       >
-                        <FileText /> {taxDataDirectImporting ? '标准解析中' : '标准资料导入'}
+                        <FileText /> {taxDataDirectImporting ? '标准解析中' : '补充原始资料'}
                       </button>
                     </div>
                   </div>
-                  {taxDataDirectImportMessage ? <pre className="tax-data-direct-import-result">{taxDataDirectImportMessage}</pre> : null}
                   {taxDataViewMode === 'overview' ? (
                     <div className="tax-data-coverage-matrix" aria-label="各月资料覆盖情况">
                       {taxDataPeriodYears.map((year) => (
@@ -8073,6 +8204,7 @@ function App() {
             }}
             onRetryAi={retryAiReport}
             aiStage={aiReportStage}
+            aiFailure={aiReportFailure && aiReportFailure.reportId === selectedReport?.id ? aiReportFailure.message : ''}
             onUpdate={(content) =>
               setReports((current) =>
                 current.map((report) => (
@@ -11989,6 +12121,7 @@ function ReportPage({
   onGenerate,
   onRetryAi,
   aiStage,
+  aiFailure,
   onUpdate,
 }: {
   report?: Report
@@ -11997,6 +12130,7 @@ function ReportPage({
   onGenerate: () => void
   onRetryAi: (report: Report) => void
   aiStage: 'saving' | 'reviewing' | 'generating' | null
+  aiFailure: string
   onUpdate: (content: string) => void
 }) {
   const safeRisks = Array.isArray(risks) ? risks : []
@@ -12093,7 +12227,7 @@ function ReportPage({
         </div>
       </header>
       {!aiStage && report.aiSource && !report.aiGenerated && (
-        <p className="period-warning">当前展示已保存的标准报告。AI 润色未完成，重试不会再次扣积分。</p>
+        <p className="period-warning">当前展示已保存的标准报告。AI 润色未完成{aiFailure ? `：${aiFailure}` : ''}。重试不会再次扣积分。</p>
       )}
       {legacyMethodology && (
         <div className="period-warning-list">

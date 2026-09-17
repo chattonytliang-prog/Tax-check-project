@@ -7,6 +7,7 @@ import { onRequestDelete as deleteReport } from '../reports/[id].js'
 import { onRequestGet as getPoints } from './index.js'
 import { onRequestPost as adjustPoints } from '../admin/users/[id]/points.js'
 import { onRequestPost as generateAiReport } from '../ai/report.js'
+import { onRequestPost as generateAiReview } from '../ai/review.js'
 import { pointErrorResponse } from '../_points.js'
 
 vi.mock('../auth/_auth.js', () => ({
@@ -393,7 +394,16 @@ describe('report points', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ choices: [] }), { status: 200 })))
     expect((await generateAiReport({ request: request('u', body), env })).status).toBe(502)
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network failed') }))
-    expect((await generateAiReport({ request: request('u', body), env })).status).toBe(500)
+    const networkFailure = await generateAiReport({ request: request('u', body), env })
+    expect(networkFailure.status).toBe(502)
+    expect((await networkFailure.json()).error).toContain('无法连接')
+
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      choices: [{ finish_reason: 'length', message: { content: '未完成' } }],
+    }), { status: 200 })))
+    const truncated = await generateAiReport({ request: request('u', body), env })
+    expect(truncated.status).toBe(502)
+    expect((await truncated.json()).error).toContain('截断')
 
     const upstream = vi.fn(async () => new Response(JSON.stringify({
       choices: [{ message: { content: '成立不足一年。\n已执行规则风险结论。\nIssue R1' } }],
@@ -408,8 +418,25 @@ describe('report points', () => {
     expect(result.content).not.toContain('成立不足一年')
     expect(result.content).not.toContain('已执行规则')
     expect(result.content).not.toContain('Issue R1')
-    expect(JSON.parse(upstream.mock.calls[0][1].body).messages[1].content).toContain('已知原因')
+    const upstreamBody = JSON.parse(upstream.mock.calls[0][1].body)
+    expect(upstreamBody.messages[1].content).toContain('已知原因')
+    expect(upstreamBody.thinking).toEqual({ type: 'disabled' })
+    expect(upstreamBody.max_tokens).toBe(10000)
     expect(sqlite.prepare("SELECT content FROM reports WHERE id = 'ai-errors'").get().content).toBe('报告正文')
+  })
+
+  it('requests non-thinking JSON for optional data review', async () => {
+    const { db } = createDatabase()
+    const env = { DB: db, DEEPSEEK_API_KEY: 'test' }
+    const upstream = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{ finish_reason: 'stop', message: { content: '{"dataQualityWarnings":[],"nearThresholdWarnings":[],"riskReviewNotes":[]}' } }],
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', upstream)
+    const response = await generateAiReview({ request: request('u', { client: { id: 'c', name: '客户' }, risks: [] }), env })
+    expect(response.status).toBe(200)
+    const body = JSON.parse(upstream.mock.calls[0][1].body)
+    expect(body.thinking).toEqual({ type: 'disabled' })
+    expect(body.response_format).toEqual({ type: 'json_object' })
   })
 
   it('preserves a short-establishment claim only when age is young or unknown', async () => {

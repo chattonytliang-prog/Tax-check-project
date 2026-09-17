@@ -64,6 +64,8 @@ export const taxDataIntakeMigration = {
       ON tax_data_source_files(batch_id)`,
     `CREATE INDEX IF NOT EXISTS idx_tax_data_source_files_client_period
       ON tax_data_source_files(client_id, period_start, period_end)`,
+    `CREATE INDEX IF NOT EXISTS idx_tax_data_source_files_owner_client_hash
+      ON tax_data_source_files(owner_user_id, client_id, file_hash)`,
     `CREATE TABLE IF NOT EXISTS tax_data_periods (
       id TEXT PRIMARY KEY,
       owner_user_id TEXT NOT NULL,
