@@ -97,6 +97,26 @@ function report(id, clientId = 'c') {
 }
 
 describe('report points', () => {
+  it('rejects a new report whose summary risk count differs from its stored details before charging', async () => {
+    const { sqlite, db } = createDatabase()
+    const env = { DB: db }
+    const inconsistent = {
+      ...report('count-mismatch'),
+      risks: [{ code: 'R1', name: '风险一', level: '高' }],
+      structured: { executiveSummary: { totalRisks: 0 } },
+    }
+    const response = await saveReport({ request: request('u', inconsistent), env })
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toContain('风险数与风险明细不一致')
+    expect(sqlite.prepare("SELECT id FROM reports WHERE id = 'count-mismatch'").get()).toBeUndefined()
+    expect(sqlite.prepare("SELECT report_id FROM report_entitlements WHERE report_id = 'count-mismatch'").get()).toBeUndefined()
+    expect(sqlite.prepare("SELECT COUNT(*) AS count FROM report_entitlements WHERE user_id = 'u'").get().count).toBe(0)
+
+    const consistent = { ...inconsistent, structured: { executiveSummary: { totalRisks: 1 } } }
+    expect((await saveReport({ request: request('u', consistent), env })).status).toBe(200)
+    expect(sqlite.prepare("SELECT COUNT(*) AS count FROM risk_results WHERE report_id = 'count-mismatch'").get().count).toBe(1)
+  })
+
   it('maps known billing errors and leaves unrelated errors for the caller', async () => {
     expect(pointErrorResponse(new Error('other error'))).toBeNull()
     const duplicate = pointErrorResponse(new Error('UNIQUE constraint failed: report_entitlements.report_id'))

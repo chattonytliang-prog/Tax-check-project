@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   isCompleteStructuredReport,
+  reportRiskCountMismatch,
   reportRiskList,
   reportTextContent,
   type CompleteStructuredReportShape,
@@ -80,6 +81,13 @@ describe('reportCompatibility', () => {
   it('preserves valid risk arrays without copying their items', () => {
     const risk = { code: 'R1', level: '高' }
     expect(reportRiskList({ risks: [risk] })).toEqual([risk])
+  })
+
+  it('only flags a mismatch within the same saved report', () => {
+    expect(reportRiskCountMismatch()).toBeNull()
+    expect(reportRiskCountMismatch({ risks: [{}], structured: { executiveSummary: { totalRisks: 2 } } })).toBeNull()
+    expect(reportRiskCountMismatch({ risks: [], structured: completeReport })).toBeNull()
+    expect(reportRiskCountMismatch({ risks: [{}], structured: completeReport })).toEqual({ summaryCount: 0, detailCount: 1 })
   })
 
   it('uses trimmed existing report content when available', () => {

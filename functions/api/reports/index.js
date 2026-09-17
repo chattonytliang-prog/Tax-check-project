@@ -86,6 +86,12 @@ export async function onRequestPost({ request, env }) {
       return json({ report, charged: false })
     }
 
+    const summaryRiskCount = report.structured?.executiveSummary?.totalRisks
+    if (summaryRiskCount !== undefined
+      && (!Number.isInteger(summaryRiskCount) || summaryRiskCount !== report.risks.length)) {
+      return badRequest('报告摘要风险数与风险明细不一致')
+    }
+
     const expectedCostHeader = request.headers.get('x-expected-report-cost')
     if (expectedCostHeader !== '0' && expectedCostHeader !== String(REPORT_COST_POINTS)) {
       return badRequest('请先确认本次报告费用')

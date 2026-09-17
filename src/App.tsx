@@ -56,6 +56,7 @@ import { reportFileName } from './lib/reportFileName'
 import { reportFollowUpCadence } from './lib/reportFollowUpCadence'
 import {
   isCompleteStructuredReport,
+  reportRiskCountMismatch,
   reportRiskList,
   reportTextContent,
   type CompleteStructuredReportShape,
@@ -5374,21 +5375,22 @@ function App() {
     sourceBackedOverviewClient?.id === client.id ? sourceBackedOverviewClient : client
   )), [clients, sourceBackedOverviewClient])
 
-  const clientRows = useMemo(() => {
-    return clients
-      .filter((client) => client.name.includes(query) || client.creditCode.includes(query) || getGroupName(client).includes(query))
-      .map((client) => {
-        const analysisClient = analysisClients.find((item) => item.id === client.id) || client
-        const risks = detectRisks(analysisClient, managedRules)
-        return {
-          client,
-          analysisClient,
-          risks,
-          level: getOverallLevel(risks),
-          report: reports.find((report) => report.clientId === client.id),
-        }
-      })
-  }, [analysisClients, clients, query, reports, managedRules])
+  const allClientRows = useMemo(() => {
+    return clients.map((client) => {
+      const analysisClient = analysisClients.find((item) => item.id === client.id) || client
+      const risks = detectRisks(analysisClient, managedRules)
+      return {
+        client,
+        analysisClient,
+        risks,
+        level: getOverallLevel(risks),
+        report: reports.find((report) => report.clientId === client.id),
+      }
+    })
+  }, [analysisClients, clients, reports, managedRules])
+  const clientRows = useMemo(() => allClientRows.filter(({ client }) => (
+    client.name.includes(query) || client.creditCode.includes(query) || getGroupName(client).includes(query)
+  )), [allClientRows, query])
 
   const groupSummaries = useMemo(() => buildGroupSummaries(analysisClients, managedRules), [analysisClients, managedRules])
   const selectedGroupSummary = useMemo(() => {
@@ -5415,7 +5417,7 @@ function App() {
   const bossPeriodLabel = bossPeriodActive ? formatMonthRange(bossPeriodMonths) : '全部期间'
   const bossPeriodClientRows = useMemo(() => {
     if (!bossPeriodActive) {
-      return clientRows.map((row) => ({ ...row, missingMonths: [] as string[], periodComplete: true }))
+      return allClientRows.map((row) => ({ ...row, missingMonths: [] as string[], periodComplete: true }))
     }
 
     return clients.map((client) => {
@@ -5453,7 +5455,7 @@ function App() {
         periodComplete: missingMonths.length === 0,
       }
     })
-  }, [bossPeriodActive, bossPeriodMonths, clientRows, clients, managedRules, reports])
+  }, [allClientRows, bossPeriodActive, bossPeriodMonths, clients, managedRules, reports])
   const bossStats = useMemo(() => {
     const analysableRows = bossPeriodClientRows.filter((row) => row.periodComplete)
     const riskSets = analysableRows.map((row) => row.risks)
@@ -7155,7 +7157,7 @@ function App() {
                 <strong>{bossStats.missingPeriodClients + bossDashboard.missingDataClients} 家待补</strong>
               </div>
               <div>
-                <span>风险命中</span>
+                <span>当前复算风险</span>
                 <strong>{bossStats.detections} 项</strong>
               </div>
             </section>
@@ -7192,7 +7194,7 @@ function App() {
               />
               <EChartPanel
                 title="税种风险命中分布"
-                subtitle="汇总所有企业当前命中的风险事项"
+                subtitle="按当前数据与启用规则复算，非历史报告累计"
                 option={dashboardTaxOption}
                 rows={dashboardTaxDisplayRows}
               />
@@ -7279,7 +7281,7 @@ function App() {
             <div className="stat-grid">
               <StatCard label="企业档案" value={clients.length} icon={<Building2 />} />
               <StatCard label="集团项目" value={stats.groups} icon={<ClipboardList />} tone="green" />
-              <StatCard label="命中风险" value={stats.detections} icon={<AlertTriangle />} tone="orange" />
+              <StatCard label="当前复算风险" value={stats.detections} icon={<AlertTriangle />} tone="orange" />
               <StatCard label="高风险企业" value={stats.high} icon={<Gauge />} tone="red" />
             </div>
             <div className="two-column">
@@ -12175,6 +12177,7 @@ function ReportPage({
     ? report.structured
     : buildStructuredReport(client, safeRisks, fallbackSkippedRules)
   const legacyMethodology = Boolean(report) && structured.methodology !== 'source-backed-v2'
+  const riskCountMismatch = reportRiskCountMismatch(report)
   const fallbackContent = report ? reportTextContent(report) : buildProfessionalReportContent(structured)
   const draft = sanitizePublicReportContent(fallbackContent || buildReportContent(client, safeRisks))
   const aiMessage = aiStage === 'saving'
@@ -12269,6 +12272,12 @@ function ReportPage({
         <div className="period-warning-list">
           <strong>历史口径报告</strong>
           <p>该报告生成于标准资料口径升级前，风险数量和等级不代表当前结果；请重新选择期间并生成新版初筛报告。</p>
+        </div>
+      )}
+      {riskCountMismatch && (
+        <div className="period-warning-list" role="alert">
+          <strong>报告风险数量待复核</strong>
+          <p>此报告摘要写有 {riskCountMismatch.summaryCount} 项，保存的风险明细为 {riskCountMismatch.detailCount} 项。请以明细核对历史报告，并基于当前资料重新生成。</p>
         </div>
       )}
       {aiStage ? (

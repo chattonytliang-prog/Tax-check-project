@@ -62,6 +62,13 @@ export function reportRiskList(report?: { risks?: unknown }): unknown[] {
   return Array.isArray(report?.risks) ? report.risks : []
 }
 
+export function reportRiskCountMismatch(report?: { risks?: unknown; structured?: unknown }) {
+  if (!report || !isCompleteStructuredReport(report.structured)) return null
+  const detailCount = reportRiskList(report).length
+  const summaryCount = report.structured.executiveSummary.totalRisks
+  return summaryCount === detailCount ? null : { summaryCount, detailCount }
+}
+
 export function reportTextContent(report: { clientName?: string; content?: unknown }) {
   const content = typeof report.content === 'string' ? report.content.trim() : ''
   if (content) return content
