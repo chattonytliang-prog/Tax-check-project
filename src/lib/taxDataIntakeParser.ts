@@ -149,6 +149,14 @@ function monthPeriod(year: string, month: string): Period {
   }
 }
 
+function monthRangePeriod(startYear: string, startMonth: string, endYear: string, endMonth: string): Period {
+  const start = monthPeriod(startYear, startMonth)
+  const end = monthPeriod(endYear, endMonth)
+  return start.periodStart && end.periodEnd && start.periodStart <= end.periodEnd
+    ? { periodStart: start.periodStart, periodEnd: end.periodEnd }
+    : {}
+}
+
 function shortDateMonthPeriod(text: string): Period {
   const match = text.match(/(?:^|\s)(\d{1,2})\/(\d{1,2})\/(\d{2})(?:\s|$)/)
   return match ? monthPeriod(`20${match[3]}`, match[1]) : {}
@@ -157,7 +165,7 @@ function shortDateMonthPeriod(text: string): Period {
 export function detectTaxDataPeriod(text: string): Period {
   const topCompactRange = text.match(/(20\d{2})(\d{2})\s*[-~—至到]\s*(20\d{2})(\d{2})/)
   if (topCompactRange) {
-    return { periodStart: monthPeriod(topCompactRange[1], topCompactRange[2]).periodStart, periodEnd: monthPeriod(topCompactRange[3], topCompactRange[4]).periodEnd }
+    return monthRangePeriod(topCompactRange[1], topCompactRange[2], topCompactRange[3], topCompactRange[4])
   }
   const normalDateRange = text.match(/(20\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?\s*(?:至|到|-)\s*(20\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/)
   if (normalDateRange) {
@@ -180,19 +188,15 @@ export function detectTaxDataPeriod(text: string): Period {
   }
   const normalCompactRange = text.match(/(20\d{2})(\d{2})\s*[-~—至到]\s*(20\d{2})(\d{2})/)
   if (normalCompactRange) {
-    return { periodStart: monthPeriod(normalCompactRange[1], normalCompactRange[2]).periodStart, periodEnd: monthPeriod(normalCompactRange[3], normalCompactRange[4]).periodEnd }
+    return monthRangePeriod(normalCompactRange[1], normalCompactRange[2], normalCompactRange[3], normalCompactRange[4])
   }
   const normalDottedRange = text.match(/(20\d{2})\.(\d{1,2})\s*-\s*(?:(20\d{2})\.)?(\d{1,2})/)
   if (normalDottedRange) {
-    const start = monthPeriod(normalDottedRange[1], normalDottedRange[2])
-    const end = monthPeriod(normalDottedRange[3] || normalDottedRange[1], normalDottedRange[4])
-    return { periodStart: start.periodStart, periodEnd: end.periodEnd }
+    return monthRangePeriod(normalDottedRange[1], normalDottedRange[2], normalDottedRange[3] || normalDottedRange[1], normalDottedRange[4])
   }
   const normalMonthRange = text.match(/(20\d{2})\s*年?\s*(\d{1,2})\s*月?\s*(?:至|到|-)\s*(?:(20\d{2})\s*年?)?\s*(\d{1,2})\s*月?/)
   if (normalMonthRange) {
-    const start = monthPeriod(normalMonthRange[1], normalMonthRange[2])
-    const end = monthPeriod(normalMonthRange[3] || normalMonthRange[1], normalMonthRange[4])
-    return { periodStart: start.periodStart, periodEnd: end.periodEnd }
+    return monthRangePeriod(normalMonthRange[1], normalMonthRange[2], normalMonthRange[3] || normalMonthRange[1], normalMonthRange[4])
   }
   const normalCompact = text.match(/(20\d{2})(\d{2})(?!\d)/)
   if (normalCompact) return monthPeriod(normalCompact[1], normalCompact[2])
@@ -200,7 +204,7 @@ export function detectTaxDataPeriod(text: string): Period {
   if (normalMonth) return monthPeriod(normalMonth[1], normalMonth[2])
   const earlyCompactRange = text.match(/(20\d{2})(\d{2})\s*[-~—]\s*(20\d{2})(\d{2})/)
   if (earlyCompactRange) {
-    return { periodStart: monthPeriod(earlyCompactRange[1], earlyCompactRange[2]).periodStart, periodEnd: monthPeriod(earlyCompactRange[3], earlyCompactRange[4]).periodEnd }
+    return monthRangePeriod(earlyCompactRange[1], earlyCompactRange[2], earlyCompactRange[3], earlyCompactRange[4])
   }
   const earlyCompact = text.match(/(20\d{2})(\d{2})(?!\d)/)
   if (earlyCompact) return monthPeriod(earlyCompact[1], earlyCompact[2])

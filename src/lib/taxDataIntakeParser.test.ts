@@ -117,6 +117,26 @@ describe('tax data intake parser', () => {
     expect(parsed.conflicts).toContainEqual(expect.objectContaining({ conflictType: 'template_validation_failed', severity: 'high' }))
   })
 
+  it('rejects reversed or invalid month ranges before standardizing balances', () => {
+    expect(detectTaxDataPeriod('账簿_202512-202501.xls')).toEqual({})
+    expect(detectTaxDataPeriod('2025.12-2025.01')).toEqual({})
+    expect(detectTaxDataPeriod('2025年12月-2025年01月')).toEqual({})
+    expect(detectTaxDataPeriod('202513-202514')).toEqual({})
+    expect(detectTaxDataPeriod('账簿_202501-202512.xls')).toEqual({ periodStart: '2025-01-01', periodEnd: '2025-12-31' })
+
+    const parsed = parseTaxDataWorkbook('科目余额表_202512-202501.xls', [{
+      name: '科目余额表',
+      rows: [
+        ['科目编码', '科目名称', '期初余额', '期初余额', '本期发生额', '本期发生额', '本年累计发生额', '本年累计发生额', '期末余额', '期末余额'],
+        ['', '', '借方', '贷方', '借方', '贷方', '借方', '贷方', '借方', '贷方'],
+        ['1001', '库存现金', '10', '', '2', '1', '2', '1', '11', ''],
+      ],
+    }])
+    expect(parsed.records).toHaveLength(1)
+    expect(parsed.records[0].periodStart).toBeUndefined()
+    expect(parsed.autoImportEligible).toBe(false)
+  })
+
   it('does not treat ledger labels as invalid dates', () => {
     const parsed = parseTaxDataWorkbook('明细账_全部科目_202502.xls', [{
       name: '1001 库存现金',
