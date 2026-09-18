@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { EChartsOption } from 'echarts'
 import { unzipSync } from 'fflate'
 import type { EChartsType } from 'echarts/core'
@@ -48,6 +48,7 @@ import {
   type SimpleRuleCondition,
 } from './lib/ruleEngine'
 import { advancedCandidateRuleConfigs, type AdvancedCandidateRuleConfig } from './lib/advancedCandidateRuleConfigs'
+import { assistantThreadStorageKey } from './lib/assistantThreadStorage'
 import { reportClientAcknowledgement } from './lib/reportClientAcknowledgement'
 import { reportArchiveEvidenceStatement, type ReportArchiveEvidence } from './lib/reportArchiveEvidence'
 import { reportDeliveryChecklist } from './lib/reportDeliveryChecklist'
@@ -3806,7 +3807,6 @@ function resolvedConfirmationFields(message: string, patch: Partial<Client>) {
   return fields
 }
 
-const assistantThreadsStorageKey = 'hy-tax-ai-assistant-threads'
 const emptyAssistantMessages: AiAssistantMessage[] = []
 const emptyAssistantDrafts: AiAssistantDraft[] = []
 
@@ -3823,10 +3823,10 @@ function createAssistantThread(title = '新对话', client?: Pick<Client, 'id' |
   }
 }
 
-function loadAssistantThreads() {
+function loadAssistantThreads(ownerUserId: string) {
   if (typeof window === 'undefined') return [createAssistantThread()]
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(assistantThreadsStorageKey) || '[]') as AssistantThread[]
+    const parsed = JSON.parse(window.localStorage.getItem(assistantThreadStorageKey(ownerUserId)) || '[]') as AssistantThread[]
     const validThreads = parsed.filter((thread) => thread?.id && thread?.title)
     return validThreads.length ? validThreads : [createAssistantThread()]
   } catch {
@@ -4842,6 +4842,32 @@ function App() {
   const taxDataDirectImportInputRef = useRef<HTMLInputElement>(null)
   const directImportTargetRef = useRef<Client | null>(null)
   const taxDataDetailCache = useRef(new Map<string, TaxDataDetail>())
+  const clearWorkspaceState = useCallback(() => {
+    setClients([])
+    setReports([])
+    setReportRiskResultCounts({})
+    setSelectedClientId('')
+    setSelectedReportId('')
+    setEditingClient(blankDraftClient())
+    setSelectedPeriodEntryIds([])
+    setTaxDataSummary(null)
+    setTaxDataSummaryError(null)
+    setTaxDataDetailSlot(null)
+    setTaxDataDetail(null)
+    setTaxDataDetailError('')
+    taxDataDetailCache.current.clear()
+    setDirectImportBatch(null)
+    directImportTargetRef.current = null
+    setAdminUsers([])
+    setAdjustingPointsUser(null)
+    setPointWallet(null)
+    setPointWalletError('')
+    setManagedRules([])
+    setRestrictedRuleCount(0)
+    setAiReportFailure(null)
+    reportRetryDraft.current = null
+    setPage('dashboard')
+  }, [])
   const canViewRuleLibrary = Boolean(
     authUser
     && !authUser.actor
@@ -4941,16 +4967,17 @@ function App() {
         }
         setDataStatus('connected')
       } catch (error) {
-        console.warn('Using local demo data because API is unavailable.', error)
+        if (!active) return
+        console.warn('Unable to load workspace data.', error)
         if (error instanceof Error && error.message.includes('401')) {
+          clearWorkspaceState()
           setLoggedIn(false)
           setAuthUser(null)
           setAuthLoading(false)
           return
         }
-        if (active) {
-          setDataStatus('fallback')
-        }
+        clearWorkspaceState()
+        setDataStatus('fallback')
       }
     }
 
@@ -4959,7 +4986,7 @@ function App() {
     return () => {
       active = false
     }
-  }, [loggedIn, authUser])
+  }, [loggedIn, authUser, clearWorkspaceState])
 
   useEffect(() => {
     if (!loggedIn || !authUser || page !== 'admin') return
@@ -6819,13 +6846,8 @@ function App() {
           password: authPassword,
         },
       )
+      clearWorkspaceState()
       setAuthUser(response.user)
-      setPointWallet(null)
-      setPointWalletError('')
-      if (!(response.user.username.trim().toLowerCase() === 'test1' && response.user.role === 'admin' && !response.user.actor)) {
-        setManagedRules([])
-        setRestrictedRuleCount(0)
-      }
       setLoggedIn(true)
       setAuthPassword('')
       setDataStatus('loading')
@@ -6846,13 +6868,9 @@ function App() {
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
+    clearWorkspaceState()
     setLoggedIn(false)
     setAuthUser(null)
-    setReportRiskResultCounts({})
-    setPointWallet(null)
-    setPointWalletError('')
-    setManagedRules([])
-    setRestrictedRuleCount(0)
     setAuthPassword('')
     setDataStatus('loading')
   }
@@ -6893,14 +6911,8 @@ function App() {
 
     try {
       const response = await apiSend<{ user: AuthUser }>('/api/admin/impersonate', 'POST', { userId: user.id })
+      clearWorkspaceState()
       setAuthUser(response.user)
-      setPointWallet(null)
-      setPointWalletError('')
-      setClients([])
-      setReports([])
-      setReportRiskResultCounts({})
-      setManagedRules([])
-      setRestrictedRuleCount(0)
       setPage('dashboard')
       setDataStatus('loading')
     } catch (error) {
@@ -6912,12 +6924,8 @@ function App() {
   const stopImpersonation = async () => {
     try {
       const response = await apiSend<{ user: AuthUser }>('/api/admin/stop-impersonation', 'POST', {})
+      clearWorkspaceState()
       setAuthUser(response.user)
-      setPointWallet(null)
-      setPointWalletError('')
-      setClients([])
-      setReports([])
-      setReportRiskResultCounts({})
       setPage('admin')
       setDataStatus('loading')
     } catch (error) {
@@ -7377,6 +7385,8 @@ function App() {
 
         <div style={page === 'assistant' ? { display: 'contents' } : { display: 'none' }} aria-hidden={page !== 'assistant'}>
           <AiAssistantPage
+            key={authUser?.id || ''}
+            ownerUserId={authUser?.id || ''}
             clients={clients}
             selectedClientId={selectedClientId}
             managedRules={managedRules}
@@ -10385,6 +10395,7 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
 }
 
 function AiAssistantPage({
+  ownerUserId,
   clients,
   selectedClientId,
   managedRules,
@@ -10395,6 +10406,7 @@ function AiAssistantPage({
   onGenerateReport,
   onTaxDataSummaryUpdate,
 }: {
+  ownerUserId: string
   clients: Client[]
   selectedClientId: string
   managedRules: ManagedRule[]
@@ -10418,7 +10430,7 @@ function AiAssistantPage({
   const dataCompleteness = useMemo(() => getDataCompleteness(selectedClient, risks), [selectedClient, risks])
   const [assistantInput, setAssistantInput] = useState('')
   const [assistantThreadState, setAssistantThreadState] = useState(() => {
-    const threads = loadAssistantThreads()
+    const threads = loadAssistantThreads(ownerUserId)
     return { threads, activeId: threads[0]?.id || '' }
   })
   const assistantThreads = assistantThreadState.threads
@@ -10518,8 +10530,8 @@ function AiAssistantPage({
     return () => window.cancelAnimationFrame(firstFrame)
   }, [assistantMessages, showAssistantProcessingMessage, assistantProgressText, assistantPendingFiles.length])
   useEffect(() => {
-    window.localStorage.setItem(assistantThreadsStorageKey, JSON.stringify(assistantThreads.slice(0, 20)))
-  }, [assistantThreads])
+    window.localStorage.setItem(assistantThreadStorageKey(ownerUserId), JSON.stringify(assistantThreads.slice(0, 20)))
+  }, [assistantThreads, ownerUserId])
   useEffect(() => {
     let active = true
     async function loadPersistedThreads() {
