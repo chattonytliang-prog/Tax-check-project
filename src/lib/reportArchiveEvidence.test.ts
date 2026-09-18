@@ -23,4 +23,16 @@ describe('report archive evidence statement', () => {
     expect(reportArchiveEvidenceStatement({ sourceFileCount: Number.NaN, storedSourceFileCount: 0, linkedSourceFileCount: 0, recordCount: 0 }))
       .toContain('未能核验企业归档统计')
   })
+
+  it('does not print contradictory archive counts as verified report evidence', () => {
+    for (const evidence of [
+      { sourceFileCount: 1, storedSourceFileCount: 2, linkedSourceFileCount: 0, recordCount: 0 },
+      { sourceFileCount: 1, storedSourceFileCount: 1, linkedSourceFileCount: 2, recordCount: 2 },
+      { sourceFileCount: 2, storedSourceFileCount: 1, linkedSourceFileCount: 2, recordCount: 1 },
+    ]) {
+      expect(reportArchiveEvidenceStatement(evidence)).toContain('未能核验企业归档统计')
+    }
+    expect(reportArchiveEvidenceStatement({ sourceFileCount: 2, storedSourceFileCount: 1, linkedSourceFileCount: 2, recordCount: 3 }))
+      .toContain('2 个文件形成标准记录')
+  })
 })

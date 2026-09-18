@@ -6,7 +6,11 @@ export type ReportArchiveEvidence = {
 }
 
 export function reportArchiveEvidenceStatement(evidence?: ReportArchiveEvidence | null) {
-  if (!evidence || Object.values(evidence).some((value) => !Number.isSafeInteger(value) || value < 0)) {
+  if (!evidence
+    || Object.values(evidence).some((value) => !Number.isSafeInteger(value) || value < 0)
+    || evidence.storedSourceFileCount > evidence.sourceFileCount
+    || evidence.linkedSourceFileCount > evidence.sourceFileCount
+    || evidence.linkedSourceFileCount > evidence.recordCount) {
     return '生成时未能核验企业归档统计；报告仅依据已录入期间数据，来源文件与标准记录需另行核对。'
   }
 
