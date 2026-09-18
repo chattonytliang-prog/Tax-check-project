@@ -49,6 +49,7 @@ import {
 } from './lib/ruleEngine'
 import { advancedCandidateRuleConfigs, type AdvancedCandidateRuleConfig } from './lib/advancedCandidateRuleConfigs'
 import { reportClientAcknowledgement } from './lib/reportClientAcknowledgement'
+import { reportArchiveEvidenceStatement, type ReportArchiveEvidence } from './lib/reportArchiveEvidence'
 import { reportDeliveryChecklist } from './lib/reportDeliveryChecklist'
 import { reportDocumentId } from './lib/reportDocumentId'
 import { professionalReportDocumentHtml } from './lib/reportDocumentHtml'
@@ -4167,6 +4168,7 @@ function buildStructuredReport(
   risks: RiskResult[],
   skippedRules: SkippedRule[] = [],
   evaluatedRuleCount = getSourceRules().length,
+  archiveEvidence?: ReportArchiveEvidence | null,
 ): StructuredReport {
   const level = getOverallLevel(risks)
   const highRisks = riskCountByRank(risks, 3)
@@ -4205,7 +4207,7 @@ function buildStructuredReport(
     scope: [
       { label: '报告编号', value: reportDocumentId(client) },
       { label: '报告版本', value: 'V1.0' },
-      { label: '报告状态', value: '标准资料初筛版（待顾问复核）' },
+      { label: '报告状态', value: '已录入数据初筛版（待顾问复核）' },
       { label: '报告性质', value: '基于已提供资料的风险初筛，不是完整税务体检或鉴证报告' },
       { label: '审阅期间', value: formatAnalysisPeriod(client) },
       { label: '数据来源', value: reportValue(client.dataBasis) },
@@ -4221,7 +4223,8 @@ function buildStructuredReport(
       { label: '复核建议', value: reportReviewAction({ totalRisks: risks.length, highRisks, mediumRisks }) },
       { label: '生成时间', value: formatDate() },
       { label: '资料覆盖口径', value: `基础检测字段 ${completeness.covered}/${completeness.total}；不代表全部账套、凭证、合同、流水或申报资料完整` },
-      { label: '工作方法', value: '基于已提供标准资料和所选连续期间进行自动初筛；AI 仅作表达润色和数据复核提示。' },
+      { label: '来源归档核对', value: reportArchiveEvidenceStatement(archiveEvidence) },
+      { label: '工作方法', value: '基于系统已录入的期间数据进行自动初筛；AI 仅作表达润色和数据复核提示，不证明原始凭证已核验。' },
       { label: '工作限制', value: '未提供证据的事项不作判断；本次初筛不替代原始凭证穿行测试、完整账套复核、税务机关沟通、专项鉴证或法律意见。' },
     ],
     executiveSummary: {
@@ -6643,7 +6646,13 @@ function App() {
     const risks = detectRisks(reportClient, managedRules)
     const skippedRules = getSkippedRules(reportClient, managedRules)
     const evaluatedRuleCount = getSourceRules(managedRules).length
-    const structuredReport = buildStructuredReport(reportClient, risks, skippedRules, evaluatedRuleCount)
+    const archiveEvidence = activeTaxDataSummary ? {
+      sourceFileCount: activeTaxDataSummary.stats.sourceFileCount ?? Number.NaN,
+      storedSourceFileCount: activeTaxDataSummary.stats.storedSourceFileCount ?? Number.NaN,
+      linkedSourceFileCount: activeTaxDataSummary.stats.linkedSourceFileCount ?? Number.NaN,
+      recordCount: activeTaxDataSummary.stats.recordCount,
+    } : null
+    const structuredReport = buildStructuredReport(reportClient, risks, skippedRules, evaluatedRuleCount, archiveEvidence)
     const risksForAi = risks.map((risk, index) => ({
       ...risk,
       displayOrder: index + 1,
@@ -8339,7 +8348,7 @@ function App() {
                         </td>
                         <td>{client.periodEntries.length ? `${client.periodEntries.length} 期` : '未归档'}</td>
                         <td><LevelBadge level={level} /></td>
-                        <td>{report ? (report.structured?.methodology === 'source-backed-v2' ? '标准资料初筛' : '历史口径（建议重算）') : '未生成'}</td>
+                        <td>{report ? (report.structured?.methodology === 'source-backed-v2' ? '已录入数据初筛' : '历史口径（建议重算）') : '未生成'}</td>
                         <td className="row-actions">
                           <button onClick={() => openClientForPeriodSelection(client)}>
                             选择期间
