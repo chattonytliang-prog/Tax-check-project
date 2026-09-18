@@ -28,9 +28,11 @@ describe('archive evidence counts', () => {
       document_type: 'account_balance',
       period_start: '2025-01-01',
       period_end: '2025-01-31',
-      parse_status: index === 7 ? 'needs_confirmation' : 'parsed',
+      parse_status: index === 2 ? 'failed' : index === 3 || index === 4 || index === 7 ? 'needs_confirmation' : 'parsed',
       storage_key: index < 7 ? `archive/${index + 1}` : '',
-      evidence_json: index === 7 ? JSON.stringify({ templateMatches: [{ validations: [{ blocking: true, status: 'failed', detail: '缺少必需表头' }] }] }) : '{}',
+      evidence_json: index === 4 || index === 7
+        ? JSON.stringify({ templateMatches: [{ validations: [{ blocking: true, status: 'failed', detail: index === 4 ? '第 4 行交易日期无效' : '缺少必需表头' }] }] })
+        : '{}',
       created_at: '2025-02-01',
     }))
     const db = {
@@ -59,6 +61,9 @@ describe('archive evidence counts', () => {
     expect(body.stats).toMatchObject({ sourceFileCount: 9, storedSourceFileCount: 7, linkedSourceFileCount: 5, recordCount: 1729 })
     expect(body.sourceFiles).toHaveLength(9)
     expect(body.sourceFiles[0]).toMatchObject({ stored: true, recordCount: 2, reviewNote: '' })
+    expect(body.sourceFiles[2]).toMatchObject({ stored: true, recordCount: 2, reviewNote: expect.stringContaining('解析状态为失败') })
+    expect(body.sourceFiles[3]).toMatchObject({ stored: true, recordCount: 2, reviewNote: expect.stringContaining('仍待人工确认') })
+    expect(body.sourceFiles[4]).toMatchObject({ stored: true, recordCount: 2, reviewNote: '第 4 行交易日期无效' })
     expect(body.sourceFiles[7]).toMatchObject({ stored: false, recordCount: 0, reviewNote: '缺少必需表头' })
     expect(body.sourceFiles[8]).toMatchObject({ stored: false, recordCount: 0, reviewNote: expect.stringContaining('尚无标准记录') })
     expect(queries.filter(({ sql }) => sql.includes('FROM tax_data_source_files')).map(({ params }) => params)).toContainEqual(['owner-a', 'client-a'])

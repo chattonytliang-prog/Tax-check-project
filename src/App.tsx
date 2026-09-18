@@ -7564,7 +7564,7 @@ function App() {
                     <details className="tax-data-file-ledger">
                       <summary>
                         <span>逐文件入库核对</span>
-                        <small>{archivedSourceFiles.length} 个已登记文件 · {archivedSourceFiles.filter((source) => source.recordCount === 0).length} 个未形成标准记录</small>
+                        <small>{archivedSourceFiles.length} 个已登记文件 · {archivedSourceFiles.filter((source) => source.recordCount === 0).length} 个未形成标准记录 · {archivedSourceFiles.filter((source) => source.recordCount > 0 && source.reviewNote).length} 个已入库待核对</small>
                       </summary>
                       <p>文件登记、原件保存、标准记录入库是三个不同环节；下表覆盖该企业全部期间的已登记文件。</p>
                       <div className="tax-data-file-ledger-list">
@@ -7575,8 +7575,8 @@ function App() {
                               <small>{source.periodStart && source.periodEnd ? `${source.periodStart} 至 ${source.periodEnd}` : '期间待确认'}</small>
                             </div>
                             <span>{source.stored ? '原件已保存' : '仅登记索引'}</span>
-                            <span className={source.recordCount > 0 ? 'tax-data-file-stored' : 'tax-data-file-pending'}>
-                              {source.recordCount > 0 ? `已入库 ${source.recordCount} 条` : '未入标准库'}
+                            <span className={source.recordCount > 0 && !source.reviewNote ? 'tax-data-file-stored' : 'tax-data-file-pending'}>
+                              {source.recordCount > 0 ? `已入库 ${source.recordCount} 条${source.reviewNote ? ' · 待核对' : ''}` : '未入标准库'}
                             </span>
                             {source.stored ? <a href={`/api/tax-data/source?sourceFileId=${encodeURIComponent(source.id)}`} target="_blank" rel="noreferrer">查看原件</a> : <span />}
                             {source.reviewNote ? <small className="tax-data-file-ledger-note">{source.reviewNote}</small> : null}

@@ -132,7 +132,6 @@ function parseSourceFileIds(value) {
 }
 
 function sourceFileReviewNote(row, recordCount) {
-  if (recordCount > 0) return row.storage_key ? '' : '标准记录已入库，但原件未保存，无法在线核对。'
   let evidence = {}
   try { evidence = JSON.parse(row.evidence_json || '{}') } catch { evidence = {} }
   if (!evidence || typeof evidence !== 'object') evidence = {}
@@ -142,8 +141,9 @@ function sourceFileReviewNote(row, recordCount) {
     .map((check) => String(check.detail || check.label || '').trim().slice(0, 240))
     .filter(Boolean)
   if (blockingChecks.length) return blockingChecks.slice(0, 2).join('；')
-  if (row.parse_status === 'needs_confirmation') return '解析结果待人工确认，尚无标准记录。'
-  if (row.parse_status === 'failed') return '解析失败；系统未保存更具体的失败原因。'
+  if (row.parse_status === 'needs_confirmation') return recordCount > 0 ? '已有标准记录，但解析结果仍待人工确认。' : '解析结果待人工确认，尚无标准记录。'
+  if (row.parse_status === 'failed') return recordCount > 0 ? '已有标准记录，但解析状态为失败，请复核。' : '解析失败；系统未保存更具体的失败原因。'
+  if (recordCount > 0) return row.storage_key ? '' : '标准记录已入库，但原件未保存，无法在线核对。'
   return '尚无标准记录；登记或识别文件不等于已完成入库，系统未保存具体原因。'
 }
 
