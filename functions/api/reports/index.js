@@ -25,7 +25,14 @@ export async function onRequestGet({ request, env }) {
       .bind(auth.user.id)
       .all()
     const reports = results.map((row) => JSON.parse(row.payload_json))
-    return json({ reports })
+    const { results: countRows } = await db
+      .prepare(`SELECT reports.id AS report_id, COUNT(risk_results.id) AS count
+        FROM reports LEFT JOIN risk_results ON risk_results.report_id = reports.id
+        WHERE reports.owner_user_id = ? GROUP BY reports.id`)
+      .bind(auth.user.id)
+      .all()
+    const riskResultCounts = Object.fromEntries(countRows.map((row) => [row.report_id, Number(row.count) || 0]))
+    return json({ reports, riskResultCounts })
   } catch (error) {
     return serverError(error)
   }

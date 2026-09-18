@@ -554,12 +554,19 @@ describe('report points', () => {
       }), env,
     })).status).toBe(200)
     expect((await saveReport({ request: request('a', report('admin-only', 'ca')), env })).status).toBe(200)
+    const adminListed = await listReports({ request: new Request('https://example.test/api', { headers: { 'x-test-user': 'a' } }), env })
+    expect((await adminListed.json()).riskResultCounts).toEqual({ 'admin-only': 0 })
     const listed = await listReports({ request: new Request('https://example.test/api', { headers: { 'x-test-user': 'u' } }), env })
-    expect((await listed.json()).reports.map((item) => item.id)).toEqual(['detailed'])
+    const listedBody = await listed.json()
+    expect(listedBody.reports.map((item) => item.id)).toEqual(['detailed'])
+    expect(listedBody.riskResultCounts).toEqual({ detailed: 2 })
     expect(sqlite.prepare("SELECT risk_level FROM reports WHERE id = 'detailed'").get().risk_level).toBe('high')
     expect(sqlite.prepare("SELECT rule_code, rule_name, risk_level FROM risk_results WHERE report_id = 'detailed' ORDER BY rule_code").all()).toEqual([
       { rule_code: '', rule_name: '', risk_level: '' },
       { rule_code: 'R1', rule_name: '风险一', risk_level: 'high' },
     ])
+    sqlite.prepare("DELETE FROM risk_results WHERE report_id = 'detailed' AND rule_code = 'R1'").run()
+    const historical = await listReports({ request: new Request('https://example.test/api', { headers: { 'x-test-user': 'u' } }), env })
+    expect((await historical.json()).riskResultCounts).toEqual({ detailed: 1 })
   })
 })

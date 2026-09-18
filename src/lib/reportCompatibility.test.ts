@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   isCompleteStructuredReport,
   reportRiskCountMismatch,
+  reportRiskStorageMismatch,
   reportRiskList,
   reportTextContent,
   type CompleteStructuredReportShape,
@@ -88,6 +89,14 @@ describe('reportCompatibility', () => {
     expect(reportRiskCountMismatch({ risks: [{}], structured: { executiveSummary: { totalRisks: 2 } } })).toBeNull()
     expect(reportRiskCountMismatch({ risks: [], structured: completeReport })).toBeNull()
     expect(reportRiskCountMismatch({ risks: [{}], structured: completeReport })).toEqual({ summaryCount: 0, detailCount: 1 })
+  })
+
+  it('separately flags database risk rows that differ from saved report details', () => {
+    const report = { risks: [{}, {}] }
+    expect(reportRiskStorageMismatch(report, undefined)).toBeNull()
+    expect(reportRiskStorageMismatch(report, -1)).toBeNull()
+    expect(reportRiskStorageMismatch(report, 2)).toBeNull()
+    expect(reportRiskStorageMismatch(report, 1)).toEqual({ detailCount: 2, storedCount: 1 })
   })
 
   it('uses trimmed existing report content when available', () => {

@@ -69,6 +69,12 @@ export function reportRiskCountMismatch(report?: { risks?: unknown; structured?:
   return summaryCount === detailCount ? null : { summaryCount, detailCount }
 }
 
+export function reportRiskStorageMismatch(report?: { risks?: unknown }, storedCount?: number) {
+  if (!report || !Number.isInteger(storedCount) || (storedCount ?? -1) < 0) return null
+  const detailCount = reportRiskList(report).length
+  return detailCount === storedCount ? null : { detailCount, storedCount }
+}
+
 export function reportTextContent(report: { clientName?: string; content?: unknown }) {
   const content = typeof report.content === 'string' ? report.content.trim() : ''
   if (content) return content

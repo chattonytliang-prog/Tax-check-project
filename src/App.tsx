@@ -59,6 +59,7 @@ import {
   isCompleteStructuredReport,
   reportRiskCountMismatch,
   reportRiskList,
+  reportRiskStorageMismatch,
   reportTextContent,
   type CompleteStructuredReportShape,
   type CompleteStructuredRiskFindingShape,
@@ -4796,6 +4797,7 @@ function App() {
   const [selectedReportId, setSelectedReportId] = useState('')
   const [editingClient, setEditingClient] = useState<Client>(blankDraftClient())
   const [reports, setReports] = useState<Report[]>([])
+  const [reportRiskResultCounts, setReportRiskResultCounts] = useState<Record<string, number>>({})
   const [pointWallet, setPointWallet] = useState<PointWallet | null>(null)
   const [pointWalletError, setPointWalletError] = useState('')
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
@@ -4919,7 +4921,7 @@ function App() {
       try {
         const [clientsResponse, reportsResponse] = await Promise.all([
           apiGet<{ clients: Client[] }>('/api/clients'),
-          apiGet<{ reports: Report[] }>('/api/reports'),
+          apiGet<{ reports: Report[]; riskResultCounts?: Record<string, number> }>('/api/reports'),
         ])
 
         if (!active) return
@@ -4929,6 +4931,7 @@ function App() {
           .map((client) => deriveClientMetrics(normalizeClient(client)))
         setClients(visibleClients)
         setReports(reportsResponse.reports)
+        setReportRiskResultCounts(reportsResponse.riskResultCounts || {})
         if (visibleClients[0]) {
           setSelectedClientId(visibleClients[0].id)
           setSelectedPeriodEntryIds([])
@@ -5236,6 +5239,7 @@ function App() {
   const reportPageClient = selectedReport
     ? clients.find((client) => client.id === selectedReport.clientId) || clientFromReport(selectedReport)
     : selectedClient
+  const reportPageReport = reportPageClient ? selectedReport || reports.find((report) => report.clientId === reportPageClient.id) : undefined
   const reportPageRisks = selectedReport ? reportRiskList(selectedReport) : currentRisks
   const taxDataPeriodYears = useMemo(() => {
     const years = new Set<string>()
@@ -6844,6 +6848,7 @@ function App() {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
     setLoggedIn(false)
     setAuthUser(null)
+    setReportRiskResultCounts({})
     setPointWallet(null)
     setPointWalletError('')
     setManagedRules([])
@@ -6893,6 +6898,7 @@ function App() {
       setPointWalletError('')
       setClients([])
       setReports([])
+      setReportRiskResultCounts({})
       setManagedRules([])
       setRestrictedRuleCount(0)
       setPage('dashboard')
@@ -6911,6 +6917,7 @@ function App() {
       setPointWalletError('')
       setClients([])
       setReports([])
+      setReportRiskResultCounts({})
       setPage('admin')
       setDataStatus('loading')
     } catch (error) {
@@ -8277,7 +8284,8 @@ function App() {
 
         {page === 'report' && reportPageClient && (
           <ReportPage
-            report={selectedReport || reports.find((report) => report.clientId === reportPageClient.id)}
+            report={reportPageReport}
+            storedRiskCount={reportPageReport ? reportRiskResultCounts[reportPageReport.id] : undefined}
             client={reportPageClient}
             risks={reportPageRisks}
             onGenerate={() => {
@@ -12201,6 +12209,7 @@ function AiAssistantPage({
 
 function ReportPage({
   report,
+  storedRiskCount,
   client,
   risks,
   onGenerate,
@@ -12210,6 +12219,7 @@ function ReportPage({
   onUpdate,
 }: {
   report?: Report
+  storedRiskCount?: number
   client: Client
   risks: RiskResult[]
   onGenerate: () => void
@@ -12225,6 +12235,7 @@ function ReportPage({
     : buildStructuredReport(client, safeRisks, fallbackSkippedRules)
   const legacyMethodology = Boolean(report) && structured.methodology !== 'source-backed-v2'
   const riskCountMismatch = reportRiskCountMismatch(report)
+  const riskStorageMismatch = reportRiskStorageMismatch(report, storedRiskCount)
   const fallbackContent = report ? reportTextContent(report) : buildProfessionalReportContent(structured)
   const draft = sanitizePublicReportContent(fallbackContent || buildReportContent(client, safeRisks))
   const aiMessage = aiStage === 'saving'
@@ -12325,6 +12336,12 @@ function ReportPage({
         <div className="period-warning-list" role="alert">
           <strong>报告风险数量待复核</strong>
           <p>此报告摘要写有 {riskCountMismatch.summaryCount} 项，保存的风险明细为 {riskCountMismatch.detailCount} 项。请以明细核对历史报告，并基于当前资料重新生成。</p>
+        </div>
+      )}
+      {riskStorageMismatch && (
+        <div className="period-warning-list" role="alert">
+          <strong>报告与数据库风险数量待复核</strong>
+          <p>此报告保存的风险明细为 {riskStorageMismatch.detailCount} 项，数据库关联的风险结果为 {riskStorageMismatch.storedCount} 项。请核对历史记录；系统不会自动改写报告结论。</p>
         </div>
       )}
       {aiStage ? (
