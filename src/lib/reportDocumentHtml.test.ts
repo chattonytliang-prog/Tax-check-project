@@ -92,6 +92,20 @@ describe('professionalReportDocumentHtml', () => {
     expect(html).toContain('box-shadow: 0 16px 42px rgba(15, 23, 42, 0.10)')
   })
 
+  it('carries known risk-count conflicts into Word and print exports', () => {
+    for (const mode of ['word', 'print'] as const) {
+      const html = professionalReportDocumentHtml({ structured: structuredReport, risks: [{}, {}] }, mode, 0)
+      expect(html).toContain('风险数量待复核，暂勿作为最终结论对外使用。')
+      expect(html).toContain('报告摘要 1 项，保存的风险明细 2 项。')
+      expect(html).toContain('保存的风险明细 2 项，数据库关联的风险结果 0 项。')
+    }
+  })
+
+  it('does not invent a count conflict when saved details or database counts are unavailable', () => {
+    expect(professionalReportDocumentHtml({ structured: structuredReport }, 'word', 0)).not.toContain('风险数量待复核')
+    expect(professionalReportDocumentHtml({ structured: structuredReport, risks: [{}] }, 'word', 1)).not.toContain('风险数量待复核')
+  })
+
   it('keeps legacy report export compatible and sanitized', () => {
     const html = professionalReportDocumentHtml({
       clientName: '历史企业',

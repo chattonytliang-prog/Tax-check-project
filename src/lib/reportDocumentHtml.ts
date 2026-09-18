@@ -1,5 +1,5 @@
 import { reportDocumentId } from './reportDocumentId'
-import { isCompleteStructuredReport, reportTextContent, type CompleteStructuredReportShape } from './reportCompatibility'
+import { isCompleteStructuredReport, reportRiskCountMismatch, reportRiskStorageMismatch, reportTextContent, type CompleteStructuredReportShape } from './reportCompatibility'
 import {
   customerFacingReportText,
   escapeHtml,
@@ -14,6 +14,7 @@ export type ReportDocumentHtmlInput = {
   content?: unknown
   createdAt?: string
   structured?: unknown
+  risks?: unknown
 }
 function formatReportDate() {
   return new Date().toLocaleString('zh-CN', { hour12: false })
@@ -222,8 +223,17 @@ function reportDocumentFooterHtml(report: ReportDocumentHtmlInput) {
   `
 }
 
-export function professionalReportDocumentHtml(report: ReportDocumentHtmlInput, mode: 'word' | 'print') {
+export function professionalReportDocumentHtml(report: ReportDocumentHtmlInput, mode: 'word' | 'print', storedRiskCount?: number) {
   const body = isCompleteStructuredReport(report.structured) ? structuredReportHtml(report.structured) : legacyReportHtml(report)
+  const summaryMismatch = Array.isArray(report.risks) ? reportRiskCountMismatch(report) : null
+  const storageMismatch = Array.isArray(report.risks) ? reportRiskStorageMismatch(report, storedRiskCount) : null
+  const integrityWarnings = [
+    summaryMismatch && `报告摘要 ${summaryMismatch.summaryCount} 项，保存的风险明细 ${summaryMismatch.detailCount} 项。`,
+    storageMismatch && `保存的风险明细 ${storageMismatch.detailCount} 项，数据库关联的风险结果 ${storageMismatch.storedCount} 项。`,
+  ].filter((warning): warning is string => Boolean(warning))
+  const integrityWarningHtml = integrityWarnings.length
+    ? `<section class="integrity-warning"><strong>风险数量待复核，暂勿作为最终结论对外使用。</strong>${integrityWarnings.map((warning) => `<p>${escapeHtml(warning)}</p>`).join('')}</section>`
+    : ''
   const printScript = mode === 'print'
     ? '<script>window.addEventListener("load", () => window.setTimeout(() => window.print(), 250));</script>'
     : ''
@@ -280,6 +290,7 @@ export function professionalReportDocumentHtml(report: ReportDocumentHtmlInput, 
             padding: 26px 38px;
             border-top: 1px solid #d9e5e8;
           }
+          .integrity-warning { background: #fff4e5; color: #7a3e00; border-top-color: #e9b96e; }
           h1, h2, h3, h4 {
             color: #0b2f38;
             line-height: 1.35;
@@ -385,7 +396,7 @@ export function professionalReportDocumentHtml(report: ReportDocumentHtmlInput, 
         </style>
       </head>
       <body>
-        <main>${body}${reportDocumentFooterHtml(report)}</main>
+        <main>${integrityWarningHtml}${body}${reportDocumentFooterHtml(report)}</main>
         ${printScript}
       </body>
     </html>`

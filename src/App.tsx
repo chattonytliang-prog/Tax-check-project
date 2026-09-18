@@ -4436,8 +4436,8 @@ ${risks.length
 }
 
 
-function downloadWord(report: Report) {
-  const html = professionalReportDocumentHtml(report, 'word')
+function downloadWord(report: Report, storedRiskCount?: number) {
+  const html = professionalReportDocumentHtml(report, 'word', storedRiskCount)
   const blob = new Blob(['\ufeff', html], { type: 'application/msword;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -4447,8 +4447,8 @@ function downloadWord(report: Report) {
   URL.revokeObjectURL(url)
 }
 
-function printReportPdf(report: Report) {
-  const html = professionalReportDocumentHtml(report, 'print')
+function printReportPdf(report: Report, storedRiskCount?: number) {
+  const html = professionalReportDocumentHtml(report, 'print', storedRiskCount)
   const printWindow = window.open('', '_blank', 'width=1120,height=860')
   if (!printWindow) {
     window.alert('浏览器拦截了打印窗口，请允许弹窗后重试。')
@@ -8407,10 +8407,10 @@ function App() {
                     >
                       查看
                     </button>
-                    <button onClick={() => downloadWord(report)}>
+                    <button onClick={() => downloadWord(report, reportRiskResultCounts[report.id])}>
                       <Download /> Word
                     </button>
-                    <button onClick={() => printReportPdf(report)}>
+                    <button onClick={() => printReportPdf(report, reportRiskResultCounts[report.id])}>
                       <Printer /> PDF
                     </button>
                     <button className="danger-action" onClick={() => deleteReport(report)}>
@@ -12322,14 +12322,14 @@ function ReportPage({
           <button
             className="primary-button"
             disabled={Boolean(aiStage)}
-            onClick={() => downloadWord(report)}
+            onClick={() => downloadWord(report, storedRiskCount)}
           >
             <Download /> 导出 Word
           </button>
           <button
             className="secondary-button"
             disabled={Boolean(aiStage)}
-            onClick={() => printReportPdf(report)}
+            onClick={() => printReportPdf(report, storedRiskCount)}
           >
             <Printer /> 打印 / PDF
           </button>
