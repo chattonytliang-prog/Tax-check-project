@@ -123,11 +123,19 @@ function amount(value: unknown) {
 
 function isoDate(value: unknown) {
   const text = clean(value)
-  const normalMatch = text.match(/(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})日?/)
-  if (normalMatch) return `${normalMatch[1]}-${normalMatch[2].padStart(2, '0')}-${normalMatch[3].padStart(2, '0')}`
   const match = text.match(/(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})日?/)
   if (!match) return ''
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (month < 1 || month > 12 || day < 1 || day > new Date(Date.UTC(year, month, 0)).getUTCDate()) return ''
   return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`
+}
+
+function exactDatePeriod(start: string, end: string): Period {
+  const periodStart = isoDate(start)
+  const periodEnd = isoDate(end)
+  return periodStart && periodEnd && periodStart <= periodEnd ? { periodStart, periodEnd } : {}
 }
 
 function monthPeriod(year: string, month: string): Period {
@@ -153,13 +161,11 @@ export function detectTaxDataPeriod(text: string): Period {
   }
   const normalDateRange = text.match(/(20\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?\s*(?:至|到|-)\s*(20\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/)
   if (normalDateRange) {
-    return {
-      periodStart: `${normalDateRange[1]}-${normalDateRange[2].padStart(2, '0')}-${normalDateRange[3].padStart(2, '0')}`,
-      periodEnd: `${normalDateRange[4]}-${normalDateRange[5].padStart(2, '0')}-${normalDateRange[6].padStart(2, '0')}`,
-    }
+    return exactDatePeriod(`${normalDateRange[1]}-${normalDateRange[2]}-${normalDateRange[3]}`, `${normalDateRange[4]}-${normalDateRange[5]}-${normalDateRange[6]}`)
   }
   const normalFullDates = Array.from(text.matchAll(/(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})日?/g))
-  if (normalFullDates.length >= 2) return { periodStart: isoDate(normalFullDates[0][0]), periodEnd: isoDate(normalFullDates[1][0]) }
+  if (normalFullDates.length >= 2) return exactDatePeriod(normalFullDates[0][0], normalFullDates[1][0])
+  if (normalFullDates.some((match) => !isoDate(match[0]))) return {}
   const annual = text.match(/(20\d{2})\s*(?:年年度|年度|年企业所得税年报|年年报)/)
   if (annual) return { periodStart: `${annual[1]}-01-01`, periodEnd: `${annual[1]}-12-31` }
   const shortQuarter = text.match(/(?:20)?(\d{2})\s*年\s*([1-4])\s*季度/)
@@ -202,10 +208,11 @@ export function detectTaxDataPeriod(text: string): Period {
   if (range) {
     const start = monthPeriod(range[1], range[2])
     const end = monthPeriod(range[3], range[4])
-    return { periodStart: start.periodStart, periodEnd: range[5] ? `${range[3]}-${range[4].padStart(2, '0')}-${range[5].padStart(2, '0')}` : end.periodEnd }
+    const periodEnd = range[5] ? isoDate(`${range[3]}-${range[4]}-${range[5]}`) : end.periodEnd
+    return start.periodStart && periodEnd && start.periodStart <= periodEnd ? { periodStart: start.periodStart, periodEnd } : {}
   }
   const fullDates = Array.from(text.matchAll(/(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})日?/g))
-  if (fullDates.length >= 2) return { periodStart: isoDate(fullDates[0][0]), periodEnd: isoDate(fullDates[1][0]) }
+  if (fullDates.length >= 2) return exactDatePeriod(fullDates[0][0], fullDates[1][0])
   const month = text.match(/(20\d{2})\s*[年./-]\s*(\d{1,2})\s*月?/)
   return month ? monthPeriod(month[1], month[2]) : {}
 }
@@ -774,6 +781,25 @@ function finalizeTemplateMatch(match: TemplateMatch, records: StandardTaxRecord[
   return match
 }
 
+function invalidLedgerDateRows(sheet: IntakeSheet) {
+  const header = findHeaderRow(sheet.rows, [/日期/, /凭证字号|凭证号/, /摘要/, /借方/, /贷方/], 8)
+  if (header < 0) return []
+  const headers = sheet.rows[header]
+  const dateIndex = headerIndex(headers, [/日期/])
+  const codeIndex = headerIndex(headers, [/科目编码/])
+  const nameIndex = headerIndex(headers, [/科目名称/])
+  const summaryIndex = headerIndex(headers, [/摘要/])
+  return sheet.rows.slice(header + 1).flatMap((row, index) => {
+    const date = clean(row[dateIndex])
+    const code = clean(row[codeIndex])
+    const name = clean(row[nameIndex])
+    const summary = clean(row[summaryIndex])
+    if (!/(?:20\d{2})[-/.年]\d{1,2}[-/.月]\d{1,2}/.test(date) || !code || !name || /日期|合计/.test(date) || /科目编码|科目名称/.test(`${code}${name}`)
+      || /^(期初余额|本期合计|本年累计)$/.test(summary) || isoDate(date)) return []
+    return [header + index + 2]
+  })
+}
+
 export function parseTaxDataWorkbook(fileName: string, sheets: IntakeSheet[]): ParsedTaxDataIntake {
   const result = emptyResult()
   sheets.forEach((sheet) => {
@@ -798,8 +824,9 @@ export function parseTaxDataWorkbook(fileName: string, sheets: IntakeSheet[]): P
     if (!records.length && documentType === 'payroll') records = parsePayroll(sheet, period)
     if (!records.length && documentType === 'iit_withholding') records = parseIit(sheet, period)
     if (!records.length && documentType === 'invoice_list') records = parseInvoice(sheet, period)
+    const invalidDateRows = documentType === 'ledger' ? invalidLedgerDateRows(sheet) : []
     const nonEmptyRows = sheet.rows.filter((row) => row.some((cell) => clean(cell))).length
-    if (!records.length && nonEmptyRows <= 3) return
+    if (!records.length && nonEmptyRows <= 3 && !invalidDateRows.length) return
     if (!records.length && documentType === 'ledger') {
       const hasTransaction = sheet.rows.some((row) => row.some((cell) => /^记[-－]?\d+/.test(clean(cell))))
       if (!hasTransaction) return
@@ -807,6 +834,14 @@ export function parseTaxDataWorkbook(fileName: string, sheets: IntakeSheet[]): P
     if (!records.length) result.warnings.push(`${sheet.name} 已识别为${documentType}，但未找到可落表的数据行。`)
     const rawTemplateMatch = matchWorkbookTemplate(fileName, sheet, documentType, Boolean(period.periodStart && period.periodEnd), records.length)
     const templateMatch = rawTemplateMatch ? finalizeTemplateMatch(rawTemplateMatch, records) : undefined
+    if (templateMatch && invalidDateRows.length) {
+      templateMatch.validations.push({
+        code: 'invalid_calendar_date', label: '交易日期校验', status: 'failed', blocking: true,
+        detail: `第 ${invalidDateRows.join('、')} 行存在无效交易日期；请修正源文件后重新解析，避免部分交易漏入库`,
+      })
+      templateMatch.autoImportEligible = false
+      templateMatch.confidence = templateMatch.matched ? 'medium' : 'low'
+    }
     if (templateMatch) {
       result.templateMatches.push(templateMatch)
       addTemplateConflict(result, templateMatch, sheet.name)
@@ -816,6 +851,8 @@ export function parseTaxDataWorkbook(fileName: string, sheets: IntakeSheet[]): P
         record.payload.templateVersion = templateMatch.version
         record.payload.templateValidationStatus = templateMatch.autoImportEligible ? 'passed' : 'failed'
       })
+    } else if (invalidDateRows.length) {
+      result.conflicts.push({ conflictType: 'invalid_calendar_date', fieldName: sheet.name, incomingValue: `第 ${invalidDateRows.join('、')} 行交易日期无效`, severity: 'high', status: 'open' })
     }
     records.forEach((record, index) => {
       result.records.push(record)

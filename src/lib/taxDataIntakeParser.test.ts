@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseTaxDataPdfText, parseTaxDataWorkbook, parseVatScheduleFourRecords } from './taxDataIntakeParser'
+import { detectTaxDataPeriod, parseTaxDataPdfText, parseTaxDataWorkbook, parseVatScheduleFourRecords } from './taxDataIntakeParser'
 
 describe('tax data intake parser', () => {
   it('parses account balances and ledger rows with periods', () => {
@@ -92,6 +92,45 @@ describe('tax data intake parser', () => {
       ['2025-01-01', '2025-01-31'],
       ['2025-12-01', '2025-12-31'],
     ])
+  })
+
+  it('rejects impossible calendar dates and blocks partial ledger imports', () => {
+    expect(detectTaxDataPeriod('2025年2月30日至2025年3月31日')).toEqual({})
+    expect(detectTaxDataPeriod('2025-02-30 至 2025-03-31')).toEqual({})
+    expect(detectTaxDataPeriod('2025-02-30')).toEqual({})
+    expect(detectTaxDataPeriod('2024年2月29日至2024年3月31日')).toEqual({ periodStart: '2024-02-29', periodEnd: '2024-03-31' })
+
+    const parsed = parseTaxDataWorkbook('明细账_全部科目_202502.xls', [{
+      name: '1001 库存现金',
+      rows: [
+        ['编制单位：测试企业', '科目：1001 库存现金'],
+        ['日期', '凭证字号', '科目编码', '科目名称', '摘要', '借方', '贷方', '方向', '余额'],
+        ['2025-02-28', '记-1', '1001', '库存现金', '报销', '100', '', '借', '100'],
+        ['2025-02-30', '记-2', '1001', '库存现金', '报销', '50', '', '借', '150'],
+      ],
+    }])
+
+    expect(parsed.records).toHaveLength(1)
+    expect(parsed.records[0].payload.entryDate).toBe('2025-02-28')
+    expect(parsed.autoImportEligible).toBe(false)
+    expect(parsed.templateMatches[0].validations).toContainEqual(expect.objectContaining({ code: 'invalid_calendar_date', status: 'failed', blocking: true }))
+    expect(parsed.conflicts).toContainEqual(expect.objectContaining({ conflictType: 'template_validation_failed', severity: 'high' }))
+  })
+
+  it('does not treat ledger labels as invalid dates', () => {
+    const parsed = parseTaxDataWorkbook('明细账_全部科目_202502.xls', [{
+      name: '1001 库存现金',
+      rows: [
+        ['编制单位：测试企业', '科目：1001 库存现金'],
+        ['日期', '凭证字号', '科目编码', '科目名称', '摘要', '借方', '贷方', '方向', '余额'],
+        ['期初结转', '', '1001', '库存现金', '期初余额', '', '', '借', '0'],
+        ['2025-02-28', '记-1', '1001', '库存现金', '报销', '100', '', '借', '100'],
+      ],
+    }])
+
+    expect(parsed.records).toHaveLength(1)
+    expect(parsed.templateMatches[0].validations).not.toContainEqual(expect.objectContaining({ code: 'invalid_calendar_date' }))
+    expect(parsed.autoImportEligible).toBe(true)
   })
 
   it('extracts client profile facts from tax source headers', () => {
