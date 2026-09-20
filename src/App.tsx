@@ -8343,73 +8343,89 @@ function App() {
                     <tr>
                       <th>企业名称</th>
                       <th>期间数据</th>
-                      <th>当前风险</th>
+                      <th>当前复算等级</th>
                       <th>报告状态</th>
                       <th>操作</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {clientRows.map(({ client, level, report }) => (
-                      <tr key={`report-source-${client.id}`}>
-                        <td>
-                          <strong>{client.name}</strong>
-                          <small>{client.creditCode}</small>
-                        </td>
-                        <td>{client.periodEntries.length ? `${client.periodEntries.length} 期` : '未归档'}</td>
-                        <td><LevelBadge level={level} /></td>
-                        <td>{report ? (report.structured?.methodology === 'source-backed-v2' ? '已录入数据初筛' : '历史口径（建议重算）') : '未生成'}</td>
-                        <td className="row-actions">
-                          <button onClick={() => openClientForPeriodSelection(client)}>
-                            选择期间
-                          </button>
-                          {report && (
-                            <button
-                              onClick={() => {
-                                setSelectedReportId(report.id)
-                                setSelectedClientId(client.id)
-                                setSelectedPeriodEntryIds([])
-                                setPage('report')
-                              }}
-                            >
-                              查看报告
+                    {clientRows.map(({ client, level, report }) => {
+                      const archivedRiskCount = report ? reportRiskList(report).length : 0
+                      const storedRiskCount = report ? reportRiskResultCounts[report.id] : undefined
+                      const countMismatch = report ? reportRiskStorageMismatch(report, storedRiskCount) : null
+                      return (
+                        <tr key={`report-source-${client.id}`}>
+                          <td>
+                            <strong>{client.name}</strong>
+                            <small>{client.creditCode}</small>
+                          </td>
+                          <td>{client.periodEntries.length ? `${client.periodEntries.length} 期` : '未归档'}</td>
+                          <td><LevelBadge level={level} /></td>
+                          <td>
+                            {report ? (report.structured?.methodology === 'source-backed-v2' ? '已录入数据初筛' : '历史口径（建议重算）') : '未生成'}
+                            {report && <small>归档报告 {archivedRiskCount} 项风险</small>}
+                            {countMismatch && <small>数据库关联 {countMismatch.storedCount} 项，数量待复核</small>}
+                          </td>
+                          <td className="row-actions">
+                            <button onClick={() => openClientForPeriodSelection(client)}>
+                              选择期间
                             </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                            {report && (
+                              <button
+                                onClick={() => {
+                                  setSelectedReportId(report.id)
+                                  setSelectedClientId(client.id)
+                                  setSelectedPeriodEntryIds([])
+                                  setPage('report')
+                                }}
+                              >
+                                查看报告
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
             </section>
             <div className="report-grid">
-              {reports.map((report) => (
-                <article className="report-card" key={report.id}>
-                  <LevelBadge level={report.riskLevel} />
-                  <h3>{report.clientName}</h3>
-                  <p>{report.createdAt}</p>
-                  <div className="report-actions">
-                    <button
-                      onClick={() => {
-                        setSelectedReportId(report.id)
-                        setSelectedClientId(report.clientId)
-                        setSelectedPeriodEntryIds([])
-                        setPage('report')
-                      }}
-                    >
-                      查看
-                    </button>
-                    <button onClick={() => downloadWord(report, reportRiskResultCounts[report.id])}>
-                      <Download /> Word
-                    </button>
-                    <button onClick={() => printReportPdf(report, reportRiskResultCounts[report.id])}>
-                      <Printer /> PDF
-                    </button>
-                    <button className="danger-action" onClick={() => deleteReport(report)}>
-                      <Trash2 /> 删除
-                    </button>
-                  </div>
-                </article>
-              ))}
+              {reports.map((report) => {
+                const archivedRiskCount = reportRiskList(report).length
+                const storedRiskCount = reportRiskResultCounts[report.id]
+                const countMismatch = reportRiskStorageMismatch(report, storedRiskCount)
+                return (
+                  <article className="report-card" key={report.id}>
+                    <LevelBadge level={report.riskLevel} />
+                    <h3>{report.clientName}</h3>
+                    <p>{report.createdAt}</p>
+                    <p>归档报告 {archivedRiskCount} 项风险{Number.isInteger(storedRiskCount) ? ` · 数据库关联 ${storedRiskCount} 项` : ''}</p>
+                    {countMismatch && <p className="report-count-warning" role="alert">数量不一致，打开报告后按明细核对。</p>}
+                    <div className="report-actions">
+                      <button
+                        onClick={() => {
+                          setSelectedReportId(report.id)
+                          setSelectedClientId(report.clientId)
+                          setSelectedPeriodEntryIds([])
+                          setPage('report')
+                        }}
+                      >
+                        查看
+                      </button>
+                      <button onClick={() => downloadWord(report, storedRiskCount)}>
+                        <Download /> Word
+                      </button>
+                      <button onClick={() => printReportPdf(report, storedRiskCount)}>
+                        <Printer /> PDF
+                      </button>
+                      <button className="danger-action" onClick={() => deleteReport(report)}>
+                        <Trash2 /> 删除
+                      </button>
+                    </div>
+                  </article>
+                )
+              })}
               {!reports.length && (
                 <div className="empty-state wide">
                   <FileText />

@@ -4878,6 +4878,11 @@ textarea:focus {
   color: var(--muted);
 }
 
+.report-card .report-count-warning {
+  color: #a33a3a;
+  font-weight: 800;
+}
+
 .report-editor {
   display: grid;
   grid-template-columns: 260px 1fr;
