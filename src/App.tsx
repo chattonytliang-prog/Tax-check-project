@@ -6793,24 +6793,24 @@ function App() {
       return
     }
 
-    const remainingClients = clients.filter((item) => item.id !== client.id)
-    const removedReportIds = new Set(reports.filter((report) => report.clientId === client.id).map((report) => report.id))
-    setClients(remainingClients)
-    setReports((current) => current.filter((report) => report.clientId !== client.id))
-    setReportRiskResultCounts((current) => Object.fromEntries(
-      Object.entries(current).filter(([reportId]) => !removedReportIds.has(reportId)),
-    ))
-    if (selectedClientId === client.id) {
-      setSelectedClientId(remainingClients[0]?.id || '')
-      setSelectedPeriodEntryIds([])
-    }
-
     try {
       await apiDelete<{ ok: true }>(`/api/clients/${client.id}`)
+      const remainingClients = clients.filter((item) => item.id !== client.id)
+      const removedReportIds = new Set(reports.filter((report) => report.clientId === client.id).map((report) => report.id))
+      setClients(remainingClients)
+      setReports((current) => current.filter((report) => report.clientId !== client.id))
+      setReportRiskResultCounts((current) => Object.fromEntries(
+        Object.entries(current).filter(([reportId]) => !removedReportIds.has(reportId)),
+      ))
+      if (selectedClientId === client.id) {
+        setSelectedClientId(remainingClients[0]?.id || '')
+        setSelectedPeriodEntryIds([])
+      }
       setDataStatus('connected')
     } catch (error) {
-      console.warn('Client deleted locally only.', error)
+      console.warn('Client deletion failed.', error)
       setDataStatus('fallback')
+      window.alert(error instanceof Error ? error.message : '企业删除失败，请稍后重试')
     }
   }
 
@@ -6819,16 +6819,17 @@ function App() {
       return
     }
 
-    setReports((current) => current.filter((item) => item.id !== report.id))
-    setReportRiskResultCounts((current) => Object.fromEntries(
-      Object.entries(current).filter(([reportId]) => reportId !== report.id),
-    ))
     try {
       await apiDelete<{ ok: true }>(`/api/reports/${report.id}`)
+      setReports((current) => current.filter((item) => item.id !== report.id))
+      setReportRiskResultCounts((current) => Object.fromEntries(
+        Object.entries(current).filter(([reportId]) => reportId !== report.id),
+      ))
       setDataStatus('connected')
     } catch (error) {
-      console.warn('Report deleted locally only.', error)
+      console.warn('Report deletion failed.', error)
       setDataStatus('fallback')
+      window.alert(error instanceof Error ? error.message : '报告删除失败，请稍后重试')
     }
   }
 
