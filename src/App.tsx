@@ -8308,15 +8308,6 @@ function App() {
             onRetryAi={retryAiReport}
             aiStage={aiReportStage}
             aiFailure={aiReportFailure && aiReportFailure.reportId === selectedReport?.id ? aiReportFailure.message : ''}
-            onUpdate={(content) =>
-              setReports((current) =>
-                current.map((report) => (
-                  selectedReport
-                    ? (report.id === selectedReport.id ? { ...report, content } : report)
-                    : (report.clientId === reportPageClient.id ? { ...report, content } : report)
-                )),
-              )
-            }
           />
         )}
 
@@ -12228,7 +12219,6 @@ function ReportPage({
   onRetryAi,
   aiStage,
   aiFailure,
-  onUpdate,
 }: {
   report?: Report
   storedRiskCount?: number
@@ -12238,7 +12228,6 @@ function ReportPage({
   onRetryAi: (report: Report) => void
   aiStage: 'saving' | 'reviewing' | 'generating' | null
   aiFailure: string
-  onUpdate: (content: string) => void
 }) {
   const safeRisks = Array.isArray(risks) ? risks : []
   const fallbackSkippedRules = getSkippedRules(client)
@@ -12442,8 +12431,9 @@ function ReportPage({
             <div className="professional-report-main">
               <StructuredReportPreview report={structured} />
               <details className="report-plain-editor">
-                <summary>查看 / 微调纯文本版本</summary>
-                <textarea value={draft} onChange={(event) => onUpdate(event.target.value)} />
+                <summary>查看已保存的纯文本版本</summary>
+                <p className="section-helper">用于复制和核对；正式导出以结构化报告为准，此处不会修改已归档报告。</p>
+                <textarea value={draft} readOnly aria-label="已保存的报告纯文本" />
               </details>
             </div>
           </div>
