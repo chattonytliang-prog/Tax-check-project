@@ -152,7 +152,7 @@ export async function onRequestPost({ request, env }) {
 
     const establishmentFacts = calculateEstablishmentFacts(client)
     const model = env.DEEPSEEK_MODEL || DEFAULT_MODEL
-    const response = await fetch(DEEPSEEK_API_URL, {
+    const requestOptions = {
       method: 'POST',
       headers: {
         authorization: `Bearer ${env.DEEPSEEK_API_KEY}`,
@@ -174,31 +174,43 @@ export async function onRequestPost({ request, env }) {
         thinking: { type: 'disabled' },
         max_tokens: 10000,
       }),
-    }).catch(() => null)
-
-    if (!response) return json({ error: '无法连接 AI 服务，请稍后重试' }, { status: 502 })
-
-    if (!response.ok) {
-      return aiUpstreamFailure(response.status)
     }
 
-    const data = await response.json()
-    if (data?.choices?.[0]?.finish_reason === 'length') {
-      return json({ error: 'AI 润色输出被截断，请重试' }, { status: 502 })
-    }
-    const enhancedContent = removeInternalReportArtifacts(removeFalseShortEstablishmentClaims(
-      data?.choices?.[0]?.message?.content?.trim() || '',
-      establishmentFacts,
-    ))
-    if (!enhancedContent) {
-      return json({ error: 'AI 未返回报告正文，请重试' }, { status: 502 })
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await fetch(DEEPSEEK_API_URL, requestOptions).catch(() => null)
+      if (!response) {
+        if (attempt === 0) continue
+        return json({ error: '无法连接 AI 服务，请稍后重试' }, { status: 502 })
+      }
+      if (!response.ok) return aiUpstreamFailure(response.status)
+
+      let data
+      try {
+        data = await response.json()
+      } catch {
+        if (attempt === 0) continue
+        return json({ error: 'AI 服务返回格式异常，请稍后重试' }, { status: 502 })
+      }
+      if (data?.choices?.[0]?.finish_reason === 'length') {
+        return json({ error: 'AI 润色输出被截断，请重试' }, { status: 502 })
+      }
+      const enhancedContent = removeInternalReportArtifacts(removeFalseShortEstablishmentClaims(
+        data?.choices?.[0]?.message?.content?.trim() || '',
+        establishmentFacts,
+      ))
+      if (!enhancedContent) {
+        if (attempt === 0) continue
+        return json({ error: 'AI 未返回报告正文，请稍后重试' }, { status: 502 })
+      }
+
+      return json({
+        content: enhancedContent,
+        model,
+        usage: data.usage || null,
+      })
     }
 
-    return json({
-      content: enhancedContent,
-      model,
-      usage: data.usage || null,
-    })
+    return json({ error: 'AI 服务暂不可用，请稍后重试' }, { status: 502 })
   } catch (error) {
     return serverError(error)
   }

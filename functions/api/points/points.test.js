@@ -425,6 +425,24 @@ describe('report points', () => {
     expect(truncated.status).toBe(502)
     expect((await truncated.json()).error).toContain('截断')
 
+    const recoveredUpstream = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ message: { content: '自动重试后的报告正文' } }],
+      }), { status: 200 }))
+    vi.stubGlobal('fetch', recoveredUpstream)
+    const recovered = await generateAiReport({ request: request('u', body), env })
+    expect(recovered.status).toBe(200)
+    expect((await recovered.json()).content).toBe('自动重试后的报告正文')
+    expect(recoveredUpstream).toHaveBeenCalledTimes(2)
+
+    const malformedUpstream = vi.fn(async () => new Response('not json', { status: 200 }))
+    vi.stubGlobal('fetch', malformedUpstream)
+    const malformed = await generateAiReport({ request: request('u', body), env })
+    expect(malformed.status).toBe(502)
+    expect((await malformed.json()).error).toContain('格式异常')
+    expect(malformedUpstream).toHaveBeenCalledTimes(2)
+
     const upstream = vi.fn(async () => new Response(JSON.stringify({
       choices: [{ message: { content: '成立不足一年。\n已执行规则风险结论。\nIssue R1' } }],
       usage: { total_tokens: 10 },
