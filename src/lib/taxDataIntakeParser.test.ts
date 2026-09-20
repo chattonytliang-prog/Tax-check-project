@@ -134,8 +134,11 @@ describe('tax data intake parser', () => {
     expect(detectTaxDataPeriod('账簿_202512-202501.xls')).toEqual({})
     expect(detectTaxDataPeriod('2025.12-2025.01')).toEqual({})
     expect(detectTaxDataPeriod('2025年12月-2025年01月')).toEqual({})
+    expect(detectTaxDataPeriod('账簿_2025/12-2025/01.xls')).toEqual({})
     expect(detectTaxDataPeriod('202513-202514')).toEqual({})
     expect(detectTaxDataPeriod('账簿_202501-202512.xls')).toEqual({ periodStart: '2025-01-01', periodEnd: '2025-12-31' })
+    expect(detectTaxDataPeriod('账簿_2025/01-2025/12.xls')).toEqual({ periodStart: '2025-01-01', periodEnd: '2025-12-31' })
+    expect(detectTaxDataPeriod('账簿_2025-01-2025-12.xls')).toEqual({ periodStart: '2025-01-01', periodEnd: '2025-12-31' })
 
     const parsed = parseTaxDataWorkbook('科目余额表_202512-202501.xls', [{
       name: '科目余额表',

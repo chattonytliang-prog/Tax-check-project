@@ -200,6 +200,10 @@ export function detectTaxDataPeriod(text: string): Period {
   if (normalMonthRange) {
     return monthRangePeriod(normalMonthRange[1], normalMonthRange[2], normalMonthRange[3] || normalMonthRange[1], normalMonthRange[4])
   }
+  const normalSeparatedMonthRange = text.match(/(20\d{2})\s*[-/.]\s*(\d{1,2})\s*(?:至|到|[-~—])\s*(20\d{2})\s*[-/.]\s*(\d{1,2})(?!\d)/)
+  if (normalSeparatedMonthRange) {
+    return monthRangePeriod(normalSeparatedMonthRange[1], normalSeparatedMonthRange[2], normalSeparatedMonthRange[3], normalSeparatedMonthRange[4])
+  }
   const normalCompact = text.match(/(20\d{2})(\d{2})(?!\d)/)
   if (normalCompact) return monthPeriod(normalCompact[1], normalCompact[2])
   const normalMonth = text.match(/(20\d{2})\s*[年./-]\s*(\d{1,2})\s*月?/)
