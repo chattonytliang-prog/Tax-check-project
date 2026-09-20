@@ -159,7 +159,9 @@ function monthRangePeriod(startYear: string, startMonth: string, endYear: string
 
 function shortDateMonthPeriod(text: string): Period {
   const match = text.match(/(?:^|\s)(\d{1,2})\/(\d{1,2})\/(\d{2})(?:\s|$)/)
-  return match ? monthPeriod(`20${match[3]}`, match[1]) : {}
+  if (!match) return {}
+  const year = `20${match[3]}`
+  return isoDate(`${year}-${match[1]}-${match[2]}`) ? monthPeriod(year, match[1]) : {}
 }
 
 export function detectTaxDataPeriod(text: string): Period {

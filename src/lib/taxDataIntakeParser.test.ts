@@ -117,6 +117,19 @@ describe('tax data intake parser', () => {
     expect(parsed.conflicts).toContainEqual(expect.objectContaining({ conflictType: 'template_validation_failed', severity: 'high' }))
   })
 
+  it('does not let an invalid short payroll date override the file period', () => {
+    const payrollRows = (date: string) => [
+      [date],
+      ['姓名', '身份证件号码', '工资'],
+      ['张三', '110101199001011234', '5000'],
+    ]
+    const invalid = parseTaxDataWorkbook('工资表_202503.xlsx', [{ name: '工资表', rows: payrollRows('2/30/25') }])
+    const validLeapDay = parseTaxDataWorkbook('工资表_202503.xlsx', [{ name: '工资表', rows: payrollRows('2/29/24') }])
+
+    expect(invalid.records[0]).toMatchObject({ periodStart: '2025-03-01', periodEnd: '2025-03-31' })
+    expect(validLeapDay.records[0]).toMatchObject({ periodStart: '2024-02-01', periodEnd: '2024-02-29' })
+  })
+
   it('rejects reversed or invalid month ranges before standardizing balances', () => {
     expect(detectTaxDataPeriod('账簿_202512-202501.xls')).toEqual({})
     expect(detectTaxDataPeriod('2025.12-2025.01')).toEqual({})
