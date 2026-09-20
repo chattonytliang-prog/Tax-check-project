@@ -144,6 +144,11 @@ function sourceFileReviewNote(row, recordCount) {
   if (row.parse_status === 'pending') return recordCount > 0 ? '已有标准记录，但源文件解析状态仍为待处理，请复核。' : '源文件已登记，尚待解析；未形成标准记录。'
   if (row.parse_status === 'needs_confirmation') return recordCount > 0 ? '已有标准记录，但解析结果仍待人工确认。' : '解析结果待人工确认，尚无标准记录。'
   if (row.parse_status === 'failed') return recordCount > 0 ? '已有标准记录，但解析状态为失败，请复核。' : '解析失败；系统未保存更具体的失败原因。'
+  if (row.parse_status === 'parsed' && recordCount === 0) {
+    return row.storage_key
+      ? '原件已保存且标记为已解析，但未形成标准记录；请重新标准化或核对模板。'
+      : '文件标记为已解析，但原件未保存且未形成标准记录；无法复核解析结果。'
+  }
   if (recordCount > 0) return row.storage_key ? '' : '标准记录已入库，但原件未保存，无法在线核对。'
   return '尚无标准记录；登记或识别文件不等于已完成入库，系统未保存具体原因。'
 }
