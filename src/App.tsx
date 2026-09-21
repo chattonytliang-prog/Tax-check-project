@@ -79,6 +79,7 @@ import {
   reportPeriodEvidenceSourceTypeLabel,
   type ReportPeriodEvidenceSource,
 } from './lib/reportPeriodEvidenceSources'
+import { sourceFileLifecycle, sourceFileLifecycleCounts } from './lib/sourceFileLifecycle'
 import {
   isCompleteStructuredReport,
   reportRiskCountMismatch,
@@ -5291,6 +5292,7 @@ function App() {
   const selectedReport = reports.find((report) => report.id === selectedReportId)
   const activeTaxDataSummary = taxDataSummary?.clientId === selectedClient?.id ? taxDataSummary : null
   const archivedSourceFiles = activeTaxDataSummary?.sourceFiles || []
+  const archivedSourceLifecycleCounts = sourceFileLifecycleCounts(archivedSourceFiles)
   const activeTaxDataSummaryError = taxDataSummaryError && taxDataSummaryError.clientId === selectedClient?.id
     ? taxDataSummaryError.message : ''
   const detectionPeriodEntries = useMemo(() => {
@@ -7682,24 +7684,26 @@ function App() {
                     <details className="tax-data-file-ledger">
                       <summary>
                         <span>逐文件入库核对</span>
-                        <small>{archivedSourceFiles.length} 个已登记文件 · {archivedSourceFiles.filter((source) => source.recordCount === 0).length} 个未形成标准记录 · {archivedSourceFiles.filter((source) => source.recordCount > 0 && source.reviewNote).length} 个已入库待核对</small>
+                        <small>{archivedSourceLifecycleCounts.registeredCount} 个已登记 · {archivedSourceLifecycleCounts.storedCount} 个原件已保存 · {archivedSourceLifecycleCounts.readyCount} 个可用于复核 · {archivedSourceLifecycleCounts.attentionCount} 个需处理</small>
                       </summary>
-                      <p>文件登记、原件保存、标准记录入库是三个不同环节；下表覆盖该企业全部期间的已登记文件。</p>
+                      <p>文件登记、原件保存、解析和标准记录入库是不同环节；“可用于复核”仅表示该文件原件已保存、解析完成且形成标准记录，不代表报告结论已由专家确认。</p>
                       <div className="tax-data-file-ledger-list">
-                        {archivedSourceFiles.map((source) => (
-                          <div className="tax-data-file-ledger-row" key={source.id}>
-                            <div className="tax-data-file-ledger-name">
-                              <strong>{source.fileName}</strong>
-                              <small>{source.periodStart && source.periodEnd ? `${source.periodStart} 至 ${source.periodEnd}` : '期间待确认'}</small>
+                        {archivedSourceFiles.map((source) => {
+                          const lifecycle = sourceFileLifecycle(source)
+                          return (
+                            <div className="tax-data-file-ledger-row" key={source.id}>
+                              <div className="tax-data-file-ledger-name">
+                                <strong>{source.fileName}</strong>
+                                <small>{source.periodStart && source.periodEnd ? `${source.periodStart} 至 ${source.periodEnd}` : '期间待确认'}</small>
+                              </div>
+                              <span className={`tax-data-file-stage ${lifecycle.storageTone}`}>{lifecycle.storageLabel}</span>
+                              <span className={`tax-data-file-stage ${lifecycle.parseTone}`}>{lifecycle.parseLabel}</span>
+                              <span className={`tax-data-file-stage ${lifecycle.recordTone}`}>{lifecycle.recordLabel}</span>
+                              {source.stored ? <a href={`/api/tax-data/source?sourceFileId=${encodeURIComponent(source.id)}`} target="_blank" rel="noreferrer">查看原件</a> : <span />}
+                              {source.reviewNote ? <small className="tax-data-file-ledger-note">处理原因：{source.reviewNote}</small> : null}
                             </div>
-                            <span>{source.stored ? '原件已保存' : '仅登记索引'}</span>
-                            <span className={source.recordCount > 0 && !source.reviewNote ? 'tax-data-file-stored' : 'tax-data-file-pending'}>
-                              {source.recordCount > 0 ? `已入库 ${source.recordCount} 条${source.reviewNote ? ' · 待核对' : ''}` : '未入标准库'}
-                            </span>
-                            {source.stored ? <a href={`/api/tax-data/source?sourceFileId=${encodeURIComponent(source.id)}`} target="_blank" rel="noreferrer">查看原件</a> : <span />}
-                            {source.reviewNote ? <small className="tax-data-file-ledger-note">{source.reviewNote}</small> : null}
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </details>
                   ) : null}

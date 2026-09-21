@@ -113,7 +113,7 @@ describe('professionalReportDocumentHtml', () => {
     expect(html).toContain('2025年12月增值税申报表 &lt;已归档&gt;.pdf')
     expect(html).toContain('增值税申报主表')
     expect(html).toContain('2025-12-01 至 2025-12-31')
-    expect(html).toContain('原件已保存 · 已形成 8 条标准记录')
+    expect(html).toContain('原件已保存 · 解析完成 · 已入库 8 条')
     expect(html).toContain('列表不代表每个文件均参与全部指标或每项风险判断')
     expect(html).toContain('检查结论覆盖快照')
     expect(html).toContain('可判断检查项')

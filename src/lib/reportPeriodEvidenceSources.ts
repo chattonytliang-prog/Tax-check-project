@@ -1,3 +1,5 @@
+import { sourceFileLifecycle } from './sourceFileLifecycle'
+
 export type ReportPeriodEvidenceSource = {
   sourceFileId: string
   fileName: string
@@ -131,7 +133,6 @@ export function reportPeriodEvidenceSourcePeriod(source: ReportPeriodEvidenceSou
 }
 
 export function reportPeriodEvidenceSourceStatus(source: ReportPeriodEvidenceSource) {
-  const storage = source.stored ? '原件已保存' : '仅登记索引'
-  const records = source.recordCount > 0 ? `已形成 ${source.recordCount} 条标准记录` : '未形成标准记录'
-  return `${storage} · ${records}`
+  const lifecycle = sourceFileLifecycle(source)
+  return `${lifecycle.storageLabel} · ${lifecycle.parseLabel} · ${lifecycle.recordLabel}`
 }

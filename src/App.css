@@ -1488,7 +1488,7 @@ td small,
 
 .tax-data-file-ledger-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 100px 110px 70px;
+  grid-template-columns: minmax(0, 1fr) 100px 120px 120px 70px;
   align-items: center;
   gap: 8px 12px;
   padding: 10px 4px;
@@ -1510,12 +1510,16 @@ td small,
   grid-column: 1 / -1;
 }
 
-.tax-data-file-stored {
+.tax-data-file-stage.passed {
   color: #08705f;
 }
 
-.tax-data-file-pending {
+.tax-data-file-stage.pending {
   color: #9d522a;
+}
+
+.tax-data-file-stage.failed {
+  color: #b42318;
 }
 
 @media (max-width: 680px) {
