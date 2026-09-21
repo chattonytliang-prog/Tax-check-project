@@ -1,4 +1,5 @@
 import type { RiskLevel } from './ruleEngine'
+import type { ReportRemediationTask } from './reportRemediationPlan'
 
 export type CompleteStructuredRiskFindingShape = {
   id: string
@@ -47,7 +48,7 @@ export type CompleteStructuredReportShape = {
   taxSummaries: string[]
   keyFindings: CompleteStructuredRiskFindingShape[]
   detailedFindings: CompleteStructuredRiskFindingShape[]
-  actionPlan: Array<{ priority: string; item: string; ownerHint: string }>
+  actionPlan: ReportRemediationTask[]
   expertReviewItems: string[]
   followUpCadence: string[]
   deliveryChecklist: string[]

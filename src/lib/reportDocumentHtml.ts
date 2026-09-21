@@ -1,5 +1,6 @@
 import { reportDocumentId } from './reportDocumentId'
 import { isCompleteStructuredReport, reportRiskCountMismatch, reportRiskStorageMismatch, reportTextContent, type CompleteStructuredReportShape } from './reportCompatibility'
+import { reportRemediationTaskView } from './reportRemediationPlan'
 import {
   customerFacingReportText,
   escapeHtml,
@@ -164,15 +165,19 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
       <h2>七、整改优先级</h2>
       ${report.actionPlan.length ? `
         <table class="finding-table">
-          <tr><th>序号</th><th>优先级</th><th>事项</th><th>责任建议</th></tr>
-          ${report.actionPlan.map((item, index) => `
+          <tr><th>任务编号</th><th>优先级</th><th>状态</th><th>整改事项</th><th>责任建议</th><th>完成凭据要求</th></tr>
+          ${report.actionPlan.map((item, index) => {
+            const task = reportRemediationTaskView(item, index)
+            return `
             <tr>
-              <td class="index">${index + 1}</td>
+              <td class="index">${escapeHtml(task.taskId)}</td>
               <td>${escapeHtml(item.priority)}</td>
+              <td>${escapeHtml(task.status)}</td>
               <td>${escapeHtml(item.item)}</td>
               <td>${escapeHtml(item.ownerHint)}</td>
+              <td>${escapeHtml(task.completionEvidence)}</td>
             </tr>
-          `).join('')}
+          `}).join('')}
         </table>
       ` : '<p class="muted">当前无需要列入整改清单的自动风险事项。</p>'}
     </section>

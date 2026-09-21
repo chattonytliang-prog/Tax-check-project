@@ -66,6 +66,7 @@ import {
   type CompleteStructuredRiskFindingShape,
 } from './lib/reportCompatibility'
 import { reportReviewAction } from './lib/reportReviewAction'
+import { buildReportRemediationPlan, reportRemediationTaskView } from './lib/reportRemediationPlan'
 import { deepReportRuleTemplates } from './lib/reportRuleTemplates'
 import { reportSignOffBlock } from './lib/reportSignOffBlock'
 import { reportScopeSummary } from './lib/reportScopeSummary'
@@ -4253,11 +4254,12 @@ function buildStructuredReport(
     taxSummaries: taxTypeSummary(risks),
     keyFindings: findings.filter((finding) => riskRank(finding.level) >= 2).slice(0, 8),
     detailedFindings: findings,
-    actionPlan: findings.slice(0, 12).map((finding) => ({
+    actionPlan: buildReportRemediationPlan(findings.slice(0, 12).map((finding) => ({
       priority: finding.priority,
       item: finding.title,
       ownerHint: riskRank(finding.level) >= 3 ? '建议由财务负责人牵头，必要时引入外部税务顾问复核。' : '建议由财税经办人员补充资料后复核。',
-    })),
+      materials: finding.materials,
+    }))),
     expertReviewItems,
     followUpCadence: reportFollowUpCadence({ highRisks, mediumRisks, totalRisks: risks.length }),
     deliveryChecklist: reportDeliveryChecklist({ hasRisks: risks.length > 0, suggestedMaterials }),
@@ -4326,7 +4328,10 @@ ${details}
 ${report.expertReviewItems.length ? report.expertReviewItems.map((item, index) => `${index + 1}. ${item}`).join('\n') : '当前无额外专家核查提示。'}
 
 七、整改优先级
-${report.actionPlan.length ? report.actionPlan.map((item, index) => `${index + 1}. ${item.priority}：${item.item}。${item.ownerHint}`).join('\n') : '当前无需要列入整改清单的自动风险事项。'}
+${report.actionPlan.length ? report.actionPlan.map((item, index) => {
+    const task = reportRemediationTaskView(item, index)
+    return `${index + 1}. ${task.taskId}｜${item.priority}｜${task.status}\n整改事项：${item.item}\n责任建议：${item.ownerHint}\n完成凭据要求：${task.completionEvidence}`
+  }).join('\n') : '当前无需要列入整改清单的自动风险事项。'}
 
 八、后续跟进节奏
 ${report.followUpCadence.map((item, index) => `${index + 1}. ${item}`).join('\n')}
@@ -10361,6 +10366,44 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
       <section className="report-section">
         <div className="report-section-title">
           <span>07</span>
+          <h3>整改任务清单</h3>
+        </div>
+        {report.actionPlan.length ? (
+          <div className="report-task-table-wrap">
+            <table className="report-task-table">
+              <thead>
+                <tr>
+                  <th>任务编号</th>
+                  <th>状态</th>
+                  <th>整改事项</th>
+                  <th>责任建议</th>
+                  <th>完成凭据要求</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.actionPlan.map((item, index) => {
+                  const task = reportRemediationTaskView(item, index)
+                  return (
+                    <tr key={task.taskId}>
+                      <td data-label="任务编号 / 优先级"><strong>{task.taskId}</strong><small>{item.priority}</small></td>
+                      <td data-label="状态"><span className="report-task-status">{task.status}</span></td>
+                      <td data-label="整改事项">{item.item}</td>
+                      <td data-label="责任建议">{item.ownerHint}</td>
+                      <td data-label="完成凭据要求">{task.completionEvidence}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="report-note">当前无需要列入整改清单的自动风险事项。</p>
+        )}
+      </section>
+
+      <section className="report-section">
+        <div className="report-section-title">
+          <span>08</span>
           <h3>后续跟进节奏</h3>
         </div>
         <ol className="disclaimer-list">
@@ -10370,7 +10413,7 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
 
       <section className="report-section">
         <div className="report-section-title">
-          <span>08</span>
+          <span>09</span>
           <h3>交付资料清单</h3>
         </div>
         <ol className="disclaimer-list">
@@ -10380,7 +10423,7 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
 
       <section className="report-section">
         <div className="report-section-title">
-          <span>09</span>
+          <span>10</span>
           <h3>客户确认事项</h3>
         </div>
         <ol className="disclaimer-list">
@@ -10390,7 +10433,7 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
 
       <section className="report-section">
         <div className="report-section-title">
-          <span>10</span>
+          <span>11</span>
           <h3>报告签收栏</h3>
         </div>
         <div className="report-scope-list">
@@ -10402,7 +10445,7 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
 
       <section className="report-section">
         <div className="report-section-title">
-          <span>11</span>
+          <span>12</span>
           <h3>责任边界及免责声明</h3>
         </div>
         <ol className="disclaimer-list">
@@ -12452,7 +12495,7 @@ function ReportPage({
           <div className="professional-report-layout">
             <aside>
               <h3>报告目录</h3>
-              {['项目背景及工作范围', '报告摘要：我们的观点', '重要事项汇总', '分税种风险摘要', '重要事项章节', '专家核查清单', '责任边界'].map((item) => (
+              {['项目背景及工作范围', '报告摘要：我们的观点', '重要事项汇总', '分税种风险摘要', '重要事项章节', '专家核查清单', '整改任务清单', '责任边界'].map((item) => (
                 <span key={item}>{item}</span>
               ))}
             </aside>
