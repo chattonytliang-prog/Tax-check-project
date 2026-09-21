@@ -66,7 +66,12 @@ import {
   type CompleteStructuredRiskFindingShape,
 } from './lib/reportCompatibility'
 import { reportReviewAction } from './lib/reportReviewAction'
-import { buildReportRemediationPlan, reportRemediationTaskView } from './lib/reportRemediationPlan'
+import {
+  buildReportRemediationPlan,
+  reportFindingEvidenceStatus,
+  reportFindingReference,
+  reportRemediationTaskView,
+} from './lib/reportRemediationPlan'
 import { deepReportRuleTemplates } from './lib/reportRuleTemplates'
 import { reportSignOffBlock } from './lib/reportSignOffBlock'
 import { reportScopeSummary } from './lib/reportScopeSummary'
@@ -4178,7 +4183,11 @@ function buildStructuredReport(
   const lowRisks = Math.max(risks.length - highRisks - mediumRisks, 0)
   const completeness = getDataCompleteness(client, risks)
   const missingFields = validateClientForReport(client).map((issue) => issue.label)
-  const findings = risks.map((risk) => buildStructuredRiskFinding(client, risk))
+  const findings = risks.map((risk, index) => ({
+    ...buildStructuredRiskFinding(client, risk),
+    findingRef: reportFindingReference(index),
+    evidenceStatus: reportFindingEvidenceStatus(),
+  }))
   const groupName = getGroupName(client)
   const suggestedMaterials = Array.from(new Set([
     ...completeness.suggestedMaterials,
@@ -4258,6 +4267,7 @@ function buildStructuredReport(
       priority: finding.priority,
       item: finding.title,
       ownerHint: riskRank(finding.level) >= 3 ? '建议由财务负责人牵头，必要时引入外部税务顾问复核。' : '建议由财税经办人员补充资料后复核。',
+      findingRef: finding.findingRef,
       materials: finding.materials,
     }))),
     expertReviewItems,
@@ -4283,13 +4293,17 @@ function buildProfessionalReportContent(report: StructuredReport) {
   const profile = report.clientProfile.map((item) => `${item.label}：${item.value}`).join('\n')
   const scope = report.scope.filter(isCustomerFacingReportFact).map((item) => `${item.label}：${item.value}`).join('\n')
   const keyFindings = report.keyFindings.length
-    ? report.keyFindings.map((item, index) => `${index + 1}. 【${plainRiskLevel(item.level)}风险】${item.title}：${item.currentFinding}`).join('\n')
+    ? report.keyFindings.map((item, index) => {
+      const detailIndex = report.detailedFindings.findIndex((finding) => finding.id === item.id)
+      return `${index + 1}. ${reportFindingReference(detailIndex >= 0 ? detailIndex : index, item.findingRef)}｜【${plainRiskLevel(item.level)}风险】${item.title}：${item.currentFinding}`
+    }).join('\n')
     : '当前未形成需要在摘要中重点列示的风险事项。'
   const details = report.detailedFindings.length
-    ? report.detailedFindings.map((item, index) => `${index + 1}. ${item.title}
+    ? report.detailedFindings.map((item, index) => `${index + 1}. ${reportFindingReference(index, item.findingRef)}｜${item.title}
 风险等级：${plainRiskLevel(item.level)}风险
 涉及税种：${item.taxType}
 整改优先级：${item.priority}
+证据状态：${reportFindingEvidenceStatus(item.evidenceStatus)}
 事项背景：${item.scenario}
 当前发现：${item.currentFinding}
 潜在税务风险分析：${item.riskAnalysis}
@@ -4330,7 +4344,7 @@ ${report.expertReviewItems.length ? report.expertReviewItems.map((item, index) =
 七、整改优先级
 ${report.actionPlan.length ? report.actionPlan.map((item, index) => {
     const task = reportRemediationTaskView(item, index)
-    return `${index + 1}. ${task.taskId}｜${item.priority}｜${task.status}\n整改事项：${item.item}\n责任建议：${item.ownerHint}\n完成凭据要求：${task.completionEvidence}`
+    return `${index + 1}. ${task.taskId}｜对应事项 ${task.findingRef}｜${item.priority}｜${task.status}\n整改事项：${item.item}\n责任建议：${item.ownerHint}\n完成凭据要求：${task.completionEvidence}`
   }).join('\n') : '当前无需要列入整改清单的自动风险事项。'}
 
 八、后续跟进节奏
@@ -10272,7 +10286,7 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
               <article key={finding.id}>
                 <span>{index + 1}</span>
                 <div>
-                  <strong>{finding.title}</strong>
+                  <strong>{reportFindingReference(Math.max(report.detailedFindings.findIndex((item) => item.id === finding.id), index), finding.findingRef)} · {finding.title}</strong>
                   <p>{publicRiskReason(finding.currentFinding)}</p>
                 </div>
                 <LevelBadge level={finding.level} />
@@ -10304,7 +10318,7 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
             <article key={finding.id} className="detailed-finding">
               <div className="finding-heading">
                 <div>
-                  <span>事项 {index + 1}</span>
+                  <span>事项 {reportFindingReference(index, finding.findingRef)}</span>
                   <h4>{finding.title}</h4>
                 </div>
                 <LevelBadge level={finding.level} />
@@ -10312,6 +10326,7 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
               <div className="finding-meta">
                 <span>涉及税种：{finding.taxType}</span>
                 <span>整改优先级：{finding.priority}</span>
+                <span>证据状态：{reportFindingEvidenceStatus(finding.evidenceStatus)}</span>
                 {finding.deepTemplate && <span>顾问级深度模板</span>}
               </div>
               <h5>事项背景</h5>
@@ -10385,7 +10400,7 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
                   const task = reportRemediationTaskView(item, index)
                   return (
                     <tr key={task.taskId}>
-                      <td data-label="任务编号 / 优先级"><strong>{task.taskId}</strong><small>{item.priority}</small></td>
+                      <td data-label="任务 / 对应事项"><strong>{task.taskId}</strong><small>{task.findingRef} · {item.priority}</small></td>
                       <td data-label="状态"><span className="report-task-status">{task.status}</span></td>
                       <td data-label="整改事项">{item.item}</td>
                       <td data-label="责任建议">{item.ownerHint}</td>

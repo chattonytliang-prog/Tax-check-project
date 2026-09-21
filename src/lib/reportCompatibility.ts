@@ -3,6 +3,8 @@ import type { ReportRemediationTask } from './reportRemediationPlan'
 
 export type CompleteStructuredRiskFindingShape = {
   id: string
+  findingRef?: string
+  evidenceStatus?: string
   title: string
   level: RiskLevel
   taxType: string

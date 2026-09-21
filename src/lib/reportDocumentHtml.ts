@@ -1,6 +1,10 @@
 import { reportDocumentId } from './reportDocumentId'
 import { isCompleteStructuredReport, reportRiskCountMismatch, reportRiskStorageMismatch, reportTextContent, type CompleteStructuredReportShape } from './reportCompatibility'
-import { reportRemediationTaskView } from './reportRemediationPlan'
+import {
+  reportFindingEvidenceStatus,
+  reportFindingReference,
+  reportRemediationTaskView,
+} from './reportRemediationPlan'
 import {
   customerFacingReportText,
   escapeHtml,
@@ -52,7 +56,7 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
   const keyFindings = report.keyFindings.length
     ? report.keyFindings.map((finding, index) => `
       <tr>
-        <td class="index">${index + 1}</td>
+        <td class="index">${escapeHtml(reportFindingReference(Math.max(report.detailedFindings.findIndex((item) => item.id === finding.id), index), finding.findingRef))}</td>
         <td>
           <strong>${escapeHtml(finding.title)}</strong>
           <p>${escapeHtml(publicRiskReason(finding.currentFinding))}</p>
@@ -67,13 +71,13 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
     ? report.detailedFindings.map((finding, index) => `
       <section class="finding">
         <div class="finding-title">
-          <span>事项 ${index + 1}</span>
+          <span>事项 ${escapeHtml(reportFindingReference(index, finding.findingRef))}</span>
           <h3>${escapeHtml(finding.title)}</h3>
           ${exportBadgeHtml(finding.level)}
         </div>
         <table class="meta-table">
           <tr><th>涉及税种</th><td>${escapeHtml(finding.taxType)}</td><th>整改优先级</th><td>${escapeHtml(finding.priority)}</td></tr>
-          <tr><th>分析深度</th><td colspan="3">${finding.deepTemplate ? '顾问级深度分析' : '标准分析说明'}</td></tr>
+          <tr><th>分析深度</th><td>${finding.deepTemplate ? '顾问级深度分析' : '标准分析说明'}</td><th>证据状态</th><td>${escapeHtml(reportFindingEvidenceStatus(finding.evidenceStatus))}</td></tr>
         </table>
         <h4>事项背景</h4>
         <p>${escapeHtml(customerFacingReportText(finding.scenario))}</p>
@@ -165,12 +169,12 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
       <h2>七、整改优先级</h2>
       ${report.actionPlan.length ? `
         <table class="finding-table">
-          <tr><th>任务编号</th><th>优先级</th><th>状态</th><th>整改事项</th><th>责任建议</th><th>完成凭据要求</th></tr>
+          <tr><th>任务 / 对应事项</th><th>优先级</th><th>状态</th><th>整改事项</th><th>责任建议</th><th>完成凭据要求</th></tr>
           ${report.actionPlan.map((item, index) => {
             const task = reportRemediationTaskView(item, index)
             return `
             <tr>
-              <td class="index">${escapeHtml(task.taskId)}</td>
+              <td class="index">${escapeHtml(task.taskId)}<br><small>对应 ${escapeHtml(task.findingRef)}</small></td>
               <td>${escapeHtml(item.priority)}</td>
               <td>${escapeHtml(task.status)}</td>
               <td>${escapeHtml(item.item)}</td>
