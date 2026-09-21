@@ -6036,6 +6036,62 @@ textarea:focus {
   font-weight: 900;
 }
 
+.report-assessment-coverage {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbfc;
+}
+
+.report-assessment-coverage.warning {
+  border-color: rgba(183, 106, 32, 0.45);
+  background: #fffaf1;
+}
+
+.report-assessment-coverage h4,
+.report-assessment-coverage p {
+  margin: 0;
+}
+
+.report-assessment-coverage p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.report-assessment-coverage > strong {
+  color: #8b4a0e;
+  line-height: 1.6;
+}
+
+.report-assessment-coverage dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.report-assessment-coverage dl div {
+  padding: 10px 12px;
+  border-left: 3px solid var(--teal);
+  background: #fff;
+}
+
+.report-assessment-coverage dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.report-assessment-coverage dd {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 900;
+}
+
 .report-scope-list p,
 .report-lead,
 .report-note,
@@ -6646,6 +6702,7 @@ textarea:focus {
   .ai-assistant-suggestions,
   .executive-summary,
   .report-archive-snapshot dl,
+  .report-assessment-coverage dl,
   .report-two-col,
   .finding-summary-list article {
     grid-template-columns: 1fr;

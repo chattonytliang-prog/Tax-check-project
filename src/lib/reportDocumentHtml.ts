@@ -1,5 +1,9 @@
 import { reportDocumentId } from './reportDocumentId'
 import { reportArchiveEvidenceFacts } from './reportArchiveEvidence'
+import {
+  reportAssessmentCoverage,
+  reportAssessmentCoverageFacts,
+} from './reportAssessmentCoverage'
 import { isCompleteStructuredReport, reportRiskCountMismatch, reportRiskStorageMismatch, reportTextContent, type CompleteStructuredReportShape } from './reportCompatibility'
 import {
   reportFindingEvidenceStatus,
@@ -55,6 +59,8 @@ function exportList(items: string[], emptyText: string, ordered = false) {
 function structuredReportHtml(report: CompleteStructuredReportShape) {
   const customerScope = report.scope.filter(isCustomerFacingReportFact)
   const archiveEvidenceFacts = reportArchiveEvidenceFacts(report.archiveEvidence)
+  const assessmentCoverage = reportAssessmentCoverage(report.dataQuality)
+  const assessmentCoverageFacts = reportAssessmentCoverageFacts(report.dataQuality)
   const keyFindings = report.keyFindings.length
     ? report.keyFindings.map((finding, index) => `
       <tr>
@@ -138,6 +144,15 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
           <td>${report.dataQuality.score}%（${escapeHtml(report.dataQuality.label)}）</td>
         </tr>
       </table>
+      ${assessmentCoverage ? `
+        <h3>检查结论覆盖快照</h3>
+        <table class="assessment-coverage">
+          <tr>${assessmentCoverageFacts.map((item) => `<th>${escapeHtml(item.label)}</th>`).join('')}</tr>
+          <tr>${assessmentCoverageFacts.map((item) => `<td>${escapeHtml(item.value)}</td>`).join('')}</tr>
+        </table>
+        <p class="muted">风险等级只依据可判断检查项；资料不足暂未判断，不代表低风险或无风险。</p>
+        ${assessmentCoverage.isConsistent ? '' : `<p class="assessment-warning"><strong>检查范围统计待复核：</strong>保存的暂未判断清单为 ${assessmentCoverage.listedUnassessedCount} 项，与统计的 ${assessmentCoverage.unassessedCount} 项不一致。</p>`}
+      ` : ''}
       <p class="lead">${escapeHtml(customerFacingReportText(report.executiveSummary.conclusion))}</p>
       <p>${escapeHtml(customerFacingReportText(report.dataQuality.note))}</p>
     </section>
@@ -353,6 +368,16 @@ export function professionalReportDocumentHtml(report: ReportDocumentHtmlInput, 
           .archive-snapshot td {
             font-size: 15px;
             font-weight: 800;
+          }
+          .assessment-coverage td {
+            font-size: 15px;
+            font-weight: 800;
+          }
+          .assessment-warning {
+            padding: 8px 10px;
+            color: #7a3e00;
+            background: #fff4e5;
+            border: 1px solid #e9b96e;
           }
           .finding-table .index {
             width: 46px;

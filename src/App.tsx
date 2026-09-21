@@ -56,6 +56,11 @@ import {
   reportArchiveEvidenceStatement,
   type ReportArchiveEvidence,
 } from './lib/reportArchiveEvidence'
+import {
+  reportAssessmentCoverage,
+  reportAssessmentCoverageFacts,
+  reportAssessmentCoverageStatement,
+} from './lib/reportAssessmentCoverage'
 import { reportDeliveryChecklist } from './lib/reportDeliveryChecklist'
 import { reportDocumentId } from './lib/reportDocumentId'
 import { professionalReportDocumentHtml } from './lib/reportDocumentHtml'
@@ -4299,6 +4304,7 @@ function buildStructuredReport(
 function buildProfessionalReportContent(report: StructuredReport) {
   const profile = report.clientProfile.map((item) => `${item.label}：${item.value}`).join('\n')
   const scope = report.scope.filter(isCustomerFacingReportFact).map((item) => `${item.label}：${item.value}`).join('\n')
+  const assessmentCoverage = reportAssessmentCoverageStatement(report.dataQuality)
   const keyFindings = report.keyFindings.length
     ? report.keyFindings.map((item, index) => {
       const detailIndex = report.detailedFindings.findIndex((finding) => finding.id === item.id)
@@ -4333,6 +4339,7 @@ ${customerFacingReportText(report.executiveSummary.conclusion)}
 
 基础字段覆盖度：${report.dataQuality.score}%（${report.dataQuality.label}）
 ${customerFacingReportText(report.dataQuality.note)}
+${assessmentCoverage ? `\n检查结论覆盖：${assessmentCoverage}` : ''}
 
 资料不足暂未判断事项：${report.dataQuality.unassessedRules?.length ? report.dataQuality.unassessedRules.map((item) => `${item.name}（尚缺：${item.missingFields.join('、')}）`).join('；') : '无。'}
 
@@ -10236,6 +10243,8 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
 
 function StructuredReportPreview({ report }: { report: StructuredReport }) {
   const archiveEvidenceFacts = reportArchiveEvidenceFacts(report.archiveEvidence)
+  const assessmentCoverage = reportAssessmentCoverage(report.dataQuality)
+  const assessmentCoverageFacts = reportAssessmentCoverageFacts(report.dataQuality)
   return (
     <div className="structured-report">
       <section className="report-cover">
@@ -10293,6 +10302,22 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
           <div><span>高 / 中 / 低</span><strong>{report.executiveSummary.highRisks} / {report.executiveSummary.mediumRisks} / {report.executiveSummary.lowRisks}</strong></div>
           <div><span>基础字段覆盖度</span><strong>{report.dataQuality.score}%</strong></div>
         </div>
+        {assessmentCoverage ? (
+          <div className={`report-assessment-coverage${assessmentCoverage.isConsistent ? '' : ' warning'}`}>
+            <div>
+              <h4>检查结论覆盖快照</h4>
+              <p>风险等级只依据可判断检查项；资料不足暂未判断，不代表低风险或无风险。</p>
+            </div>
+            <dl>
+              {assessmentCoverageFacts.map((item) => (
+                <div key={item.label}><dt>{item.label}</dt><dd>{item.value}</dd></div>
+              ))}
+            </dl>
+            {!assessmentCoverage.isConsistent ? (
+              <strong role="alert">保存的暂未判断清单为 {assessmentCoverage.listedUnassessedCount} 项，与统计的 {assessmentCoverage.unassessedCount} 项不一致，请重新核对。</strong>
+            ) : null}
+          </div>
+        ) : null}
         <p className="report-lead">{customerFacingReportText(report.executiveSummary.conclusion)}</p>
         <p className="report-note">{customerFacingReportText(report.dataQuality.note)}</p>
       </section>
