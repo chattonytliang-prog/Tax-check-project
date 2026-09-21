@@ -65,6 +65,10 @@ import { reportDeliveryChecklist } from './lib/reportDeliveryChecklist'
 import { reportDocumentId } from './lib/reportDocumentId'
 import { professionalReportDocumentHtml } from './lib/reportDocumentHtml'
 import { reportFileName } from './lib/reportFileName'
+import {
+  buildReportFindingInputEvidence,
+  reportFindingInputEvidenceList,
+} from './lib/reportFindingEvidence'
 import { reportFollowUpCadence } from './lib/reportFollowUpCadence'
 import {
   isCompleteStructuredReport,
@@ -3333,6 +3337,9 @@ const autoDerivedFieldConfigs: AutoDerivedFieldConfig[] = [
 ]
 
 const autoDerivedFieldMap = new Map(autoDerivedFieldConfigs.map((field) => [field.key, field]))
+const reportAutoDerivedSources = Object.fromEntries(
+  autoDerivedFieldConfigs.map((field) => [String(field.key), field.source]),
+)
 
 function isManualDerivedField(client: Partial<Client>, field: keyof Client) {
   return Boolean(client.manualDerivedFields?.[String(field)])
@@ -4141,9 +4148,19 @@ function findingAnalysisForRisk(client: Client, risk: RiskResult) {
 
 function buildStructuredRiskFinding(client: Client, risk: RiskResult): StructuredRiskFinding {
   const template = deepReportRuleTemplates[risk.code]
+  const inputEvidence = buildReportFindingInputEvidence({
+    condition: riskRuleCondition(risk),
+    requiredFields: risk.requiredFields,
+    values: toClientSnapshot(client),
+    standardMetricCoverage: client.standardMetricCoverage,
+    explicitFields: client.manualDerivedFields,
+    autoDerivedSources: reportAutoDerivedSources,
+    additionalLabels: clientImportFieldLabels,
+  })
   if (template) {
     return {
       id: risk.code,
+      inputEvidence,
       title: riskDisplayTitle(risk),
       level: risk.level,
       taxType: risk.taxType,
@@ -4163,6 +4180,7 @@ function buildStructuredRiskFinding(client: Client, risk: RiskResult): Structure
 
   return {
     id: risk.code,
+    inputEvidence,
     title: riskDisplayTitle(risk),
     level: risk.level,
     taxType: risk.taxType,
@@ -4324,6 +4342,9 @@ function buildProfessionalReportContent(report: StructuredReport) {
 政策依据：${item.legalBasis}
 优化建议：${item.remediation}
 建议补充资料：${item.materials.join('、') || '暂无'}
+本次采用数据：${reportFindingInputEvidenceList(item.inputEvidence).length
+    ? reportFindingInputEvidenceList(item.inputEvidence).map((evidence) => `${evidence.label}=${evidence.value}（${evidence.basis}）`).join('；')
+    : '未保存事项级输入快照，需结合企业档案复核'}
 `).join('\n')
     : '当前未命中自动风险事项。'
 
@@ -10380,6 +10401,26 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
               <p>{customerFacingReportText(finding.scenario)}</p>
               <h5>当前发现</h5>
               <p>{publicRiskReason(finding.currentFinding)}</p>
+              {reportFindingInputEvidenceList(finding.inputEvidence).length ? (
+                <>
+                  <h5>本次采用数据（生成时快照）</h5>
+                  <div className="finding-input-evidence-wrap">
+                    <table className="finding-input-evidence">
+                      <thead><tr><th>数据项</th><th>生成时取值</th><th>数据口径</th></tr></thead>
+                      <tbody>
+                        {reportFindingInputEvidenceList(finding.inputEvidence).map((evidence) => (
+                          <tr key={`${finding.id}-${evidence.label}`}>
+                            <td>{evidence.label}</td>
+                            <td>{evidence.value}</td>
+                            <td>{evidence.basis}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="finding-evidence-note">该快照用于复算本事项，不代表来源原件已逐项核验。</p>
+                </>
+              ) : null}
               <h5>潜在税务风险分析</h5>
               <p>{customerFacingReportText(finding.riskAnalysis)}</p>
               <h5>测算逻辑</h5>

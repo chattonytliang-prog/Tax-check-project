@@ -6142,10 +6142,48 @@ textarea:focus {
 }
 
 .detailed-finding {
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 20px;
   background: #fff;
+}
+
+.finding-input-evidence-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.finding-input-evidence {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+}
+
+.finding-input-evidence th,
+.finding-input-evidence td {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.finding-input-evidence th {
+  color: #29444c;
+  background: #eef7f8;
+}
+
+.finding-input-evidence td:nth-child(2) {
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.finding-evidence-note {
+  margin-top: 8px;
+  color: var(--muted) !important;
+  font-size: 12px;
 }
 
 .finding-heading,

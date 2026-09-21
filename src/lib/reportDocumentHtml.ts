@@ -4,6 +4,7 @@ import {
   reportAssessmentCoverage,
   reportAssessmentCoverageFacts,
 } from './reportAssessmentCoverage'
+import { reportFindingInputEvidenceList } from './reportFindingEvidence'
 import { isCompleteStructuredReport, reportRiskCountMismatch, reportRiskStorageMismatch, reportTextContent, type CompleteStructuredReportShape } from './reportCompatibility'
 import {
   reportFindingEvidenceStatus,
@@ -76,7 +77,9 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
     : `<tr><td colspan="4" class="muted">当前未形成需要在摘要中重点列示的风险事项。</td></tr>`
 
   const detailSections = report.detailedFindings.length
-    ? report.detailedFindings.map((finding, index) => `
+    ? report.detailedFindings.map((finding, index) => {
+      const inputEvidence = reportFindingInputEvidenceList(finding.inputEvidence)
+      return `
       <section class="finding">
         <div class="finding-title">
           <span>事项 ${escapeHtml(reportFindingReference(index, finding.findingRef))}</span>
@@ -91,6 +94,14 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
         <p>${escapeHtml(customerFacingReportText(finding.scenario))}</p>
         <h4>当前发现</h4>
         <p>${escapeHtml(publicRiskReason(finding.currentFinding))}</p>
+        ${inputEvidence.length ? `
+          <h4>本次采用数据（生成时快照）</h4>
+          <table class="finding-input-evidence">
+            <tr><th>数据项</th><th>生成时取值</th><th>数据口径</th></tr>
+            ${inputEvidence.map((evidence) => `<tr><td>${escapeHtml(evidence.label)}</td><td>${escapeHtml(evidence.value)}</td><td>${escapeHtml(evidence.basis)}</td></tr>`).join('')}
+          </table>
+          <p class="muted">该快照用于复算本事项，不代表来源原件已逐项核验。</p>
+        ` : ''}
         <h4>潜在税务风险分析</h4>
         <p>${escapeHtml(customerFacingReportText(finding.riskAnalysis))}</p>
         <h4>测算逻辑</h4>
@@ -102,7 +113,7 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
         <h4>建议补充资料</h4>
         ${exportList(finding.materials, '暂无明确补充资料。')}
       </section>
-    `).join('')
+    `}).join('')
     : '<p class="muted">当前未命中自动风险事项。</p>'
 
   return `
@@ -387,6 +398,9 @@ export function professionalReportDocumentHtml(report: ReportDocumentHtmlInput, 
           .finding-table p {
             margin: 4px 0 0;
             color: #4d6269;
+          }
+          .finding-input-evidence td:nth-child(2) {
+            font-weight: 800;
           }
           .finding {
             margin: 16px 0;

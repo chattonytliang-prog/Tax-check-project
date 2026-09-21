@@ -1,11 +1,13 @@
 import type { RiskLevel } from './ruleEngine'
 import type { ReportRemediationTask } from './reportRemediationPlan'
 import { isValidReportArchiveEvidence, type ReportArchiveEvidence } from './reportArchiveEvidence'
+import type { ReportFindingInputEvidence } from './reportFindingEvidence'
 
 export type CompleteStructuredRiskFindingShape = {
   id: string
   findingRef?: string
   evidenceStatus?: string
+  inputEvidence?: ReportFindingInputEvidence[]
   title: string
   level: RiskLevel
   taxType: string

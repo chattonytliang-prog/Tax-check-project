@@ -42,6 +42,10 @@ const structuredReport: CompleteStructuredReportShape = {
   keyFindings: [
     {
       id: 'R-TEST',
+      inputEvidence: [
+        { label: '增值税应税销售额', value: '1,234,567.89', basis: '标准资料已形成指标' },
+        { label: '增值税应纳/入库税额', value: '8,000', basis: '资料或用户明确值' },
+      ],
       title: '进销项差异 <核查>',
       level: '高',
       taxType: '增值税',
@@ -171,6 +175,10 @@ describe('professionalReportDocumentHtml', () => {
     expect(html).toContain('中风险')
     expect(html).toContain('低风险')
     expect(html).toContain('标准分析说明')
+    expect(html).toContain('本次采用数据（生成时快照）')
+    expect(html).toContain('1,234,567.89')
+    expect(html).toContain('标准资料已形成指标')
+    expect(html).toContain('不代表来源原件已逐项核验')
     expect(html).toContain('待按建议资料完成原件或明细复核')
     expect(html).toContain('暂无明确补充资料。')
     expect(html).toContain('当前无需要列入整改清单的自动风险事项。')
