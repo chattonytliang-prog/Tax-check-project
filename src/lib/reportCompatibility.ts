@@ -8,6 +8,9 @@ export type CompleteStructuredRiskFindingShape = {
   findingRef?: string
   evidenceStatus?: string
   inputEvidence?: ReportFindingInputEvidence[]
+  ruleCode?: string
+  ruleOrigin?: string
+  ruleCondition?: string
   title: string
   level: RiskLevel
   taxType: string

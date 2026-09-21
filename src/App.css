@@ -6186,6 +6186,16 @@ textarea:focus {
   font-size: 12px;
 }
 
+.finding-rule-condition {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid #1596a8;
+  background: #eef7f8;
+  color: #29444c !important;
+  font-weight: 800;
+  line-height: 1.6;
+}
+
 .finding-heading,
 .finding-meta,
 .report-two-col {

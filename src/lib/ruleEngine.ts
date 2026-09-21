@@ -253,11 +253,18 @@ export function conditionSummary(condition?: RuleCondition): string {
   if ('any' in condition) return `任一满足：${condition.any.map(conditionSummary).join('；')}`
   if (!condition.field) return '不参与自动检测'
   const labelOf = (field: string) => conditionFields.find((item) => item.value === field)?.label || field
-  const right = condition.compareField
-    ? `${labelOf(condition.compareField)}${condition.multiplier ? ` × ${condition.multiplier}` : ''}`
-    : String(condition.value)
+  const literal = (value: string | number | boolean) => {
+    if (typeof value === 'boolean') return value ? '是' : '否'
+    if (typeof value === 'number') return value.toLocaleString('zh-CN', { maximumFractionDigits: 6 })
+    return String(value)
+  }
+  const right = condition.transform === 'absDiff'
+    ? literal(condition.value)
+    : condition.compareField
+      ? `${labelOf(condition.compareField)}${condition.multiplier !== undefined ? ` × ${literal(condition.multiplier)}` : ''}`
+      : literal(condition.value)
   const left = condition.transform === 'absDiff'
-    ? `|${labelOf(condition.field)} - ${condition.compareField ? labelOf(condition.compareField) : ''}|`
+    ? `|${labelOf(condition.field)} - ${condition.compareField ? labelOf(condition.compareField) : '0'}|`
     : labelOf(condition.field)
   return `${left} ${condition.operator} ${right}`
 }

@@ -89,11 +89,13 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
         <table class="meta-table">
           <tr><th>涉及税种</th><td>${escapeHtml(finding.taxType)}</td><th>整改优先级</th><td>${escapeHtml(finding.priority)}</td></tr>
           <tr><th>分析深度</th><td>${finding.deepTemplate ? '顾问级深度分析' : '标准分析说明'}</td><th>证据状态</th><td>${escapeHtml(reportFindingEvidenceStatus(finding.evidenceStatus))}</td></tr>
+          ${finding.ruleCode || finding.ruleOrigin ? `<tr><th>规则编号</th><td>${escapeHtml(finding.ruleCode || finding.id)}</td><th>规则来源</th><td>${escapeHtml(finding.ruleOrigin || '未保存')}</td></tr>` : ''}
         </table>
         <h4>事项背景</h4>
         <p>${escapeHtml(customerFacingReportText(finding.scenario))}</p>
         <h4>当前发现</h4>
         <p>${escapeHtml(publicRiskReason(finding.currentFinding))}</p>
+        ${finding.ruleCondition ? `<h4>生成时命中条件</h4><p class="rule-condition">${escapeHtml(finding.ruleCondition)}</p>` : ''}
         ${inputEvidence.length ? `
           <h4>本次采用数据（生成时快照）</h4>
           <table class="finding-input-evidence">
@@ -401,6 +403,13 @@ export function professionalReportDocumentHtml(report: ReportDocumentHtmlInput, 
           }
           .finding-input-evidence td:nth-child(2) {
             font-weight: 800;
+          }
+          .rule-condition {
+            padding: 10px 12px;
+            border-left: 3px solid #1596a8;
+            background: #eef7f8;
+            color: #29444c;
+            font-weight: 700;
           }
           .finding {
             margin: 16px 0;

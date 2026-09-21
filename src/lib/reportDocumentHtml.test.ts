@@ -42,6 +42,9 @@ const structuredReport: CompleteStructuredReportShape = {
   keyFindings: [
     {
       id: 'R-TEST',
+      ruleCode: 'R-TEST',
+      ruleOrigin: '内置规则',
+      ruleCondition: '增值税应纳/入库税额 < 增值税应税销售额 × 0.01',
       inputEvidence: [
         { label: '增值税应税销售额', value: '1,234,567.89', basis: '标准资料已形成指标' },
         { label: '增值税应纳/入库税额', value: '8,000', basis: '资料或用户明确值' },
@@ -176,6 +179,12 @@ describe('professionalReportDocumentHtml', () => {
     expect(html).toContain('低风险')
     expect(html).toContain('标准分析说明')
     expect(html).toContain('本次采用数据（生成时快照）')
+    expect(html).toContain('规则编号')
+    expect(html).toContain('R-TEST')
+    expect(html).toContain('规则来源')
+    expect(html).toContain('内置规则')
+    expect(html).toContain('生成时命中条件')
+    expect(html).toContain('增值税应纳/入库税额 &lt; 增值税应税销售额 × 0.01')
     expect(html).toContain('1,234,567.89')
     expect(html).toContain('标准资料已形成指标')
     expect(html).toContain('不代表来源原件已逐项核验')

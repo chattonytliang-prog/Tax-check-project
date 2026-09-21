@@ -4148,8 +4148,9 @@ function findingAnalysisForRisk(client: Client, risk: RiskResult) {
 
 function buildStructuredRiskFinding(client: Client, risk: RiskResult): StructuredRiskFinding {
   const template = deepReportRuleTemplates[risk.code]
+  const condition = riskRuleCondition(risk)
   const inputEvidence = buildReportFindingInputEvidence({
-    condition: riskRuleCondition(risk),
+    condition,
     requiredFields: risk.requiredFields,
     values: toClientSnapshot(client),
     standardMetricCoverage: client.standardMetricCoverage,
@@ -4161,6 +4162,9 @@ function buildStructuredRiskFinding(client: Client, risk: RiskResult): Structure
     return {
       id: risk.code,
       inputEvidence,
+      ruleCode: risk.code,
+      ruleOrigin: ruleOrigin(risk),
+      ruleCondition: conditionSummary(condition),
       title: riskDisplayTitle(risk),
       level: risk.level,
       taxType: risk.taxType,
@@ -4181,6 +4185,9 @@ function buildStructuredRiskFinding(client: Client, risk: RiskResult): Structure
   return {
     id: risk.code,
     inputEvidence,
+    ruleCode: risk.code,
+    ruleOrigin: ruleOrigin(risk),
+    ruleCondition: conditionSummary(condition),
     title: riskDisplayTitle(risk),
     level: risk.level,
     taxType: risk.taxType,
@@ -4335,6 +4342,7 @@ function buildProfessionalReportContent(report: StructuredReport) {
 涉及税种：${item.taxType}
 整改优先级：${item.priority}
 证据状态：${reportFindingEvidenceStatus(item.evidenceStatus)}
+规则快照：${item.ruleCode || item.id}${item.ruleOrigin ? `｜${item.ruleOrigin}` : ''}${item.ruleCondition ? `｜${item.ruleCondition}` : ''}
 事项背景：${item.scenario}
 当前发现：${item.currentFinding}
 潜在税务风险分析：${item.riskAnalysis}
@@ -10395,12 +10403,20 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
                 <span>涉及税种：{finding.taxType}</span>
                 <span>整改优先级：{finding.priority}</span>
                 <span>证据状态：{reportFindingEvidenceStatus(finding.evidenceStatus)}</span>
+                {finding.ruleCode && <span>规则编号：{finding.ruleCode}</span>}
+                {finding.ruleOrigin && <span>规则来源：{finding.ruleOrigin}</span>}
                 {finding.deepTemplate && <span>顾问级深度模板</span>}
               </div>
               <h5>事项背景</h5>
               <p>{customerFacingReportText(finding.scenario)}</p>
               <h5>当前发现</h5>
               <p>{publicRiskReason(finding.currentFinding)}</p>
+              {finding.ruleCondition ? (
+                <>
+                  <h5>生成时命中条件</h5>
+                  <p className="finding-rule-condition">{finding.ruleCondition}</p>
+                </>
+              ) : null}
               {reportFindingInputEvidenceList(finding.inputEvidence).length ? (
                 <>
                   <h5>本次采用数据（生成时快照）</h5>
