@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { reportArchiveEvidenceStatement } from './reportArchiveEvidence'
+import {
+  isValidReportArchiveEvidence,
+  reportArchiveEvidenceFacts,
+  reportArchiveEvidenceSnapshot,
+  reportArchiveEvidenceStatement,
+} from './reportArchiveEvidence'
 
 describe('report archive evidence statement', () => {
   it('distinguishes registered files, stored originals, linked files, and records', () => {
@@ -34,5 +39,26 @@ describe('report archive evidence statement', () => {
     }
     expect(reportArchiveEvidenceStatement({ sourceFileCount: 2, storedSourceFileCount: 1, linkedSourceFileCount: 2, recordCount: 3 }))
       .toContain('2 个文件形成标准记录')
+  })
+
+  it('freezes a validated copy for the saved report', () => {
+    const currentArchive = { sourceFileCount: 9, storedSourceFileCount: 7, linkedSourceFileCount: 5, recordCount: 1729 }
+    const snapshot = reportArchiveEvidenceSnapshot(currentArchive)
+    currentArchive.sourceFileCount = 10
+
+    expect(snapshot).toEqual({ sourceFileCount: 9, storedSourceFileCount: 7, linkedSourceFileCount: 5, recordCount: 1729 })
+    expect(snapshot).not.toBe(currentArchive)
+    expect(reportArchiveEvidenceSnapshot({ ...currentArchive, linkedSourceFileCount: 2000 })).toBeUndefined()
+  })
+
+  it('provides consistent display facts only for valid snapshots', () => {
+    expect(reportArchiveEvidenceFacts({ sourceFileCount: 9, storedSourceFileCount: 7, linkedSourceFileCount: 5, recordCount: 1729 })).toEqual([
+      { label: '已登记源文件', value: '9 个' },
+      { label: '原件已保存', value: '7 个' },
+      { label: '形成标准记录的文件', value: '5 个' },
+      { label: '标准记录', value: '1729 条' },
+    ])
+    expect(reportArchiveEvidenceFacts({ sourceFileCount: 1 })).toEqual([])
+    expect(isValidReportArchiveEvidence(null)).toBe(false)
   })
 })

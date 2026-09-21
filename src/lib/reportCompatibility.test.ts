@@ -43,6 +43,10 @@ const completeReport: CompleteStructuredReportShape = {
 describe('reportCompatibility', () => {
   it('keeps complete professional structured reports renderable', () => {
     expect(isCompleteStructuredReport(completeReport)).toBe(true)
+    expect(isCompleteStructuredReport({
+      ...completeReport,
+      archiveEvidence: { sourceFileCount: 9, storedSourceFileCount: 7, linkedSourceFileCount: 5, recordCount: 1729 },
+    })).toBe(true)
   })
 
   it('rejects empty or non-object structured report payloads', () => {
@@ -72,6 +76,14 @@ describe('reportCompatibility', () => {
     }
 
     expect(isCompleteStructuredReport(partial)).toBe(false)
+  })
+
+  it('rejects contradictory saved archive snapshots without breaking reports that predate the field', () => {
+    expect(isCompleteStructuredReport(completeReport)).toBe(true)
+    expect(isCompleteStructuredReport({
+      ...completeReport,
+      archiveEvidence: { sourceFileCount: 2, storedSourceFileCount: 3, linkedSourceFileCount: 1, recordCount: 1 },
+    })).toBe(false)
   })
 
   it('returns an empty risk list for legacy reports without array risks', () => {

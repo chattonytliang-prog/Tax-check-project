@@ -50,7 +50,12 @@ import {
 import { advancedCandidateRuleConfigs, type AdvancedCandidateRuleConfig } from './lib/advancedCandidateRuleConfigs'
 import { assistantThreadStorageKey } from './lib/assistantThreadStorage'
 import { reportClientAcknowledgement } from './lib/reportClientAcknowledgement'
-import { reportArchiveEvidenceStatement, type ReportArchiveEvidence } from './lib/reportArchiveEvidence'
+import {
+  reportArchiveEvidenceFacts,
+  reportArchiveEvidenceSnapshot,
+  reportArchiveEvidenceStatement,
+  type ReportArchiveEvidence,
+} from './lib/reportArchiveEvidence'
 import { reportDeliveryChecklist } from './lib/reportDeliveryChecklist'
 import { reportDocumentId } from './lib/reportDocumentId'
 import { professionalReportDocumentHtml } from './lib/reportDocumentHtml'
@@ -4200,11 +4205,13 @@ function buildStructuredReport(
     name: rule.name,
     missingFields: execution.missingFields.map(fieldLabel),
   }))
+  const archiveEvidenceSnapshot = reportArchiveEvidenceSnapshot(archiveEvidence)
 
   return {
     version: 'professional-v1',
     methodology: 'source-backed-v2',
     title: `${client.name} 企业涉税风险初筛报告——基于已提供资料`,
+    archiveEvidence: archiveEvidenceSnapshot,
     clientProfile: [
       { label: '企业名称', value: reportValue(client.name) },
       { label: '统一社会信用代码', value: reportValue(client.creditCode) },
@@ -4234,7 +4241,7 @@ function buildStructuredReport(
       { label: '复核建议', value: reportReviewAction({ totalRisks: risks.length, highRisks, mediumRisks }) },
       { label: '生成时间', value: formatDate() },
       { label: '资料覆盖口径', value: `基础检测字段 ${completeness.covered}/${completeness.total}；不代表全部账套、凭证、合同、流水或申报资料完整` },
-      { label: '来源归档核对', value: reportArchiveEvidenceStatement(archiveEvidence) },
+      { label: '来源归档核对', value: reportArchiveEvidenceStatement(archiveEvidenceSnapshot) },
       { label: '工作方法', value: '基于系统已录入的期间数据进行自动初筛；AI 仅作表达润色和数据复核提示，不证明原始凭证已核验。' },
       { label: '工作限制', value: '未提供证据的事项不作判断；本次初筛不替代原始凭证穿行测试、完整账套复核、税务机关沟通、专项鉴证或法律意见。' },
     ],
@@ -10228,6 +10235,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
 }
 
 function StructuredReportPreview({ report }: { report: StructuredReport }) {
+  const archiveEvidenceFacts = reportArchiveEvidenceFacts(report.archiveEvidence)
   return (
     <div className="structured-report">
       <section className="report-cover">
@@ -10258,6 +10266,20 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
             <p key={item.label}><strong>{item.label}：</strong>{item.value}</p>
           ))}
         </div>
+        {archiveEvidenceFacts.length ? (
+          <div className="report-archive-snapshot">
+            <div>
+              <h4>报告生成时归档快照</h4>
+              <p>冻结本报告生成时界面已加载的企业全部期间归档统计，用于后续复核报告口径。</p>
+            </div>
+            <dl>
+              {archiveEvidenceFacts.map((item) => (
+                <div key={item.label}><dt>{item.label}</dt><dd>{item.value}</dd></div>
+              ))}
+            </dl>
+            <small>该快照只证明系统当时的归档数量，不代表本报告期间或各风险事项的证据已逐项核验。</small>
+          </div>
+        ) : null}
       </section>
 
       <section className="report-section">

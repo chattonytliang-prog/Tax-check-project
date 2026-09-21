@@ -5,12 +5,43 @@ export type ReportArchiveEvidence = {
   recordCount: number
 }
 
+export function isValidReportArchiveEvidence(evidence: unknown): evidence is ReportArchiveEvidence {
+  if (!evidence || typeof evidence !== 'object') return false
+  const candidate = evidence as Partial<ReportArchiveEvidence>
+  const values = [
+    candidate.sourceFileCount,
+    candidate.storedSourceFileCount,
+    candidate.linkedSourceFileCount,
+    candidate.recordCount,
+  ]
+  return values.every((value) => Number.isSafeInteger(value) && (value ?? -1) >= 0)
+    && candidate.storedSourceFileCount! <= candidate.sourceFileCount!
+    && candidate.linkedSourceFileCount! <= candidate.sourceFileCount!
+    && candidate.linkedSourceFileCount! <= candidate.recordCount!
+}
+
+export function reportArchiveEvidenceSnapshot(evidence: unknown): ReportArchiveEvidence | undefined {
+  if (!isValidReportArchiveEvidence(evidence)) return undefined
+  return {
+    sourceFileCount: evidence.sourceFileCount,
+    storedSourceFileCount: evidence.storedSourceFileCount,
+    linkedSourceFileCount: evidence.linkedSourceFileCount,
+    recordCount: evidence.recordCount,
+  }
+}
+
+export function reportArchiveEvidenceFacts(evidence: unknown) {
+  if (!isValidReportArchiveEvidence(evidence)) return []
+  return [
+    { label: '已登记源文件', value: `${evidence.sourceFileCount} 个` },
+    { label: '原件已保存', value: `${evidence.storedSourceFileCount} 个` },
+    { label: '形成标准记录的文件', value: `${evidence.linkedSourceFileCount} 个` },
+    { label: '标准记录', value: `${evidence.recordCount} 条` },
+  ]
+}
+
 export function reportArchiveEvidenceStatement(evidence?: ReportArchiveEvidence | null) {
-  if (!evidence
-    || Object.values(evidence).some((value) => !Number.isSafeInteger(value) || value < 0)
-    || evidence.storedSourceFileCount > evidence.sourceFileCount
-    || evidence.linkedSourceFileCount > evidence.sourceFileCount
-    || evidence.linkedSourceFileCount > evidence.recordCount) {
+  if (!isValidReportArchiveEvidence(evidence)) {
     return '生成时未能核验企业归档统计；报告仅依据已录入期间数据，来源文件与标准记录需另行核对。'
   }
 

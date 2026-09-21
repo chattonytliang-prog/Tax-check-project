@@ -1,4 +1,5 @@
 import { reportDocumentId } from './reportDocumentId'
+import { reportArchiveEvidenceFacts } from './reportArchiveEvidence'
 import { isCompleteStructuredReport, reportRiskCountMismatch, reportRiskStorageMismatch, reportTextContent, type CompleteStructuredReportShape } from './reportCompatibility'
 import {
   reportFindingEvidenceStatus,
@@ -53,6 +54,7 @@ function exportList(items: string[], emptyText: string, ordered = false) {
 
 function structuredReportHtml(report: CompleteStructuredReportShape) {
   const customerScope = report.scope.filter(isCustomerFacingReportFact)
+  const archiveEvidenceFacts = reportArchiveEvidenceFacts(report.archiveEvidence)
   const keyFindings = report.keyFindings.length
     ? report.keyFindings.map((finding, index) => `
       <tr>
@@ -110,6 +112,14 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
       <h2>一、项目背景及工作范围</h2>
       <table class="fact-table">${exportRows(report.clientProfile)}</table>
       <table class="fact-table">${exportRows(customerScope)}</table>
+      ${archiveEvidenceFacts.length ? `
+        <h3>报告生成时归档快照</h3>
+        <table class="archive-snapshot">
+          <tr>${archiveEvidenceFacts.map((item) => `<th>${escapeHtml(item.label)}</th>`).join('')}</tr>
+          <tr>${archiveEvidenceFacts.map((item) => `<td>${escapeHtml(item.value)}</td>`).join('')}</tr>
+        </table>
+        <p class="muted">该快照只证明系统当时的归档数量，不代表本报告期间或各风险事项的证据已逐项核验。</p>
+      ` : ''}
     </section>
 
     <section>
@@ -337,6 +347,10 @@ export function professionalReportDocumentHtml(report: ReportDocumentHtmlInput, 
           }
           .fact-table th { width: 24%; }
           .summary-table td {
+            font-size: 15px;
+            font-weight: 800;
+          }
+          .archive-snapshot td {
             font-size: 15px;
             font-weight: 800;
           }

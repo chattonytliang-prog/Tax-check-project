@@ -5987,6 +5987,55 @@ textarea:focus {
   margin-top: 16px;
 }
 
+.report-archive-snapshot {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--teal);
+  border-radius: 8px;
+  background: #f5fbfb;
+}
+
+.report-archive-snapshot h4,
+.report-archive-snapshot p {
+  margin: 0;
+}
+
+.report-archive-snapshot p,
+.report-archive-snapshot small {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.report-archive-snapshot dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.report-archive-snapshot dl div {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.report-archive-snapshot dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.report-archive-snapshot dd {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 900;
+}
+
 .report-scope-list p,
 .report-lead,
 .report-note,
@@ -6596,6 +6645,7 @@ textarea:focus {
   .report-fact-grid,
   .ai-assistant-suggestions,
   .executive-summary,
+  .report-archive-snapshot dl,
   .report-two-col,
   .finding-summary-list article {
     grid-template-columns: 1fr;

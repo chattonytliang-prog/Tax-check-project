@@ -5,6 +5,12 @@ import type { CompleteStructuredReportShape } from './reportCompatibility'
 const structuredReport: CompleteStructuredReportShape = {
   version: 'professional-v1',
   title: '上海测试科技有限公司税务健康报告 <draft>',
+  archiveEvidence: {
+    sourceFileCount: 9,
+    storedSourceFileCount: 7,
+    linkedSourceFileCount: 5,
+    recordCount: 1729,
+  },
   clientProfile: [
     { label: '企业名称', value: '上海测试科技有限公司' },
     { label: '统一社会信用代码', value: '91310000TEST' },
@@ -81,6 +87,11 @@ describe('professionalReportDocumentHtml', () => {
     expect(html).toContain('FND-001')
     expect(html).toContain('待复核')
     expect(html).toContain('整改过程记录、顾问复核意见及客户确认凭据')
+    expect(html).toContain('报告生成时归档快照')
+    expect(html).toContain('已登记源文件')
+    expect(html).toContain('9 个')
+    expect(html).toContain('1729 条')
+    expect(html).toContain('不代表本报告期间或各风险事项的证据已逐项核验')
     expect(html).not.toContain('规则执行覆盖')
     expect(html).not.toContain('<draft>')
     expect(html).not.toContain('window.print()')
