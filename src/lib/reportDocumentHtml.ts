@@ -5,6 +5,13 @@ import {
   reportAssessmentCoverageFacts,
 } from './reportAssessmentCoverage'
 import { reportFindingInputEvidenceList } from './reportFindingEvidence'
+import {
+  reportPeriodEvidenceDisclaimer,
+  reportPeriodEvidenceSourceList,
+  reportPeriodEvidenceSourcePeriod,
+  reportPeriodEvidenceSourceStatus,
+  reportPeriodEvidenceSourceTypeLabel,
+} from './reportPeriodEvidenceSources'
 import { isCompleteStructuredReport, reportRiskCountMismatch, reportRiskStorageMismatch, reportTextContent, type CompleteStructuredReportShape } from './reportCompatibility'
 import {
   reportFindingEvidenceStatus,
@@ -60,6 +67,7 @@ function exportList(items: string[], emptyText: string, ordered = false) {
 function structuredReportHtml(report: CompleteStructuredReportShape) {
   const customerScope = report.scope.filter(isCustomerFacingReportFact)
   const archiveEvidenceFacts = reportArchiveEvidenceFacts(report.archiveEvidence)
+  const periodEvidenceSources = reportPeriodEvidenceSourceList(report.periodEvidenceSources)
   const assessmentCoverage = reportAssessmentCoverage(report.dataQuality)
   const assessmentCoverageFacts = reportAssessmentCoverageFacts(report.dataQuality)
   const keyFindings = report.keyFindings.length
@@ -138,6 +146,14 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
           <tr>${archiveEvidenceFacts.map((item) => `<td>${escapeHtml(item.value)}</td>`).join('')}</tr>
         </table>
         <p class="muted">该快照只证明系统当时的归档数量，不代表本报告期间或各风险事项的证据已逐项核验。</p>
+      ` : ''}
+      ${periodEvidenceSources.length ? `
+        <h3>本报告期间可核对来源文件</h3>
+        <p class="muted">${escapeHtml(reportPeriodEvidenceDisclaimer)}</p>
+        <table class="period-evidence-sources">
+          <tr><th>文件</th><th>资料类型</th><th>文件期间</th><th>归档状态</th></tr>
+          ${periodEvidenceSources.map((source) => `<tr><td>${escapeHtml(source.fileName)}</td><td>${escapeHtml(reportPeriodEvidenceSourceTypeLabel(source.documentType))}</td><td>${escapeHtml(reportPeriodEvidenceSourcePeriod(source))}</td><td>${escapeHtml(reportPeriodEvidenceSourceStatus(source))}</td></tr>`).join('')}
+        </table>
       ` : ''}
     </section>
 

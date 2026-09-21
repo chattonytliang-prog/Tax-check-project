@@ -6036,6 +6036,57 @@ textarea:focus {
   font-weight: 900;
 }
 
+.report-period-evidence {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-left: 4px solid #377d87;
+  border-radius: 8px;
+  background: #f8fbfc;
+}
+
+.report-period-evidence h4,
+.report-period-evidence p {
+  margin: 0;
+}
+
+.report-period-evidence p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.report-period-evidence-table-wrap {
+  overflow-x: auto;
+}
+
+.report-period-evidence table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+}
+
+.report-period-evidence th,
+.report-period-evidence td {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.report-period-evidence th {
+  color: var(--muted);
+  font-size: 12px;
+  background: #eef7f8;
+}
+
+.report-period-evidence td:first-child {
+  max-width: 320px;
+  overflow-wrap: anywhere;
+  font-weight: 800;
+}
+
 .report-assessment-coverage {
   display: grid;
   gap: 12px;

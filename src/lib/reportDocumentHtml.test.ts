@@ -11,6 +11,16 @@ const structuredReport: CompleteStructuredReportShape = {
     linkedSourceFileCount: 5,
     recordCount: 1729,
   },
+  periodEvidenceSources: [{
+    sourceFileId: 'source-1',
+    fileName: '2025年12月增值税申报表 <已归档>.pdf',
+    documentType: 'vat_return',
+    periodStart: '2025-12-01',
+    periodEnd: '2025-12-31',
+    parseStatus: 'parsed',
+    stored: true,
+    recordCount: 8,
+  }],
   clientProfile: [
     { label: '企业名称', value: '上海测试科技有限公司' },
     { label: '统一社会信用代码', value: '91310000TEST' },
@@ -99,6 +109,12 @@ describe('professionalReportDocumentHtml', () => {
     expect(html).toContain('9 个')
     expect(html).toContain('1729 条')
     expect(html).toContain('不代表本报告期间或各风险事项的证据已逐项核验')
+    expect(html).toContain('本报告期间可核对来源文件')
+    expect(html).toContain('2025年12月增值税申报表 &lt;已归档&gt;.pdf')
+    expect(html).toContain('增值税申报主表')
+    expect(html).toContain('2025-12-01 至 2025-12-31')
+    expect(html).toContain('原件已保存 · 已形成 8 条标准记录')
+    expect(html).toContain('列表不代表每个文件均参与全部指标或每项风险判断')
     expect(html).toContain('检查结论覆盖快照')
     expect(html).toContain('可判断检查项')
     expect(html).toContain('12 / 15 项')
@@ -197,6 +213,7 @@ describe('professionalReportDocumentHtml', () => {
   it('renders empty finding summaries and legacy defaults', () => {
     const emptyStructured = {
       ...structuredReport,
+      periodEvidenceSources: undefined,
       keyFindings: [],
       detailedFindings: [],
     }
@@ -205,6 +222,7 @@ describe('professionalReportDocumentHtml', () => {
 
     expect(structuredHtml).toContain('当前未形成需要在摘要中重点列示的风险事项。')
     expect(structuredHtml).toContain('当前未命中自动风险事项。')
+    expect(structuredHtml).not.toContain('本报告期间可核对来源文件')
     expect(legacyHtml).toContain('<h1>历史报告历史口径税务风险初筛报告</h1>')
     expect(legacyHtml).toContain('生成时间：')
   })

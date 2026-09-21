@@ -2,6 +2,10 @@ import type { RiskLevel } from './ruleEngine'
 import type { ReportRemediationTask } from './reportRemediationPlan'
 import { isValidReportArchiveEvidence, type ReportArchiveEvidence } from './reportArchiveEvidence'
 import type { ReportFindingInputEvidence } from './reportFindingEvidence'
+import {
+  isValidReportPeriodEvidenceSources,
+  type ReportPeriodEvidenceSource,
+} from './reportPeriodEvidenceSources'
 
 export type CompleteStructuredRiskFindingShape = {
   id: string
@@ -32,6 +36,7 @@ export type CompleteStructuredReportShape = {
   methodology?: 'source-backed-v2'
   title: string
   archiveEvidence?: ReportArchiveEvidence
+  periodEvidenceSources?: ReportPeriodEvidenceSource[]
   clientProfile: Array<{ label: string; value: string }>
   scope: Array<{ label: string; value: string }>
   executiveSummary: {
@@ -100,6 +105,7 @@ export function isCompleteStructuredReport(report?: unknown): report is Complete
     candidate.version === 'professional-v1'
     && typeof candidate.title === 'string'
     && (candidate.archiveEvidence === undefined || isValidReportArchiveEvidence(candidate.archiveEvidence))
+    && (candidate.periodEvidenceSources === undefined || isValidReportPeriodEvidenceSources(candidate.periodEvidenceSources))
     && Array.isArray(candidate.clientProfile)
     && Array.isArray(candidate.scope)
     && candidate.executiveSummary

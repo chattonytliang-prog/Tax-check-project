@@ -86,6 +86,24 @@ describe('reportCompatibility', () => {
     })).toBe(false)
   })
 
+  it('accepts valid period source snapshots and rejects malformed saved rows', () => {
+    const periodEvidenceSources = [{
+      sourceFileId: 'source-1',
+      fileName: '2025年12月申报表.pdf',
+      documentType: 'vat_return',
+      periodStart: '2025-12-01',
+      periodEnd: '2025-12-31',
+      parseStatus: 'parsed',
+      stored: true,
+      recordCount: 8,
+    }]
+    expect(isCompleteStructuredReport({ ...completeReport, periodEvidenceSources })).toBe(true)
+    expect(isCompleteStructuredReport({
+      ...completeReport,
+      periodEvidenceSources: [{ ...periodEvidenceSources[0], recordCount: -1 }],
+    })).toBe(false)
+  })
+
   it('returns an empty risk list for legacy reports without array risks', () => {
     expect(reportRiskList({ risks: undefined })).toEqual([])
     expect(reportRiskList({ risks: 'legacy-risk' })).toEqual([])

@@ -71,6 +71,15 @@ import {
 } from './lib/reportFindingEvidence'
 import { reportFollowUpCadence } from './lib/reportFollowUpCadence'
 import {
+  buildReportPeriodEvidenceSources,
+  reportPeriodEvidenceDisclaimer,
+  reportPeriodEvidenceSourceList,
+  reportPeriodEvidenceSourcePeriod,
+  reportPeriodEvidenceSourceStatus,
+  reportPeriodEvidenceSourceTypeLabel,
+  type ReportPeriodEvidenceSource,
+} from './lib/reportPeriodEvidenceSources'
+import {
   isCompleteStructuredReport,
   reportRiskCountMismatch,
   reportRiskList,
@@ -4211,6 +4220,7 @@ function buildStructuredReport(
   skippedRules: SkippedRule[] = [],
   evaluatedRuleCount = getSourceRules().length,
   archiveEvidence?: ReportArchiveEvidence | null,
+  periodEvidenceSources: ReportPeriodEvidenceSource[] = [],
 ): StructuredReport {
   const level = getOverallLevel(risks)
   const highRisks = riskCountByRank(risks, 3)
@@ -4242,6 +4252,7 @@ function buildStructuredReport(
     methodology: 'source-backed-v2',
     title: `${client.name} 企业涉税风险初筛报告——基于已提供资料`,
     archiveEvidence: archiveEvidenceSnapshot,
+    periodEvidenceSources: reportPeriodEvidenceSourceList(periodEvidenceSources),
     clientProfile: [
       { label: '企业名称', value: reportValue(client.name) },
       { label: '统一社会信用代码', value: reportValue(client.creditCode) },
@@ -4330,6 +4341,10 @@ function buildProfessionalReportContent(report: StructuredReport) {
   const profile = report.clientProfile.map((item) => `${item.label}：${item.value}`).join('\n')
   const scope = report.scope.filter(isCustomerFacingReportFact).map((item) => `${item.label}：${item.value}`).join('\n')
   const assessmentCoverage = reportAssessmentCoverageStatement(report.dataQuality)
+  const periodEvidenceSources = reportPeriodEvidenceSourceList(report.periodEvidenceSources)
+  const periodEvidenceText = periodEvidenceSources.length
+    ? `\n\n本报告期间可核对来源文件\n${reportPeriodEvidenceDisclaimer}\n${periodEvidenceSources.map((source, index) => `${index + 1}. ${source.fileName}｜${reportPeriodEvidenceSourceTypeLabel(source.documentType)}｜${reportPeriodEvidenceSourcePeriod(source)}｜${reportPeriodEvidenceSourceStatus(source)}`).join('\n')}`
+    : ''
   const keyFindings = report.keyFindings.length
     ? report.keyFindings.map((item, index) => {
       const detailIndex = report.detailedFindings.findIndex((finding) => finding.id === item.id)
@@ -4362,6 +4377,7 @@ function buildProfessionalReportContent(report: StructuredReport) {
 ${profile}
 
 ${scope}
+${periodEvidenceText}
 
 二、报告摘要：我们的观点
 ${customerFacingReportText(report.executiveSummary.conclusion)}
@@ -6745,7 +6761,18 @@ function App() {
       linkedSourceFileCount: activeTaxDataSummary.stats.linkedSourceFileCount ?? Number.NaN,
       recordCount: activeTaxDataSummary.stats.recordCount,
     } : null
-    const structuredReport = buildStructuredReport(reportClient, risks, skippedRules, evaluatedRuleCount, archiveEvidence)
+    const periodEvidenceSources = buildReportPeriodEvidenceSources(
+      activeTaxDataSummary?.sourceFiles || [],
+      selectedPeriodMonths,
+    )
+    const structuredReport = buildStructuredReport(
+      reportClient,
+      risks,
+      skippedRules,
+      evaluatedRuleCount,
+      archiveEvidence,
+      periodEvidenceSources,
+    )
     const risksForAi = risks.map((risk, index) => ({
       ...risk,
       displayOrder: index + 1,
@@ -10272,6 +10299,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
 
 function StructuredReportPreview({ report }: { report: StructuredReport }) {
   const archiveEvidenceFacts = reportArchiveEvidenceFacts(report.archiveEvidence)
+  const periodEvidenceSources = reportPeriodEvidenceSourceList(report.periodEvidenceSources)
   const assessmentCoverage = reportAssessmentCoverage(report.dataQuality)
   const assessmentCoverageFacts = reportAssessmentCoverageFacts(report.dataQuality)
   return (
@@ -10316,6 +10344,29 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
               ))}
             </dl>
             <small>该快照只证明系统当时的归档数量，不代表本报告期间或各风险事项的证据已逐项核验。</small>
+          </div>
+        ) : null}
+        {periodEvidenceSources.length ? (
+          <div className="report-period-evidence">
+            <div>
+              <h4>本报告期间可核对来源文件</h4>
+              <p>{reportPeriodEvidenceDisclaimer}</p>
+            </div>
+            <div className="report-period-evidence-table-wrap">
+              <table>
+                <thead><tr><th>文件</th><th>资料类型</th><th>文件期间</th><th>归档状态</th></tr></thead>
+                <tbody>
+                  {periodEvidenceSources.map((source) => (
+                    <tr key={source.sourceFileId}>
+                      <td>{source.fileName}</td>
+                      <td>{reportPeriodEvidenceSourceTypeLabel(source.documentType)}</td>
+                      <td>{reportPeriodEvidenceSourcePeriod(source)}</td>
+                      <td>{reportPeriodEvidenceSourceStatus(source)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : null}
       </section>
