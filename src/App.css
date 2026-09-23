@@ -35,6 +35,7 @@ button {
   min-height: 100vh;
   display: grid;
   grid-template-columns: minmax(420px, 0.9fr) minmax(360px, 1.1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
   background:
     radial-gradient(circle at 18% 18%, rgba(86, 240, 238, 0.26), transparent 28%),
     radial-gradient(circle at 88% 12%, rgba(18, 174, 234, 0.22), transparent 30%),
@@ -1841,6 +1842,40 @@ td small,
 
 .tax-data-slot-card strong {
   color: var(--ink);
+}
+
+.site-compliance-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.site-compliance-footer a {
+  color: #087a7a;
+  text-decoration: none;
+}
+
+.site-compliance-footer a:hover,
+.site-compliance-footer a:focus-visible {
+  text-decoration: underline;
+}
+
+.login-compliance-footer {
+  grid-column: 1 / -1;
+  padding: 14px 24px 18px;
+}
+
+.workspace-compliance-footer {
+  max-width: 1440px;
+  margin: 32px auto 0;
+  padding: 18px 20px 0;
+  border-top: 1px solid var(--line);
 }
 
 .tax-data-slot-card dl {

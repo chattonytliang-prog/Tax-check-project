@@ -4873,6 +4873,17 @@ function RiskOrbit({
   )
 }
 
+function SiteComplianceFooter({ className = '' }: { className?: string }) {
+  return (
+    <footer className={`site-compliance-footer${className ? ` ${className}` : ''}`}>
+      <span>运营主体：北京翰昇咨询有限公司</span>
+      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">
+        京ICP备2026063322号-1
+      </a>
+    </footer>
+  )
+}
+
 function App() {
   const [loggedIn, setLoggedIn] = useState(false)
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
@@ -7121,6 +7132,7 @@ function App() {
           </div>
           <p>围绕企业财税画像、风险检查和报告流转，帮助财务负责人更快完成税务风险初筛。</p>
         </aside>
+        <SiteComplianceFooter className="login-compliance-footer" />
       </main>
     )
   }
@@ -9065,6 +9077,7 @@ function App() {
           onReimportSource={reimportArchivedSource}
           onClose={() => setTaxDataDetailSlot(null)}
         />
+        <SiteComplianceFooter className="workspace-compliance-footer" />
       </main>
     </div>
   )
