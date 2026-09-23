@@ -24,7 +24,7 @@ export function apiGet<T>(url: string) {
   return requestJson<T>(url, { cache: 'no-store' })
 }
 
-export function apiSend<T>(url: string, method: 'POST' | 'PUT', body: unknown, init?: RequestInit) {
+export function apiSend<T>(url: string, method: 'POST' | 'PUT' | 'PATCH', body: unknown, init?: RequestInit) {
   return requestJson<T>(url, {
     ...init,
     method,

@@ -31,6 +31,7 @@ import {
   X,
   Coins,
   QrCode,
+  Save,
 } from 'lucide-react'
 import {
   builtInRuleConditions,
@@ -94,7 +95,9 @@ import {
   buildReportRemediationPlan,
   reportFindingEvidenceStatus,
   reportFindingReference,
+  reportRemediationStatuses,
   reportRemediationTaskView,
+  type ReportRemediationStatus,
 } from './lib/reportRemediationPlan'
 import { deepReportRuleTemplates } from './lib/reportRuleTemplates'
 import { reportSignOffBlock } from './lib/reportSignOffBlock'
@@ -1159,6 +1162,15 @@ type Report = {
   aiReview?: AiReview
   aiGenerated?: boolean
   aiModel?: string
+}
+
+type ReportRemediationUpdateInput = {
+  taskId: string
+  status: ReportRemediationStatus
+  assignee: string
+  progressNote: string
+  clientAcknowledged: boolean
+  expectedUpdatedAt: string
 }
 
 type AuthUser = {
@@ -4404,7 +4416,7 @@ ${report.expertReviewItems.length ? report.expertReviewItems.map((item, index) =
 七、整改优先级
 ${report.actionPlan.length ? report.actionPlan.map((item, index) => {
     const task = reportRemediationTaskView(item, index)
-    return `${index + 1}. ${task.taskId}｜对应事项 ${task.findingRef}｜${item.priority}｜${task.status}\n整改事项：${item.item}\n责任建议：${item.ownerHint}\n完成凭据要求：${task.completionEvidence}`
+    return `${index + 1}. ${task.taskId}｜对应事项 ${task.findingRef}｜${item.priority}｜${task.status}\n整改事项：${item.item}\n实际负责人：${task.assignee || '待指定'}（建议：${item.ownerHint}）\n最新处理：${task.progressNote || '尚未登记处理记录'}\n客户确认：${task.clientAcknowledged ? '已确认' : '未确认'}\n完成凭据要求：${task.completionEvidence}`
   }).join('\n') : '当前无需要列入整改清单的自动风险事项。'}
 
 八、后续跟进节奏
@@ -6879,6 +6891,16 @@ function App() {
     }
   }
 
+  const updateReportRemediationTask = async (reportId: string, input: ReportRemediationUpdateInput) => {
+    const response = await apiSend<{ report: Report }>(
+      `/api/reports/${encodeURIComponent(reportId)}`,
+      'PATCH',
+      input,
+    )
+    setReports((current) => current.map((item) => item.id === reportId ? response.report : item))
+    setDataStatus('connected')
+  }
+
   const deleteClient = async (client: Client) => {
     if (!window.confirm(`确定删除企业「${client.name}」吗？相关报告也会一起删除。`)) {
       return
@@ -8411,6 +8433,9 @@ function App() {
               createReport()
             }}
             onRetryAi={retryAiReport}
+            onUpdateRemediationTask={(input) => reportPageReport
+              ? updateReportRemediationTask(reportPageReport.id, input)
+              : Promise.reject(new Error('报告尚未生成'))}
             aiStage={aiReportStage}
             aiFailure={aiReportFailure && aiReportFailure.reportId === selectedReport?.id ? aiReportFailure.message : ''}
           />
@@ -10301,11 +10326,55 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
   )
 }
 
-function StructuredReportPreview({ report }: { report: StructuredReport }) {
+function StructuredReportPreview({
+  report,
+  onUpdateRemediationTask,
+}: {
+  report: StructuredReport
+  onUpdateRemediationTask?: (input: ReportRemediationUpdateInput) => Promise<void>
+}) {
   const archiveEvidenceFacts = reportArchiveEvidenceFacts(report.archiveEvidence)
   const periodEvidenceSources = reportPeriodEvidenceSourceList(report.periodEvidenceSources)
   const assessmentCoverage = reportAssessmentCoverage(report.dataQuality)
   const assessmentCoverageFacts = reportAssessmentCoverageFacts(report.dataQuality)
+  const [editingTaskId, setEditingTaskId] = useState('')
+  const [taskStatus, setTaskStatus] = useState<ReportRemediationStatus>('待复核')
+  const [taskAssignee, setTaskAssignee] = useState('')
+  const [taskProgressNote, setTaskProgressNote] = useState('')
+  const [taskClientAcknowledged, setTaskClientAcknowledged] = useState(false)
+  const [taskExpectedUpdatedAt, setTaskExpectedUpdatedAt] = useState('')
+  const [taskSaving, setTaskSaving] = useState(false)
+  const [taskError, setTaskError] = useState('')
+  const beginTaskUpdate = (item: StructuredReport['actionPlan'][number], index: number) => {
+    const task = reportRemediationTaskView(item, index)
+    setEditingTaskId(task.taskId)
+    setTaskStatus(task.status)
+    setTaskAssignee(task.assignee)
+    setTaskProgressNote(task.progressNote)
+    setTaskClientAcknowledged(task.clientAcknowledged)
+    setTaskExpectedUpdatedAt(task.updatedAt)
+    setTaskError('')
+  }
+  const saveTaskUpdate = async () => {
+    if (!onUpdateRemediationTask || !editingTaskId || taskSaving) return
+    setTaskSaving(true)
+    setTaskError('')
+    try {
+      await onUpdateRemediationTask({
+        taskId: editingTaskId,
+        status: taskStatus,
+        assignee: taskAssignee,
+        progressNote: taskProgressNote,
+        clientAcknowledged: taskClientAcknowledged,
+        expectedUpdatedAt: taskExpectedUpdatedAt,
+      })
+      setEditingTaskId('')
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : '整改进度保存失败，请稍后重试')
+    } finally {
+      setTaskSaving(false)
+    }
+  }
   return (
     <div className="structured-report">
       <section className="report-cover">
@@ -10550,8 +10619,10 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
                   <th>任务编号</th>
                   <th>状态</th>
                   <th>整改事项</th>
-                  <th>责任建议</th>
+                  <th>实际负责人</th>
+                  <th>最新处理</th>
                   <th>完成凭据要求</th>
+                  {onUpdateRemediationTask ? <th>操作</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -10560,10 +10631,27 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
                   return (
                     <tr key={task.taskId}>
                       <td data-label="任务 / 对应事项"><strong>{task.taskId}</strong><small>{task.findingRef} · {item.priority}</small></td>
-                      <td data-label="状态"><span className="report-task-status">{task.status}</span></td>
+                      <td data-label="状态">
+                        <span className="report-task-status" data-status={task.status}>{task.status}</span>
+                        {task.updatedAt ? <small className="report-task-meta">{new Date(task.updatedAt).toLocaleString('zh-CN', { hour12: false })}</small> : null}
+                      </td>
                       <td data-label="整改事项">{item.item}</td>
-                      <td data-label="责任建议">{item.ownerHint}</td>
+                      <td data-label="实际负责人">
+                        <strong>{task.assignee || '待指定'}</strong>
+                        <small className="report-task-meta">建议：{item.ownerHint}</small>
+                      </td>
+                      <td data-label="最新处理">
+                        {task.progressNote || '尚未登记处理记录'}
+                        <small className="report-task-meta">客户确认：{task.clientAcknowledged ? '已确认' : '未确认'}{task.updatedBy ? ` · ${task.updatedBy}` : ''}</small>
+                      </td>
                       <td data-label="完成凭据要求">{task.completionEvidence}</td>
+                      {onUpdateRemediationTask ? (
+                        <td data-label="操作">
+                          <button type="button" className="icon-text-button compact-button" onClick={() => beginTaskUpdate(item, index)} disabled={taskSaving}>
+                            <Pencil /> 登记处理
+                          </button>
+                        </td>
+                      ) : null}
                     </tr>
                   )
                 })}
@@ -10573,6 +10661,44 @@ function StructuredReportPreview({ report }: { report: StructuredReport }) {
         ) : (
           <p className="report-note">当前无需要列入整改清单的自动风险事项。</p>
         )}
+        {editingTaskId && onUpdateRemediationTask ? (
+          <div className="report-task-editor" aria-label={`${editingTaskId} 整改进度`}>
+            <div className="report-task-editor-heading">
+              <div>
+                <span>整改进度登记</span>
+                <strong>{editingTaskId}</strong>
+              </div>
+              <button type="button" className="icon-button" aria-label="关闭整改进度登记" title="关闭" onClick={() => setEditingTaskId('')} disabled={taskSaving}><X /></button>
+            </div>
+            <div className="report-task-editor-grid">
+              <label>
+                <span>处理状态</span>
+                <select value={taskStatus} onChange={(event) => setTaskStatus(event.target.value as ReportRemediationStatus)} disabled={taskSaving}>
+                  {reportRemediationStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>实际负责人</span>
+                <input value={taskAssignee} maxLength={80} onChange={(event) => setTaskAssignee(event.target.value)} placeholder="姓名或岗位" disabled={taskSaving} />
+              </label>
+              <label className="report-task-note-field">
+                <span>处理说明</span>
+                <textarea value={taskProgressNote} maxLength={1000} onChange={(event) => setTaskProgressNote(event.target.value)} placeholder="记录已核对资料、处理结果和下一步" disabled={taskSaving} />
+              </label>
+            </div>
+            <label className="report-task-acknowledgement">
+              <input type="checkbox" checked={taskClientAcknowledged} onChange={(event) => setTaskClientAcknowledged(event.target.checked)} disabled={taskSaving} />
+              <span>客户已确认本次整改结果</span>
+            </label>
+            {taskError ? <p className="report-task-error" role="alert">{taskError}</p> : null}
+            <div className="report-task-editor-actions">
+              <button type="button" className="secondary-button" onClick={() => setEditingTaskId('')} disabled={taskSaving}>取消</button>
+              <button type="button" className="primary-button" onClick={() => void saveTaskUpdate()} disabled={taskSaving || !taskAssignee.trim() || !taskProgressNote.trim() || (taskStatus === '已完成' && !taskClientAcknowledged)}>
+                <Save /> {taskSaving ? '保存中...' : '保存处理记录'}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="report-section">
@@ -12462,6 +12588,7 @@ function ReportPage({
   risks,
   onGenerate,
   onRetryAi,
+  onUpdateRemediationTask,
   aiStage,
   aiFailure,
 }: {
@@ -12471,6 +12598,7 @@ function ReportPage({
   risks: RiskResult[]
   onGenerate: () => void
   onRetryAi: (report: Report) => void
+  onUpdateRemediationTask: (input: ReportRemediationUpdateInput) => Promise<void>
   aiStage: 'saving' | 'reviewing' | 'generating' | null
   aiFailure: string
 }) {
@@ -12674,10 +12802,10 @@ function ReportPage({
               ))}
             </aside>
             <div className="professional-report-main">
-              <StructuredReportPreview report={structured} />
+              <StructuredReportPreview report={structured} onUpdateRemediationTask={onUpdateRemediationTask} />
               <details className="report-plain-editor">
-                <summary>查看已保存的纯文本版本</summary>
-                <p className="section-helper">用于复制和核对；正式导出以结构化报告为准，此处不会修改已归档报告。</p>
+                <summary>查看报告生成时的纯文本版本</summary>
+                <p className="section-helper">该文本用于核对生成时内容，不包含后续整改进度；当前状态和正式导出以结构化报告为准。</p>
                 <textarea value={draft} readOnly aria-label="已保存的报告纯文本" />
               </details>
             </div>

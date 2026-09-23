@@ -1,11 +1,32 @@
+export const reportRemediationStatuses = ['待复核', '整改中', '待客户确认', '已完成'] as const
+
+export type ReportRemediationStatus = typeof reportRemediationStatuses[number]
+
+export type ReportRemediationEvent = {
+  status: ReportRemediationStatus
+  assignee: string
+  progressNote: string
+  clientAcknowledged: boolean
+  clientAcknowledgedAt?: string
+  updatedAt: string
+  updatedBy: string
+}
+
 export type ReportRemediationTask = {
   priority: string
   item: string
   ownerHint: string
   taskId?: string
   findingRef?: string
-  status?: '待复核'
+  status?: ReportRemediationStatus
   completionEvidence?: string
+  assignee?: string
+  progressNote?: string
+  clientAcknowledged?: boolean
+  clientAcknowledgedAt?: string
+  updatedAt?: string
+  updatedBy?: string
+  history?: ReportRemediationEvent[]
 }
 
 type ReportRemediationPlanInput = {
@@ -19,8 +40,14 @@ type ReportRemediationPlanInput = {
 export type ReportRemediationTaskView = {
   taskId: string
   findingRef: string
-  status: '待复核'
+  status: ReportRemediationStatus
   completionEvidence: string
+  assignee: string
+  progressNote: string
+  clientAcknowledged: boolean
+  clientAcknowledgedAt: string
+  updatedAt: string
+  updatedBy: string
 }
 
 const fallbackCompletionEvidence = '整改过程记录、顾问复核意见及客户确认凭据'
@@ -57,5 +84,11 @@ export function reportRemediationTaskView(item: ReportRemediationTask, index: nu
     findingRef: reportFindingReference(index, item.findingRef),
     status: item.status || '待复核',
     completionEvidence: item.completionEvidence?.trim() || fallbackCompletionEvidence,
+    assignee: item.assignee?.trim() || '',
+    progressNote: item.progressNote?.trim() || '',
+    clientAcknowledged: item.clientAcknowledged === true,
+    clientAcknowledgedAt: item.clientAcknowledgedAt?.trim() || '',
+    updatedAt: item.updatedAt?.trim() || '',
+    updatedBy: item.updatedBy?.trim() || '',
   }
 }

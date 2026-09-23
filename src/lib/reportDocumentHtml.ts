@@ -223,7 +223,7 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
       <h2>七、整改优先级</h2>
       ${report.actionPlan.length ? `
         <table class="finding-table">
-          <tr><th>任务 / 对应事项</th><th>优先级</th><th>状态</th><th>整改事项</th><th>责任建议</th><th>完成凭据要求</th></tr>
+          <tr><th>任务 / 对应事项</th><th>优先级</th><th>状态</th><th>整改事项</th><th>实际负责人</th><th>最新处理</th><th>客户确认</th><th>完成凭据要求</th></tr>
           ${report.actionPlan.map((item, index) => {
             const task = reportRemediationTaskView(item, index)
             return `
@@ -232,7 +232,9 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
               <td>${escapeHtml(item.priority)}</td>
               <td>${escapeHtml(task.status)}</td>
               <td>${escapeHtml(item.item)}</td>
-              <td>${escapeHtml(item.ownerHint)}</td>
+              <td>${escapeHtml(task.assignee || '待指定')}<br><small>建议：${escapeHtml(item.ownerHint)}</small></td>
+              <td>${escapeHtml(task.progressNote || '尚未登记处理记录')}</td>
+              <td>${escapeHtml(task.clientAcknowledged ? '已确认' : '未确认')}</td>
               <td>${escapeHtml(task.completionEvidence)}</td>
             </tr>
           `}).join('')}

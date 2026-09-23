@@ -76,7 +76,15 @@ const structuredReport: CompleteStructuredReportShape = {
     },
   ],
   detailedFindings: [],
-  actionPlan: [{ priority: '高优先级', item: '复核进项发票', ownerHint: '财务负责人牵头' }],
+  actionPlan: [{
+    priority: '高优先级',
+    item: '复核进项发票',
+    ownerHint: '财务负责人牵头',
+    status: '整改中',
+    assignee: '王会计',
+    progressNote: '已核对发票台账。',
+    clientAcknowledged: false,
+  }],
   expertReviewItems: ['核对发票与账务记录'],
   followUpCadence: ['7日内完成资料复核'],
   deliveryChecklist: ['导出报告'],
@@ -102,7 +110,10 @@ describe('professionalReportDocumentHtml', () => {
     expect(html).toContain('银行流水核对（尚缺：银行流水）')
     expect(html).toContain('RMD-001')
     expect(html).toContain('FND-001')
-    expect(html).toContain('待复核')
+    expect(html).toContain('整改中')
+    expect(html).toContain('王会计')
+    expect(html).toContain('已核对发票台账。')
+    expect(html).toContain('未确认')
     expect(html).toContain('整改过程记录、顾问复核意见及客户确认凭据')
     expect(html).toContain('报告生成时归档快照')
     expect(html).toContain('已登记源文件')

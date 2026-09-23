@@ -6312,7 +6312,7 @@ textarea:focus {
 
 .report-task-table {
   width: 100%;
-  min-width: 720px;
+  min-width: 980px;
   border-collapse: collapse;
   color: #35474f;
   font-size: 13px;
@@ -6355,6 +6355,119 @@ textarea:focus {
   white-space: nowrap;
 }
 
+.report-task-status[data-status="整改中"] {
+  border-color: rgba(12, 119, 132, 0.28);
+  background: rgba(12, 119, 132, 0.1);
+  color: #076875;
+}
+
+.report-task-status[data-status="待客户确认"] {
+  border-color: rgba(35, 93, 164, 0.28);
+  background: rgba(35, 93, 164, 0.1);
+  color: #245d91;
+}
+
+.report-task-status[data-status="已完成"] {
+  border-color: rgba(19, 128, 91, 0.28);
+  background: rgba(19, 128, 91, 0.1);
+  color: #0c7753;
+}
+
+.report-task-meta {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.report-task-table .icon-text-button {
+  white-space: nowrap;
+}
+
+.report-task-editor {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.report-task-editor-heading,
+.report-task-editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.report-task-editor-heading div {
+  display: grid;
+  gap: 3px;
+}
+
+.report-task-editor-heading span,
+.report-task-editor-grid label > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.report-task-editor-heading strong {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.report-task-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.report-task-editor-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.report-task-editor-grid input,
+.report-task-editor-grid select,
+.report-task-editor-grid textarea {
+  width: 100%;
+}
+
+.report-task-note-field {
+  grid-column: 1 / -1;
+}
+
+.report-task-note-field textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.report-task-acknowledgement {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: fit-content;
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.report-task-acknowledgement input {
+  width: 18px;
+  height: 18px;
+}
+
+.report-task-error {
+  margin: 0;
+  color: var(--danger);
+  font-weight: 800;
+}
+
+.report-task-editor-actions {
+  justify-content: flex-end;
+}
+
 @media (max-width: 700px) {
   .report-task-table {
     min-width: 0;
@@ -6391,6 +6504,23 @@ textarea:focus {
     color: var(--muted);
     font-size: 12px;
     font-weight: 800;
+  }
+
+  .report-task-editor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .report-task-note-field {
+    grid-column: auto;
+  }
+
+  .report-task-editor-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .report-task-editor-actions button {
+    width: 100%;
   }
 }
 
