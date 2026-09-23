@@ -3,6 +3,7 @@ import type { EChartsOption } from 'echarts'
 import { unzipSync } from 'fflate'
 import type { EChartsType } from 'echarts/core'
 import type * as ThreeNamespace from 'three'
+import alipayMerchantQrUrl from './assets/alipay-merchant-qr.jpg'
 import {
   AlertTriangle,
   BarChart3,
@@ -8615,12 +8616,12 @@ function App() {
                   <h3>支付宝充值 200 元</h3>
                   <a
                     className="payment-code-placeholder"
-                    href="/alipay-merchant-qr.jpg"
+                    href={alipayMerchantQrUrl}
                     target="_blank"
                     rel="noreferrer"
                     aria-label="查看北京翰昇咨询有限公司支付宝商家收款码大图"
                   >
-                    <img src="/alipay-merchant-qr.jpg" alt="北京翰昇咨询有限公司支付宝商家收款码" />
+                    <img src={alipayMerchantQrUrl} alt="北京翰昇咨询有限公司支付宝商家收款码" />
                   </a>
                   <p>收款方：北京翰昇咨询有限公司。付款时备注用户名，管理员核实到账后增加 200 积分；当前为人工核验，不会自动到账。</p>
                 </div>
