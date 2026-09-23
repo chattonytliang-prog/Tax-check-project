@@ -30,7 +30,6 @@ import {
   Printer,
   X,
   Coins,
-  QrCode,
   Save,
 } from 'lucide-react'
 import {
@@ -1213,7 +1212,6 @@ type PointWallet = {
   transactions: PointTransaction[]
 }
 
-const paymentQrImageUrl = import.meta.env.VITE_PAYMENT_QR_IMAGE_URL as string | undefined
 
 function formatPointTime(value: string) {
   const date = new Date(value.includes('T') ? value : `${value.replace(' ', 'T')}Z`)
@@ -8614,11 +8612,17 @@ function App() {
               </div>
               {!pointWallet?.adminUnlimited && (
                 <div className="payment-code-panel">
-                  <h3>充值 200 元</h3>
-                  <div className="payment-code-placeholder" aria-label={paymentQrImageUrl ? '收款二维码' : '扫码支付演示位置'}>
-                    {paymentQrImageUrl ? <img src={paymentQrImageUrl} alt="收款二维码" /> : <QrCode aria-hidden="true" />}
-                  </div>
-                  <p>{paymentQrImageUrl ? '付款时备注用户名，联系管理员核实到账后加分。扫码不会自动到账。' : '演示扫码支付位置，当前没有可付款的二维码。请联系管理员充值。'}</p>
+                  <h3>支付宝充值 200 元</h3>
+                  <a
+                    className="payment-code-placeholder"
+                    href="/alipay-merchant-qr.jpg"
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="查看北京翰昇咨询有限公司支付宝商家收款码大图"
+                  >
+                    <img src="/alipay-merchant-qr.jpg" alt="北京翰昇咨询有限公司支付宝商家收款码" />
+                  </a>
+                  <p>收款方：北京翰昇咨询有限公司。付款时备注用户名，管理员核实到账后增加 200 积分；当前为人工核验，不会自动到账。</p>
                 </div>
               )}
             </div>

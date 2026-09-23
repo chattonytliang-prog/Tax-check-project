@@ -2650,7 +2650,7 @@ th {
 
 .wallet-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
   gap: 40px;
   padding: 28px 0;
 }
@@ -2675,22 +2675,20 @@ th {
 .payment-code-placeholder {
   display: grid;
   place-items: center;
-  width: min(100%, 180px);
-  aspect-ratio: 1;
+  width: min(100%, 300px);
+  aspect-ratio: 2 / 3;
   border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
   background: white;
-}
-
-.payment-code-placeholder svg {
-  width: 92px;
-  height: 92px;
-  color: var(--muted);
+  box-shadow: 0 14px 30px rgba(5, 26, 34, 0.1);
 }
 
 .payment-code-placeholder img {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  display: block;
 }
 
 .wallet-history h3 {
