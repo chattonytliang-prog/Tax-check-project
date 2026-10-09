@@ -2672,6 +2672,24 @@ th {
   padding-left: 24px;
 }
 
+.payment-methods {
+  display: grid;
+  gap: 32px;
+  min-width: 0;
+}
+
+.payment-code-panel p {
+  overflow-wrap: anywhere;
+}
+
+.payment-code-panel button {
+  margin: 4px 8px 4px 0;
+}
+
+.payment-order-number {
+  font-size: 12px;
+}
+
 .payment-code-placeholder {
   display: grid;
   place-items: center;

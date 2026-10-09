@@ -21,12 +21,22 @@ export async function onRequestGet({ request, env }) {
        ORDER BY created_at DESC, rowid DESC LIMIT 50`,
     ).bind(auth.user.id).all()
 
+    // Old deployments remain compatible until the separately approved payment migration runs.
+    const paymentTable = await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'wechat_recharges'").first()
+    let rechargeRows = []
+    if (paymentTable) {
+      const recharges = await db.prepare(`SELECT order_id AS id, points AS delta, 'wechat_recharge' AS source,
+        NULL AS report_id, NULL AS actor_user_id, '微信支付充值' AS note, created_at
+        FROM wechat_recharges WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`).bind(auth.user.id).all()
+      rechargeRows = recharges.results
+    }
+    const history = [...results, ...rechargeRows].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 50)
     return json({
       balance: wallet.balance,
       freeReportAvailable: auth.user.role !== 'admin' && !wallet.free_report_used,
       adminUnlimited: auth.user.role === 'admin',
       reportCost: REPORT_COST_POINTS,
-      transactions: results.map((row) => ({
+      transactions: history.map((row) => ({
         id: row.id,
         delta: row.delta,
         source: row.source,
