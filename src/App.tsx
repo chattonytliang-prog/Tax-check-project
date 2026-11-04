@@ -3,7 +3,6 @@ import type { EChartsOption } from 'echarts'
 import { unzipSync } from 'fflate'
 import type { EChartsType } from 'echarts/core'
 import type * as ThreeNamespace from 'three'
-import alipayMerchantQrUrl from './assets/alipay-merchant-qr.jpg'
 import { WechatRecharge } from './components/WechatRecharge'
 import {
   AlertTriangle,
@@ -8610,24 +8609,11 @@ function App() {
                 <h3>使用规则</h3>
                 <p>每个普通账号的首份报告免费，之后每生成一份新报告扣 200 积分；查看和重新导出已有报告不扣分。</p>
                 <p>删除报告不会返还已使用的免费次数或积分。管理员账号生成报告免费；管理员代入普通用户时，按该用户账户计费。</p>
-                <p>充值 200 元对应 200 积分，可生成一份付费报告。微信订单付款成功后自动到账；支付宝收款仍由管理员核实后调整。</p>
+                <p>充值 200 元对应 200 积分，可生成一份付费报告。请使用微信支付，系统确认付款成功后积分自动到账。</p>
               </div>
               {!pointWallet?.adminUnlimited && (
                 <div className="payment-methods">
                 {authUser && !authUser.actor && <WechatRecharge userId={authUser.id} onPaid={() => void refreshPointWallet()} />}
-                <div className="payment-code-panel">
-                  <h3>支付宝充值 200 元</h3>
-                  <a
-                    className="payment-code-placeholder"
-                    href={alipayMerchantQrUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label="查看北京翰昇咨询有限公司支付宝商家收款码大图"
-                  >
-                    <img src={alipayMerchantQrUrl} alt="北京翰昇咨询有限公司支付宝商家收款码" />
-                  </a>
-                  <p>收款方：北京翰昇咨询有限公司。付款时备注用户名，管理员核实到账后增加 200 积分；当前为人工核验，不会自动到账。</p>
-                </div>
                 </div>
               )}
             </div>
