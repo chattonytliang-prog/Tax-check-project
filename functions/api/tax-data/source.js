@@ -52,7 +52,7 @@ export async function onRequestGet({ request, env }) {
        WHERE id = ? AND owner_user_id = ? LIMIT 1`,
     ).bind(sourceFileId, auth.user.id).first()
     if (!row) return new Response('Source file not found', { status: 404 })
-    if (!row.storage_key) return new Response('The original file was indexed but not stored', { status: 404 })
+    if (!row.storage_key?.startsWith(`${auth.user.id}/`)) return new Response('The original file was indexed but not stored', { status: 404 })
     const bucket = getMaterialsBucket(env)
     if (!bucket) return new Response('Material storage is unavailable', { status: 503 })
     const object = await bucket.get(row.storage_key)

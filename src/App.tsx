@@ -120,7 +120,9 @@ import {
 } from './lib/clientImportParser'
 import { extractPdfTextPages } from './lib/pdfTextExtractor'
 import { parseTaxDataPdfText, type ParsedTaxDataIntake } from './lib/taxDataIntakeParser'
-import { binaryAssistantReplyMessage, hasDirectIntakeAuthorization, inferAssistantThreadRenameTitle, instantAssistantReply, isArchiveChecklistQuestion, isBinaryAssistantQuestion } from './lib/assistantIntakeIntent'
+import { binaryAssistantReplyMessage, hasDirectIntakeAuthorization, inferAssistantThreadRenameTitle, instantAssistantReply, isArchiveChecklistQuestion, isAssistantWorkflowRequest, isBinaryAssistantQuestion } from './lib/assistantIntakeIntent'
+import { assistantAttachmentAccept, maxAssistantAttachments, readAssistantAttachment } from './lib/assistantAttachment'
+import { askArchivedSources } from './lib/assistantArchive'
 import {
   classifyIntakeMaterial,
   detectIntakePeriod,
@@ -409,6 +411,7 @@ type AiAssistantMessage = {
   id: string
   role: 'user' | 'assistant'
   content: string
+  attachmentIds?: string[]
   response?: AiAssistantResponse
 }
 
@@ -649,15 +652,6 @@ function isReadOnlyBusinessDataQuestion(message: string) {
   const asksForData = /(多少|什么|吗|呢|[？?]|怎么|为什么|为何|能否|是否|有没有|有无|查询|查看|显示|哪一|情况|余额|销售额|收入|成本|利润|税额|人数|金额|叫什么)/.test(text)
   const explicitlyEdits = /(改成|修改为|更正为|更新为|填写为|确认是|应当是|录入|导入|保存|入库)/.test(text)
   return asksForData && !explicitlyEdits
-}
-
-function fileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(reader.error || new Error('图片读取失败'))
-    reader.readAsDataURL(file)
-  })
 }
 
 function AssistantPendingAttachment({ file, onRemove }: { file: File; onRemove: () => void }) {
@@ -10841,6 +10835,7 @@ function AiAssistantPage({
   const activeAssistantThread = assistantThreads.find((thread) => thread.id === activeAssistantThreadId) || assistantThreads[0]
   const assistantThreadClient = clients.find((client) => client.id === activeAssistantThread?.clientId)
   const assistantMessages = activeAssistantThread?.messages || emptyAssistantMessages
+  const assistantAttachmentIds = assistantMessages.flatMap((item) => item.attachmentIds || [])
   const assistantDrafts = activeAssistantThread?.drafts || emptyAssistantDrafts
   const showAssistantProcessingMessage = assistantLoading && assistantMessages.at(-1)?.role === 'user'
   const assistantProgressText = (() => {
@@ -11039,8 +11034,12 @@ function AiAssistantPage({
   const addAssistantPendingFiles = (fileList: FileList | File[]) => {
     const files = Array.from(fileList)
     if (!files.length) return
+    if (assistantPendingFiles.length + files.length > maxAssistantAttachments) {
+      setAssistantError(`一次最多选择 ${maxAssistantAttachments} 份文件，请减少后重新选择。`)
+      return
+    }
     setAssistantError('')
-    setAssistantPendingFiles((current) => [...current, ...files].slice(0, 12))
+    setAssistantPendingFiles((current) => [...current, ...files])
   }
   const removeAssistantPendingFile = (index: number) => {
     setAssistantPendingFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))
@@ -12088,47 +12087,96 @@ function AiAssistantPage({
   }
   const askAssistant = async (message = assistantInput) => {
     const cleanMessage = message.trim()
-    if ((!cleanMessage && !assistantPendingFiles.length) || assistantLoading) return
+    if ((!cleanMessage && !assistantPendingFiles.length) || assistantLoading || !assistantThreadsHydrated) return
+    const readingRequested = /^(?:请|帮我|麻烦|\s)*(阅读|读取|读一下|读一读|看一下|看看|查看|查询|列出|解读|总结|概括|对比|比较|回答|解释|查找|提取)/.test(cleanMessage)
+      || (!assistantPendingFiles.length && /(?:什么|哪些|多少|何时|什么时候|是否|怎么|为什么)/.test(cleanMessage))
+    const directIntake = !readingRequested && hasDirectIntakeAuthorization(cleanMessage)
+    const workflowRequest = directIntake || isAssistantWorkflowRequest(cleanMessage)
+    const cleaningRequested = assistantPendingFiles.length > 0 && /^(?:请|帮我|麻烦|\s)*(清洗|整理成草稿)/.test(cleanMessage)
+    const thread = activeAssistantThread
+    const attachmentQuestion = !directIntake && !cleaningRequested && thread && (
+      assistantPendingFiles.length || (!workflowRequest && assistantAttachmentIds.length
+        && !instantAssistantReply(cleanMessage)
+        && !inferAssistantThreadRenameTitle(cleanMessage, (assistantThreadClient || selectedClient).name))
+    )
+    if (attachmentQuestion && assistantAttachmentIds.length + assistantPendingFiles.length > maxAssistantAttachments) {
+      setAssistantError(`每个对话最多读取 ${maxAssistantAttachments} 份附件，请在新对话中继续上传。`)
+      return
+    }
     const runId = assistantRunIdRef.current + 1
     assistantRunIdRef.current = runId
     const abortController = new AbortController()
     assistantAbortRef.current = abortController
     const isRunActive = () => assistantRunIdRef.current === runId && !abortController.signal.aborted
-    if (assistantPendingFiles.length) {
-      const directIntake = hasDirectIntakeAuthorization(cleanMessage)
-      const imageFiles = assistantPendingFiles.filter((file) => file.type.startsWith('image/'))
-      if (!directIntake && imageFiles.length === assistantPendingFiles.length) {
-        const nextMessages: AiAssistantMessage[] = [
-          ...assistantMessages,
-          { id: crypto.randomUUID(), role: 'user', content: `${cleanMessage || '请查看这些截图。'}\n\n附件：${imageFiles.map((file) => file.name).join('、')}` },
-        ]
-        setAssistantInput('')
-        setAssistantPendingFiles([])
-        setActiveAssistantMessages(nextMessages)
-        setAssistantLoading(true)
-        setAssistantError('')
-        try {
-          await Promise.all(imageFiles.map((file) => uploadAssistantMaterial(file)))
-          const images = await Promise.all(imageFiles.map(fileAsDataUrl))
-          const response = await apiSend<AiAssistantResponse>('/api/ai/assistant', 'POST', {
-            message: cleanMessage || '请查看这些截图并结合当前企业上下文回答。',
-            images,
-            history: assistantMessages.map((item) => ({ role: item.role, content: item.content })),
-            client: assistantThreadClient || selectedClient,
-            risks: [], report: null, assistantContext: buildAssistantContext(),
-          }, { signal: abortController.signal })
+    if (attachmentQuestion && thread) {
+      const files = assistantPendingFiles
+      const question = cleanMessage || '请分别总结本次上传的每份附件，并列出各自的主要结论和关键数据。'
+      const userMessage: AiAssistantMessage = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: files.length ? `${question}\n\n附件：${files.map((file) => file.name).join('、')}` : question,
+      }
+      const requestOptions = { signal: abortController.signal }
+      const failed: string[] = []
+      const uploaded: string[] = []
+      setAssistantInput('')
+      setAssistantPendingFiles([])
+      setAssistantError('')
+      setAssistantNotice('')
+      setAssistantLoading(true)
+      setActiveAssistantMessages([...assistantMessages, userMessage])
+      updateAssistantThreadTitle(cleanMessage || files[0]?.name || '附件问答')
+      const appendAnswer = (content: string) => setActiveAssistantMessages((current) => [
+        ...current, { id: crypto.randomUUID(), role: 'assistant', content },
+      ])
+      try {
+        if (files.length) {
+          await apiSend('/api/assistant/threads', 'POST', { threads: [thread] }, requestOptions)
+        }
+        for (const file of files) {
           if (!isRunActive()) return
-          setActiveAssistantMessages([...nextMessages, { id: crypto.randomUUID(), role: 'assistant', content: sanitizeAssistantAnswer(response.answer), response }])
-        } catch (error) {
-          if (isRunActive()) setAssistantError(error instanceof Error && error.name === 'AbortError' ? '已停止当前处理。' : error instanceof Error ? error.message : String(error))
-        } finally {
-          if (isRunActive()) {
-            setAssistantLoading(false)
-            assistantAbortRef.current = null
+          setAssistantNotice(`正在读取「${file.name}」…`)
+          try {
+            const sections = await readAssistantAttachment(file)
+            if (!isRunActive()) return
+            const { id } = await apiSend<{ id: string }>('/api/ai/attachments', 'POST', {
+              threadId: thread.id, attachment: { fileName: file.name, sections },
+            }, requestOptions)
+            if (!isRunActive()) return
+            uploaded.push(id)
+            setActiveAssistantMessages((current) => current.map((item) => (
+              item.id === userMessage.id ? { ...item, attachmentIds: [...uploaded] } : item
+            )))
+          } catch (error) {
+            if (!isRunActive()) return
+            failed.push(`「${file.name}」${error instanceof Error ? error.message : String(error)}`)
           }
         }
-        return
+        if (failed.length) appendAnswer(`以下附件未能读取：\n${failed.map((failure) => `- ${failure}`).join('\n')}`)
+        if (files.length && !uploaded.length) return
+        setAssistantNotice('')
+        const response = await apiSend<{ answer: string; excerpted: boolean }>('/api/ai/attachments', 'POST', {
+          threadId: thread.id,
+          attachmentIds: [...assistantAttachmentIds, ...uploaded],
+          recentAttachmentCount: uploaded.length,
+          message: question,
+          history: assistantMessages.map(({ role, content }) => ({ role, content })),
+        }, requestOptions)
+        if (!isRunActive()) return
+        appendAnswer(response.answer)
+        if (response.excerpted) setAssistantNotice('附件较长，本轮回答使用了原文摘录。可以继续按文件、页码或关键词追问。')
+      } catch (error) {
+        if (isRunActive()) setAssistantError(error instanceof Error ? error.message : String(error))
+      } finally {
+        if (isRunActive()) {
+          setAssistantNotice((current) => current.startsWith('正在读取「') ? '' : current)
+          setAssistantLoading(false)
+          assistantAbortRef.current = null
+        }
       }
+      return
+    }
+    if (assistantPendingFiles.length) {
       const filesToImport = directIntake
         ? [...assistantPendingFiles].sort((left, right) => Number(Boolean(extractCompanyNameFromText(right.name))) - Number(Boolean(extractCompanyNameFromText(left.name))))
         : assistantPendingFiles
@@ -12218,7 +12266,11 @@ function AiAssistantPage({
       return
     }
     const readOnlyDataQuestion = isReadOnlyBusinessDataQuestion(cleanMessage)
-    if (readOnlyDataQuestion && !activeAssistantThread?.clientId && selectedClient) bindActiveAssistantThreadToClient(selectedClient)
+    const archiveClient = assistantThreadClient || (
+      !thread?.clientId || thread.clientId === temporaryAssistantClient.id
+        ? clients.find((client) => client.id === selectedClient.id)
+        : undefined
+    )
     const parsedTextDraft: AiAssistantDraft | null = readOnlyDataQuestion ? null : (() => {
       try {
         return addAssistantDraftFromParsedImport(parseClientImportText(cleanMessage))
@@ -12286,7 +12338,26 @@ function AiAssistantPage({
     }
     setAssistantLoading(true)
     setAssistantError('')
+    setAssistantNotice('')
     try {
+      if (!workflowRequest && thread && archiveClient && (!assistantDrafts.length || readOnlyDataQuestion)) {
+        const archived = await askArchivedSources({
+          threadId: thread.id,
+          clientId: archiveClient.id,
+          message: cleanMessage,
+          history: assistantMessages.map(({ role, content }) => ({ role, content })),
+          signal: abortController.signal,
+          onProgress: (notice) => { if (isRunActive()) setAssistantNotice(notice) },
+        })
+        if (!isRunActive()) return
+        if (archived) {
+          if (!assistantThreadClient) bindActiveAssistantThreadToClient(archiveClient)
+          setActiveAssistantMessages([...nextMessages, { id: crypto.randomUUID(), role: 'assistant', content: archived.answer }])
+          if (archived.excerpted) setAssistantNotice('原件较长，本轮使用了相关摘录。可以按文件名、页码或工作表继续追问。')
+          return
+        }
+      }
+      if (readOnlyDataQuestion && archiveClient && !assistantThreadClient) bindActiveAssistantThreadToClient(archiveClient)
       const response = await apiSend<AiAssistantResponse>('/api/ai/assistant', 'POST', {
         message: cleanMessage,
         history: assistantMessages.map((item) => ({ role: item.role, content: item.content })),
@@ -12322,6 +12393,7 @@ function AiAssistantPage({
       if (isRunActive()) setAssistantError(error instanceof Error && error.name === 'AbortError' ? '已停止当前处理。' : error instanceof Error ? error.message : String(error))
     } finally {
       if (isRunActive()) {
+        setAssistantNotice((notice) => notice.startsWith('正在读取归档原件「') ? '' : notice)
         setAssistantLoading(false)
         assistantAbortRef.current = null
       }
@@ -12338,7 +12410,7 @@ function AiAssistantPage({
       </header>
       <div className="assistant-workspace">
         <aside className="assistant-thread-sidebar">
-          <button type="button" className="primary-button compact-button assistant-new-thread" onClick={startAssistantThread}>
+          <button type="button" className="primary-button compact-button assistant-new-thread" onClick={startAssistantThread} disabled={!assistantThreadsHydrated}>
             <Plus /> 新对话
           </button>
           <div className="assistant-thread-list">
@@ -12348,6 +12420,7 @@ function AiAssistantPage({
                 key={thread.id}
                 className={thread.id === activeAssistantThread?.id ? 'assistant-thread-item active' : 'assistant-thread-item'}
                 onClick={() => {
+                  if (thread.id !== activeAssistantThread?.id) setAssistantPendingFiles([])
                   setActiveAssistantThreadId(thread.id)
                   setAssistantInput('')
                   setAssistantError('')
@@ -12399,7 +12472,7 @@ function AiAssistantPage({
             ref={assistantFileInputRef}
             className="assistant-hidden-file-input"
             type="file"
-            accept=".json,.csv,.tsv,.txt,.xlsx,.xls,.pdf,.png,.jpg,.jpeg,.webp,.ppt,.pptx"
+            accept={assistantAttachmentAccept}
             multiple
             onChange={(event) => {
               addAssistantPendingFiles(event.target.files || [])
@@ -12439,7 +12512,7 @@ function AiAssistantPage({
                   <article key={item.id} className={`ai-assistant-message ${item.role}`}>
                     <div className="ai-assistant-message-head">
                       <strong>{item.role === 'user' ? '你' : 'AI 助手'}</strong>
-                      {item.role === 'user' ? (
+                      {item.role === 'user' && !item.attachmentIds?.length ? (
                         <button type="button" onClick={() => editAssistantUserMessage(item.id)}>
                           <Pencil /> 修改
                         </button>
@@ -12534,7 +12607,7 @@ function AiAssistantPage({
                   event.preventDefault()
                   void askAssistant()
                 }}
-                placeholder="把文件拖到这里，也可以补充说明：这是2025年3月工资表/明细账/申报表。"
+                placeholder="直接提问，助手会优先读取当前企业的归档原件。也可以拖入新文件。"
               />
             </div>
             <div className="ai-assistant-actions">
@@ -12542,7 +12615,7 @@ function AiAssistantPage({
                 type="button"
                 className={assistantLoading ? 'secondary-button danger-secondary' : 'primary-button'}
                 onClick={() => assistantLoading ? stopAssistantRun() : void askAssistant()}
-                disabled={!assistantLoading && !assistantInput.trim() && !assistantPendingFiles.length}
+                disabled={!assistantThreadsHydrated || (!assistantLoading && !assistantInput.trim() && !assistantPendingFiles.length)}
               >
                 {assistantLoading ? <Square /> : <Sparkles />} {assistantLoading ? '停止' : '发送'}
               </button>
@@ -12554,6 +12627,12 @@ function AiAssistantPage({
             {assistantError ? <div className="ai-assistant-error">{assistantError}</div> : null}
         </section>
         <aside className="assistant-status-panel" aria-label="当前处理状态">
+          {assistantAttachmentIds.length ? (
+            <div>
+              <span>当前对话可追问的附件</span>
+              <strong>{assistantAttachmentIds.length} 份</strong>
+            </div>
+          ) : null}
           <div>
             <span>当前企业</span>
             <strong>{currentAssistantClientName}</strong>
