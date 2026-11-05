@@ -21,7 +21,7 @@ export async function askArchivedSources({
 }): Promise<AssistantFileResponse | null> {
   const options = { signal }
   const prepare = await apiSend<ArchivePreparation>('/api/ai/attachments', 'POST', {
-    threadId, message, archive: { action: 'prepare', clientId },
+    threadId, message, history, archive: { action: 'prepare', clientId },
   }, options)
   const failed = prepare.unavailable.map((name) => `「${name}」缺少可读取的原件`)
   const sourceIds: string[] = []

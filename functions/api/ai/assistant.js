@@ -3,6 +3,7 @@ import { requireUser } from '../auth/_auth.js'
 import { readAiRequest, reserveAiCall } from '../_ai_budget.js'
 import { DEEPSEEK_API_URL, DEFAULT_DEEPSEEK_MODEL } from '../_deepseek.js'
 import { assistantRuntimeError, runAssistant, sdkBusinessTools } from '../_assistant_runtime.js'
+import { normalizeConversation, prepareAssistantContext } from '../_assistant_context.js'
 
 const readOnlyAgentTools = [
   {
@@ -555,20 +556,6 @@ function conversationalSystemPrompt(client, assistantContext) {
 线程/企业上下文：${JSON.stringify(assistantContext || {})}`
 }
 
-async function loadCustomerMemories(db, auth, clientId) {
-  try {
-    const result = await db.prepare(
-      `SELECT memory_key, memory_value, source, confidence, updated_at
-       FROM assistant_customer_memories
-       WHERE owner_user_id = ? AND client_id = ?
-       ORDER BY updated_at DESC LIMIT 40`,
-    ).bind(auth.user.id, clientId).all()
-    return result.results || []
-  } catch {
-    return []
-  }
-}
-
 function normalizeImageInputs(images) {
   return (Array.isArray(images) ? images : []).filter((item) => (
     typeof item === 'string' && /^data:image\/(?:png|jpeg|webp);base64,/i.test(item) && item.length <= 8_000_000
@@ -642,14 +629,13 @@ async function callVisionProvider(provider, images, promptText, maxTokens = 1800
 
 async function runConversationalAssistant({ env, db, auth, client, message, history, assistantContext, images = [], threadId, requestId, signal }) {
   const vision = images.length ? await analyzeImages(env, images, message) : null
-  const customerMemories = await loadCustomerMemories(db, auth, client.id)
   const userContent = vision
     ? `${message || '请查看这些截图并结合当前企业上下文回答。'}\n\n[视觉模型 ${vision.model} 的截图识别结果]\n${vision.content}`
     : message
   return runAssistant({
-    env, db, user: auth.user, threadId, requestId, signal,
+    env, db, user: auth.user, threadId, clientId: client.id, requestId, signal,
     message: userContent, history, firstCallReserved: !vision,
-    instructions: `${conversationalSystemPrompt(client, assistantContext)}\n客户长期记忆：${JSON.stringify(customerMemories)}`,
+    instructions: conversationalSystemPrompt(client, assistantContext),
     businessTools: assistantBusinessTools(db, auth, client.id),
   })
 }
@@ -784,14 +770,7 @@ function normalizeToolCalls(value) {
 }
 
 function normalizeHistory(value) {
-  if (!Array.isArray(value)) return []
-  return value
-    .map((item) => ({
-      role: item?.role === 'assistant' ? 'assistant' : 'user',
-      content: String(item?.content || '').trim().slice(0, 2000),
-    }))
-    .filter((item) => item.content)
-    .slice(-10)
+  return normalizeConversation(value)
 }
 
 function normalizeAssistantContext(value) {
@@ -1014,6 +993,9 @@ export async function onRequestPost({ request, env }) {
         artifacts: conversational.artifacts, toolSteps: conversational.toolSteps,
       })
     }
+    const writeContext = await prepareAssistantContext({
+      db, env, user: auth.user, threadId, clientId: ownedClient?.id, history: cleanHistory, message: cleanMessage, signal: request.signal,
+    })
     const messages = [
       {
         role: 'system',
@@ -1023,12 +1005,12 @@ export async function onRequestPost({ request, env }) {
         role: 'user',
         content: buildPrompt({
           message: cleanMessage,
-          history: cleanHistory,
+          history: writeContext.recent,
           client,
           clientVerified,
           risks,
           report,
-          assistantContext: cleanAssistantContext,
+          assistantContext: { ...cleanAssistantContext, conversationMemory: writeContext.context },
         }),
       },
     ]

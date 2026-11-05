@@ -36,6 +36,14 @@ export async function onRequestGet({ request, env }) {
       .bind(auth.user.id, maxThreads)
       .all()
     const threads = results.map((row) => JSON.parse(row.payload_json))
+    if (threads.length) {
+      // Recover uploads even for conversations compressed by older clients.
+      const { results: files } = await db.prepare(`SELECT id, thread_id FROM assistant_attachments WHERE owner_user_id = ? AND thread_id IN (${threads.map(() => '?').join(', ')})`)
+        .bind(auth.user.id, ...threads.map((thread) => thread.id)).all()
+      for (const thread of threads) {
+        thread.attachmentIds = [...new Set([...(thread.attachmentIds || []), ...files.filter((file) => file.thread_id === thread.id).map((file) => file.id)])]
+      }
+    }
     return json({ threads })
   } catch (error) {
     return serverError(error)

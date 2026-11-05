@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { onRequestDelete } from '../assistant/threads.js'
+import { onRequestDelete, onRequestGet as readThreads } from '../assistant/threads.js'
 import { onRequestPost } from './attachments.js'
 import { onRequestPost as askGeneralAssistant } from './assistant.js'
 import { onRequestGet as downloadArtifact } from '../assistant/artifacts/[id].js'
@@ -20,7 +20,7 @@ beforeEach(() => {
   sqlite.exec(`CREATE TABLE users (id TEXT PRIMARY KEY); INSERT INTO users VALUES ('owner-a'), ('owner-b');
     CREATE TABLE clients (id TEXT PRIMARY KEY, owner_user_id TEXT, name TEXT);
     INSERT INTO clients VALUES ('client-a', 'owner-a', '甲公司'), ('client-b', 'owner-a', '乙公司'), ('client-c', 'owner-b', '丙公司');`)
-  for (const file of ['0005_assistant_threads.sql', '0008_full_tax_data_intake.sql', '0010_ai_daily_usage.sql', '0012_assistant_attachments.sql', '0013_assistant_artifacts.sql']) {
+  for (const file of ['0005_assistant_threads.sql', '0008_full_tax_data_intake.sql', '0010_ai_daily_usage.sql', '0012_assistant_attachments.sql', '0013_assistant_artifacts.sql', '0014_assistant_context.sql']) {
     sqlite.exec(readFileSync(new URL(`../../../migrations/${file}`, import.meta.url), 'utf8'))
   }
   sqlite.exec(`INSERT INTO assistant_threads (id, owner_user_id, title, payload_json) VALUES
@@ -144,6 +144,41 @@ function sourceAnswer(init, answer) {
   }
   return completion(answer)
 }
+
+it('loads company memory and early user agreements into uploaded-file questions', async () => {
+  sqlite.exec(`CREATE TABLE assistant_customer_memories(owner_user_id TEXT, client_id TEXT, memory_key TEXT, memory_value TEXT, source TEXT, confidence TEXT, updated_at TEXT);
+    INSERT INTO assistant_customer_memories VALUES ('owner-a','client-a','展示口径','所有金额以元为单位','用户确认','high','2026-11-05'),
+      ('owner-b','client-c','私密','另一个用户的隐私','用户确认','high','2026-11-05');`)
+  sqlite.prepare('UPDATE assistant_threads SET payload_json = ? WHERE id = ?').run(JSON.stringify({ id: 'thread-a', clientId: 'client-a' }), 'thread-a')
+  const id = await upload('测试资料.txt', [{ label: '正文', text: '银行手续费 28.50 元。' }])
+  const fetch = vi.fn(async (_url, init) => sourceAnswer(init, '手续费28.5000元。'))
+  vi.stubGlobal('fetch', fetch)
+  const history = [
+    { role: 'user', content: '以后统一保留四位小数。' },
+    ...Array.from({ length: 12 }, (_, index) => ({ role: index % 2 ? 'assistant' : 'user', content: `后续交流${index}` })),
+  ]
+  const response = await post({ attachmentIds: [id], history, message: '按之前的要求给我手续费金额' })
+  expect(response.status).toBe(200)
+  const prompt = JSON.parse(fetch.mock.calls[0][1].body).messages[0].content
+  expect(prompt).toContain('所有金额以元为单位')
+  expect(prompt).toContain('以后统一保留四位小数')
+  expect(prompt).not.toContain('另一个用户的隐私')
+})
+
+it('recovers uploaded-file references for threads compressed by older clients', async () => {
+  const id = await upload('原件.txt', [{ label: '正文', text: '银行手续费 28.50 元。' }])
+  for (const thread of ['thread-a', 'thread-b']) sqlite.prepare('UPDATE assistant_threads SET payload_json = ? WHERE id = ?')
+    .run(JSON.stringify({ id: thread, messages: [{ role: 'assistant', content: '旧版压缩摘要' }] }), thread)
+  const response = await readThreads({ env, request: new Request('https://test.local/api/assistant/threads') })
+  expect(response.status).toBe(200)
+  const threads = (await response.json()).threads
+  expect(threads.find((thread) => thread.id === 'thread-a').attachmentIds).toEqual([id])
+  expect(threads.find((thread) => thread.id === 'thread-b').attachmentIds).toEqual([])
+  vi.stubGlobal('fetch', vi.fn(async (_url, init) => sourceAnswer(init, '原文金额为28.50元。')))
+  const answer = await post({ attachmentIds: threads.find((thread) => thread.id === 'thread-a').attachmentIds, message: '继续看之前的原件' })
+  expect(answer.status).toBe(200)
+  expect((await answer.json()).answer).toContain('28.50')
+})
 
 it('reads uploaded text, generates Excel and Word over consecutive SDK tool calls, and serves authorized downloads', async () => {
   const storage = new Map()

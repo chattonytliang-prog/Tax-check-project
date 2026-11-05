@@ -49,7 +49,7 @@ import {
   type SimpleRuleCondition,
 } from './lib/ruleEngine'
 import { advancedCandidateRuleConfigs, type AdvancedCandidateRuleConfig } from './lib/advancedCandidateRuleConfigs'
-import { assistantThreadStorageKey } from './lib/assistantThreadStorage'
+import { assistantThreadStorageKey, retainAssistantThreadFiles } from './lib/assistantThreadStorage'
 import { reportClientAcknowledgement } from './lib/reportClientAcknowledgement'
 import {
   reportArchiveEvidenceFacts,
@@ -479,6 +479,8 @@ type AssistantThread = {
   title: string
   clientId?: string
   messages: AiAssistantMessage[]
+  attachmentIds?: string[]
+  generatedFiles?: AssistantGeneratedFile[]
   drafts: AiAssistantDraft[]
   latestMaterialSummary?: AssistantMaterialSummary
   createdAt: string
@@ -3913,7 +3915,7 @@ function loadAssistantThreads(ownerUserId: string) {
   if (typeof window === 'undefined') return [createAssistantThread()]
   try {
     const parsed = JSON.parse(window.localStorage.getItem(assistantThreadStorageKey(ownerUserId)) || '[]') as AssistantThread[]
-    const validThreads = parsed.filter((thread) => thread?.id && thread?.title)
+    const validThreads = parsed.filter((thread) => thread?.id && thread?.title).map(retainAssistantThreadFiles)
     return validThreads.length ? validThreads : [createAssistantThread()]
   } catch {
     return [createAssistantThread()]
@@ -11176,7 +11178,7 @@ function AiAssistantPage({
   const activeAssistantThread = assistantThreads.find((thread) => thread.id === activeAssistantThreadId) || assistantThreads[0]
   const assistantThreadClient = clients.find((client) => client.id === activeAssistantThread?.clientId)
   const assistantMessages = activeAssistantThread?.messages || emptyAssistantMessages
-  const assistantAttachmentIds = assistantMessages.flatMap((item) => item.attachmentIds || [])
+  const assistantAttachmentIds = retainAssistantThreadFiles(activeAssistantThread || { messages: [] }).attachmentIds
   const assistantDrafts = activeAssistantThread?.drafts || emptyAssistantDrafts
   const showAssistantProcessingMessage = assistantLoading && assistantMessages.at(-1)?.role === 'user'
   const assistantProgressText = (() => {
@@ -11245,7 +11247,7 @@ function AiAssistantPage({
         const response = await apiGet<{ threads: AssistantThread[] }>('/api/assistant/threads')
         if (!active || !response.threads?.length) return
         setAssistantThreadState({
-          threads: response.threads,
+          threads: response.threads.map(retainAssistantThreadFiles),
           activeId: response.threads[0].id,
         })
       } catch (error) {
@@ -11277,7 +11279,7 @@ function AiAssistantPage({
     )))
   }
   const setActiveAssistantMessages = (updater: AiAssistantMessage[] | ((messages: AiAssistantMessage[]) => AiAssistantMessage[])) => {
-    updateActiveAssistantThread((thread) => ({
+    updateActiveAssistantThread((thread) => retainAssistantThreadFiles({
       ...thread,
       messages: typeof updater === 'function' ? updater(thread.messages) : updater,
       updatedAt: formatDate(),
@@ -11454,6 +11456,7 @@ function AiAssistantPage({
         {
           client: { id: client.id, name: client.name },
           threadTitle: activeAssistantThread.title,
+          threadId: activeAssistantThread.id,
           messages: assistantMessages.map((item) => ({ role: item.role, content: item.content })),
         },
       )
@@ -11470,10 +11473,10 @@ function AiAssistantPage({
       }
       updateActiveAssistantThread((thread) => ({
         ...thread,
-        messages: [summaryMessage],
+        messages: [...thread.messages, summaryMessage],
         updatedAt: formatDate(),
       }))
-      setAssistantNotice(`已压缩当前对话，并保存 ${response.savedCount} 条企业长期记忆。后续新对话会自动读取。`)
+      setAssistantNotice(`已保存 ${response.savedCount} 条企业长期记忆，原消息和文件仍保留。后续对话会自动整理上下文。`)
     } catch (error) {
       setAssistantError(error instanceof Error ? error.message : String(error))
       setAssistantNotice('')
@@ -12462,6 +12465,7 @@ function AiAssistantPage({
       const requestOptions = { signal: abortController.signal }
       const failed: string[] = []
       const uploaded: string[] = []
+      const attachmentClient = assistantThreadClient || clients.find((client) => client.id === selectedClient.id)
       setAssistantInput('')
       setAssistantPendingFiles([])
       setAssistantError('')
@@ -12473,8 +12477,10 @@ function AiAssistantPage({
         ...current, { id: crypto.randomUUID(), role: 'assistant', content, artifacts: result?.artifacts, toolSteps: result?.toolSteps },
       ])
       try {
-        if (files.length) {
-          await apiSend('/api/assistant/threads', 'POST', { threads: [{ ...thread, messages: [...assistantMessages, userMessage] }] }, requestOptions)
+        if (files.length || (!thread.clientId && attachmentClient)) {
+          const clientId = attachmentClient?.id || thread.clientId
+          await apiSend('/api/assistant/threads', 'POST', { threads: [{ ...thread, clientId, messages: [...assistantMessages, userMessage] }] }, requestOptions)
+          if (clientId && clientId !== thread.clientId) updateActiveAssistantThread((current) => ({ ...current, clientId }))
         }
         for (const file of files) {
           if (!isRunActive()) return
