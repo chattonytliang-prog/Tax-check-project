@@ -1,8 +1,6 @@
 import { badRequest, json, nowIso, readJson, requireDb, serverError } from '../_utils.js'
 import { requireUser } from '../auth/_auth.js'
-
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
-const DEFAULT_MODEL = 'deepseek-v4-pro'
+import { DEEPSEEK_API_URL, DEFAULT_DEEPSEEK_MODEL } from '../_deepseek.js'
 
 const memoryTableStatements = [
   `CREATE TABLE IF NOT EXISTS assistant_customer_memories (
@@ -76,7 +74,8 @@ async function summarizeWithModel(env, client, messages) {
     method: 'POST',
     headers: { authorization: `Bearer ${env.DEEPSEEK_API_KEY}`, 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: env.DEEPSEEK_MODEL || DEFAULT_MODEL,
+      model: env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL,
+      thinking: { type: 'disabled' },
       temperature: 0.2,
       max_tokens: 1800,
       messages: [

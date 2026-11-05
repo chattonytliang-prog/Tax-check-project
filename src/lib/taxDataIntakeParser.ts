@@ -1,4 +1,6 @@
 import type { IntakeDocumentType } from './intakeClassifier'
+import { taxDocumentKinds, validateTaxDocumentMapping } from './taxDocumentMapping'
+import { excelMappingSchemas, validateExcelColumnMapping, type ExcelColumnMapping } from './excelMappingSchema'
 import { matchPdfTemplate, matchWorkbookTemplate, type TemplateMatch, type TemplateValidation } from './taxDataTemplateRules'
 
 export type IntakeSheet = {
@@ -87,8 +89,9 @@ function extractProfilePatchFromText(text: string): ParsedTaxDataIntake['profile
   const patch: ParsedTaxDataIntake['profilePatch'] = {}
   const creditCode = normalizeCreditCode(text.match(/(?:统一社会信用代码|纳税人识别号|税号)[^0-9A-Z]{0,30}([0-9A-Z]{15,20})/i)?.[1])
   if (creditCode) patch.creditCode = creditCode
-  const nameMatch = text.match(/(?:纳税人名称|扣缴义务人名称|编制单位|核算单位|单位)[:：\s]*([^|。\n\r]{4,80})/)
-  const name = clean(nameMatch?.[1]).replace(/金额单位.*$/, '').replace(/单位[:：]?.*$/, '').trim()
+  const nameMatch = text.match(/(?:纳税人名称|扣缴义务人名称|编制单位|核算单位|(?:^|\n)单位)[：:\t ]+([^|。\n\r]{4,80})/)
+  const name = clean(nameMatch?.[1]).replace(/^[（(](?:公章|盖章)[）)]\s*/, '')
+    .replace(/\s{2,}.*$|(?:金额单位|法定代表人).*$/, '').trim()
   if (isLikelyCompanyName(name)) patch.name = name
   if (/一般纳税人适用|一般纳税人/.test(text)) patch.taxpayerType = '一般纳税人'
   if (/小规模纳税人/.test(text)) patch.taxpayerType = '小规模纳税人'
@@ -791,6 +794,100 @@ function finalizeTemplateMatch(match: TemplateMatch, records: StandardTaxRecord[
   return match
 }
 
+export function parseConfirmedExcelMapping(sheet: IntakeSheet, settings: {
+  headerRow: number
+  lastRow: number
+  periodStart: string
+  periodEnd: string
+  amountScale: number
+  mapping: ExcelColumnMapping
+}): ParsedTaxDataIntake {
+  const { headerRow, lastRow, periodStart, periodEnd, amountScale } = settings
+  if (!Number.isInteger(headerRow) || !Number.isInteger(lastRow)
+    || headerRow < 1 || lastRow <= headerRow || lastRow > sheet.rows.length) {
+    throw new Error('请确认表头行和最后一行数据。')
+  }
+  const mapping = validateExcelColumnMapping(settings.mapping, sheet.rows[headerRow - 1])
+  if (!mapping) throw new Error('请检查列映射，同一原表列只能对应一个字段。')
+  if (isoDate(periodStart) !== periodStart || isoDate(periodEnd) !== periodEnd || !periodStart || !periodEnd || periodStart > periodEnd) {
+    throw new Error('请确认有效的资料起止日期。')
+  }
+  if (![1, 1000, 10000].includes(amountScale)) throw new Error('请选择正确的金额单位。')
+  const { recordType, subtype, label, fields } = excelMappingSchemas[mapping.kind]
+  const documentType = recordType as IntakeDocumentType
+  const required = fields.filter(({ required, key }) => required && !Object.hasOwn(mapping.columns, key))
+  if (required.length) throw new Error(`请映射必填字段：${required.map(({ label }) => label).join('、')}。`)
+  const mapped = fields.filter(({ key }) => Object.hasOwn(mapping.columns, key))
+  const monetary = mapped.filter(({ kind }) => kind === 'amount')
+  if (!monetary.length || (subtype === 'ledger_entry' && !monetary.some(({ key }) => key === 'debitAmount' || key === 'creditAmount'))) {
+    throw new Error('请映射至少一列有效金额，明细账须映射借方或贷方。')
+  }
+
+  const period = { periodStart, periodEnd }
+  const result = emptyResult()
+  sheet.rows.slice(headerRow, lastRow).forEach((row, offset) => {
+    if (!row.some((cell) => clean(cell))) return
+    const rowNo = headerRow + offset + 1
+    const payload: Record<string, unknown> = { sourceRowNo: rowNo, sourceSheetName: sheet.name }
+    const evidence: Array<[string, string, number]> = []
+    for (const { key, label, kind, required } of mapped) {
+      const column = mapping.columns[key]
+      const raw = clean(row[column])
+      if (!raw || (kind === 'amount' && /^[-—–]+$/.test(raw))) {
+        if (required) throw new Error(`原表第 ${rowNo} 行缺少「${label}」。`)
+        continue
+      }
+      if (kind === 'amount') {
+        const decimal = raw.replace(/[￥¥元\s]/g, '').replace(/，/g, ',').replace(/^\((.+)\)$/, '-$1')
+        const value = amount(raw)
+        if (!amountPattern.test(decimal) || value === null || Math.abs(value * amountScale) > Number.MAX_SAFE_INTEGER / 100) {
+          throw new Error(`原表第 ${rowNo} 行「${label}」无法解析为金额。`)
+        }
+        payload[key] = value * amountScale
+      } else if (kind === 'date') {
+        const value = isoDate(raw)
+        if (!value) throw new Error(`原表第 ${rowNo} 行「${label}」不是有效日期。`)
+        if (subtype !== 'input_invoice' && (value < periodStart || value > periodEnd)) {
+          throw new Error(`原表第 ${rowNo} 行「${label}」超出确认期间。`)
+        }
+        payload[key] = value
+      } else if (kind === 'identity') {
+        payload.idNumberMasked = maskId(raw)
+      } else {
+        payload[key] = raw
+      }
+      evidence.push([kind === 'identity' ? 'idNumberMasked' : key, raw, column + 1])
+    }
+    if (!monetary.some(({ key }) => Object.hasOwn(payload, key))) throw new Error(`原表第 ${rowNo} 行没有可用金额。`)
+    if (subtype === 'ledger_entry' && payload.debitAmount === undefined && payload.creditAmount === undefined) {
+      throw new Error(`原表第 ${rowNo} 行缺少借方或贷方金额。`)
+    }
+    if (documentType === 'financial_statement') Object.assign(payload, { statementType: subtype, rowNo })
+    if (documentType === 'invoice_list') payload.invoiceDirection = subtype === 'output_invoice' ? 'output' : 'input'
+    const recordPeriod = typeof payload.entryDate === 'string' ? entryMonthPeriod(payload.entryDate, period) : period
+    const record = makeRecord(recordType, subtype, payload, recordPeriod, 'medium')
+    result.records.push(record)
+    result.evidenceFields.push(...evidenceFor(record, sheet.name, rowNo, evidence).map((item) => ({
+      ...item,
+      normalizedValue: String(payload[item.targetField] ?? item.normalizedValue),
+      note: '用户确认的 Excel 列映射',
+    })))
+  })
+  if (!result.records.length) throw new Error('所选行范围内没有可入库记录。')
+  const match = finalizeTemplateMatch({
+    templateId: `confirmed_excel_${mapping.kind}`, templateName: `确认列映射 · ${label}`, version: 1,
+    documentType, slotId: mapping.kind, confidence: 'medium', matched: true, autoImportEligible: false, validations: [],
+  }, result.records)
+  if (!match.autoImportEligible) throw new Error(match.validations.find(({ status }) => status === 'failed')?.detail || '原表数据未通过校验。')
+  result.documentTypes = [documentType]
+  result.recordCounts = { [recordType]: result.records.length }
+  result.templateMatches = [match]
+  result.records.forEach((record) => { record.payload.templateId = match.templateId })
+  result.warnings = match.validations.filter(({ status }) => status === 'warning').map(({ detail }) => detail)
+  result.autoImportEligible = true
+  return result
+}
+
 function invalidLedgerDateRows(sheet: IntakeSheet) {
   const header = findHeaderRow(sheet.rows, [/日期/, /凭证字号|凭证号/, /摘要/, /借方/, /贷方/], 8)
   if (header < 0) return []
@@ -1064,6 +1161,97 @@ function vatScheduleName(text: string) {
   if (match) return match[1] ? `增值税及附加税费申报表附列资料（${match[1]}）` : clean(match[0])
   if (/税额抵减情况表/.test(text)) return '增值税及附加税费申报表附列资料（四）'
   return '增值税及附加税费申报表其他附表'
+}
+
+export function parseLocatedTaxDocument(
+  lines: string[], proposal: unknown, context: { label: string; pageNo?: number; scanned?: boolean; periodText?: string },
+): ParsedTaxDataIntake {
+  const mapping = validateTaxDocumentMapping(proposal, lines.length)
+  if (!mapping) throw new Error('没有可核对的原文数据行。')
+  const text = lines.join('\n')
+  const preamble = lines.slice(0, mapping.rows[0].start).join(' ')
+  const compact = preamble.replace(/\s+/g, '')
+  const period = detectTaxDataPeriod(lines.find((line) => /所属|期间/.test(line) && detectTaxDataPeriod(line).periodStart) || preamble)
+  const effectivePeriod = period.periodStart ? period : detectTaxDataPeriod(context.periodText || '')
+  if (!effectivePeriod.periodStart || !effectivePeriod.periodEnd) throw new Error('无法核对表格所属期间。')
+  const kind = mapping.kind
+  const isMain = kind === 'vat_main'
+  const isSchedule = kind === 'vat_schedule_four'
+  const title = { income_statement: '利润表', balance_sheet: '资产负债表', cash_flow_statement: '现金流量表' }
+  const current = compact.search(/本月数|本期数|本月金额|本期金额/)
+  const cumulative = compact.search(/本年累计/)
+  const ending = compact.search(/期末余额|期末金额/)
+  const beginning = compact.search(/年初余额|期初余额|年初金额/)
+  const scheduleHeading = /附列资料[（(]?四|税额抵减情况表/
+  if (isMain ? (!/增值税.*申报表/.test(compact) || scheduleHeading.test(compact)
+    || !/一般项目.*即征即退项目.*(?:本月数|本期数)本年累计(?:本月数|本期数)本年累计/.test(compact))
+    : isSchedule ? (!scheduleHeading.test(compact)
+      || !/期初余额本期发生额本期应抵减税额本期实际抵减税额期末余额/.test(compact)
+      || !/期初余额本期发生额本期调减额本期可抵减额本期实际抵减额期末余额/.test(text.replace(/\s+/g, '')))
+      : (!compact.includes(title[kind]) || (kind === 'balance_sheet'
+        ? ending < 0 || beginning < 0 : current < 0 || cumulative < 0))) {
+    throw new Error('原文表型或金额列顺序无法核实。')
+  }
+  const units = new Set(Array.from(preamble.matchAll(/单位\s*[:：]\s*(万元|千元|元)/g), (match) => match[1]))
+  if (units.size > 1 || /单位\s*[:：]\s*(?:美元|港元|欧元)/.test(preamble)) throw new Error('金额单位无法统一核实。')
+  const unit = [...units][0]
+  const scale = unit === '万元' ? 10000 : unit === '千元' ? 1000 : 1
+  const result = emptyResult()
+  const documentType: IntakeDocumentType = isMain ? 'vat_return' : isSchedule ? 'vat_return_schedule' : 'financial_statement'
+  const recordType = isMain || isSchedule ? 'vat_return' : 'financial_statement'
+  const subtype = isMain || isSchedule ? 'vat_return_line' : kind
+  const keyRows: Record<string, RegExp> = { 1: /按适用税率计税销售额|应税销售额/, 11: /^销项税额$/, 12: /^进项税额$/, 19: /^应纳税额$/ }
+  for (const { start, end } of mapping.rows) {
+    const row = lines.slice(start, end + 1).join(' ').trim()
+    const parts = row.split(/\s+/)
+    const rowNo = isSchedule ? parts[0] : isMain ? parts.at(-5)?.split('=')[0] : ''
+    const count = isMain ? 4 : isSchedule ? Number(rowNo) <= 5 ? 5 : 6 : 2
+    const rawAmounts = parts.slice(-count)
+    const values = rawAmounts.map((value) => /^[-—–]+$/.test(value) ? null
+      : amountPattern.test(value) ? amount(value) : Number.NaN)
+    const lineName = parts.slice(isSchedule ? 1 : 0, isMain ? -5 : -count).join(' ')
+      .replace(isMain || isSchedule ? /$^/ : /\s+\d{1,3}$/, '').trim()
+    if (parts.length <= count || values.some((value) => value !== null && (!Number.isFinite(value) || Math.abs(value * scale) > Number.MAX_SAFE_INTEGER / 100))
+      || !values.some((value) => value !== null) || !/[\p{L}]/u.test(lineName)
+      || /^(项目|栏次|行次)$/.test(lineName) || /\d+[.,]\d+/.test(lineName)
+      || (isMain && (!/^(?:[1-9]|[1-3]\d|4[01])$/.test(rowNo || '') || (keyRows[rowNo || ''] && !keyRows[rowNo || ''].test(normalized(lineName)))))
+      || (isSchedule && !/^[1-8]$/.test(rowNo || ''))) {
+      throw new Error(`原文第 ${start + 1} 行无法核对项目、栏次或金额。`)
+    }
+    const fields = isMain ? ['currentAmount', 'cumulativeAmount', 'currentTax', 'cumulativeTax']
+      : isSchedule ? ['beginningAmount', 'currentOccurrenceAmount', ...(count === 6 ? ['currentDecreaseAmount'] : []),
+        'currentDeductibleAmount', 'actualDeductionAmount', 'endingAmount']
+        : kind === 'balance_sheet'
+          ? ending < beginning ? ['endingAmount', 'beginningAmount'] : ['beginningAmount', 'endingAmount']
+          : current < cumulative ? ['currentAmount', 'cumulativeAmount'] : ['cumulativeAmount', 'currentAmount']
+    const payload: Record<string, unknown> = {
+      lineName, rowNo: rowNo || String(start + 1), sourceRowNo: start + 1,
+      sourceSheetName: context.label, sourcePageNo: context.pageNo, templateId: `confirmed_document_${kind}`,
+      ...(isMain || isSchedule
+        ? { itemName: lineName, formName: isSchedule ? '增值税及附加税费申报表附列资料（四）' : '增值税及附加税费申报表' }
+        : { statementType: kind }),
+    }
+    fields.forEach((field, index) => { payload[field] = values[index] === null ? null : values[index]! * scale })
+    if (isMain && keyRows[rowNo || ''] && payload.currentAmount === null) throw new Error(`主表第 ${rowNo} 栏缺少本期金额。`)
+    const record = makeRecord(recordType, subtype, payload, effectivePeriod, 'medium')
+    result.records.push(record)
+    result.evidenceFields.push(...fields.flatMap((field, index) => values[index] === null ? [] : [{
+      ...evidenceFor(record, context.label, start + 1, [[field, rawAmounts[index]]])[0],
+      pageNo: context.pageNo, normalizedValue: String(payload[field]),
+      note: context.scanned ? '扫描页文字识别，按原文行定位' : `原文第 ${start + 1}–${end + 1} 行`,
+    }]))
+  }
+  const match = finalizeTemplateMatch({
+    templateId: `confirmed_document_${kind}`, templateName: taxDocumentKinds[kind], version: 1, documentType,
+    slotId: isSchedule ? 'vat-schedule-4' : kind, confidence: 'medium', matched: true, autoImportEligible: false, validations: [],
+  }, result.records)
+  if (!match.autoImportEligible) throw new Error(match.validations.find(({ status }) => status === 'failed')?.detail || '原文表格未通过校验。')
+  result.profilePatch = extractProfilePatchFromText(text.slice(0, 5000))
+  result.documentTypes = [documentType]
+  result.recordCounts = { [recordType]: result.records.length }
+  result.templateMatches = [match]
+  result.autoImportEligible = true
+  return result
 }
 
 function addPdfPageResult(

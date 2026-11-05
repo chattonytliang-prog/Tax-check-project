@@ -2,7 +2,8 @@ export function hasDirectIntakeAuthorization(message: string) {
   const text = message.replace(/\s+/g, '')
   if (/(不要|暂不|先别|不用).{0,8}(录入|收录|导入|入库|保存|建档|归档|上传)/.test(text)) return false
   return (
-    /(都|全部|全都|直接|先|这批|这些|这两个|这2个|这几个|这个|该).{0,12}(录入|收录|导入|入库|保存|建档|归档)/.test(text)
+    /^(导入|入库|收录|归档)[。！!]*$/.test(text)
+    || /(都|全部|全都|直接|先|这批|这些|这两个|这2个|这几个|这个|该).{0,12}(录入|收录|导入|入库|保存|建档|归档)/.test(text)
     || /(帮我|请|麻烦).{0,12}(录入|收录|导入|入库|保存|建档|归档)/.test(text)
     || /(录入|收录|导入|入库|保存).{0,8}(并|和|然后)?.{0,8}(建档|归档)/.test(text)
     || /(收录|导入|入库|保存|归档).{0,8}(完|后).{0,8}(再|再来|再告诉|再问)/.test(text)
@@ -17,6 +18,10 @@ export function instantAssistantReply(message: string) {
   if (/^(在吗|在不在|有人吗)$/.test(text)) return '在。请直接告诉我需要处理什么。'
   if (/^(谢谢|感谢|多谢|thankyou|thanks)$/.test(text)) return '不客气。'
   return ''
+}
+
+export function isAssistantWorkflowRequest(message: string) {
+  return /^(?:请你?|帮我|给我|麻烦你?|能否|可以|先|现在|\s)*(?:(?:生成|出具).{0,12}报告|(?:开始|运行|执行)(?:基础合规|风险检测|分析|评估)|(?:确认|保存|更新|修改)(?:导入|草稿|档案|期间数据|企业信息)|资料已传完|按这个保存)/.test(message)
 }
 
 export function isBinaryAssistantQuestion(text: string) {

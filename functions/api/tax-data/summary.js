@@ -470,9 +470,15 @@ export async function onRequestGet({ request, env }) {
       all(
         db,
         `SELECT record_type, record_subtype, period_start, period_end, record_json
-         FROM tax_data_standard_records
+         FROM tax_data_standard_records AS records
          WHERE owner_user_id = ? AND client_id = ?
            AND COALESCE(period_start, '') <> '' AND COALESCE(period_end, '') <> ''
+           AND NOT EXISTS (
+             SELECT 1 FROM tax_data_source_files AS source
+             WHERE source.id = records.source_file_id AND source.owner_user_id = records.owner_user_id
+               AND source.parse_status = 'pending'
+               AND CASE WHEN json_valid(source.evidence_json) THEN json_extract(source.evidence_json, '$.mappingHash') END IS NOT NULL
+           )
          ORDER BY period_start, period_end, record_type, record_subtype`,
         auth.user.id,
         clientId,

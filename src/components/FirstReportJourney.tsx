@@ -1,8 +1,8 @@
-import { AlertTriangle, CheckCircle2, FileText, RefreshCcw, Upload } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, FileText, RefreshCcw, Upload, X } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 import { summarizeDirectImport, type DirectImportBatch } from '../lib/firstReportJourney'
 
-type JourneyClient = { id: string; name: string; creditCode: string }
-type JourneyMonth = { id: string; label: string }
+type JourneyClient = { id: string; name: string }
 
 type Props = {
   clients: JourneyClient[]
@@ -10,18 +10,17 @@ type Props = {
   sourceFileCount: number
   storedSourceFileCount: number
   recordCount: number
-  months: JourneyMonth[]
-  selectedMonthId: string
+  hasPeriods: boolean
   summaryLoading: boolean
   summaryError: string
   batch: DirectImportBatch | null
   importing: boolean
-  reportPrice: string
+  uploadGuideOpen: boolean
+  onUploadGuideChange: (open: boolean) => void
   onSelectClient: (id: string) => void
   onUploadCurrent: () => void
   onUploadNew: () => void
   onInspect: () => void
-  onSelectMonth: (id: string) => void
   onStartDetection: () => void
   onRetrySummary: () => void
 }
@@ -37,7 +36,7 @@ export function DirectImportReceipt({ batch }: { batch: DirectImportBatch }) {
         {batch.items.map((item, index) => (
           <li key={`${item.name}-${index}`} className={item.status}>
             {item.status === 'saved' || item.status === 'repaired' ? <CheckCircle2 aria-hidden="true" /> : <AlertTriangle aria-hidden="true" />}
-            <span><strong>{item.name}</strong><small>{item.status === 'saved' ? `入库 ${item.records} 条` : item.detail}</small></span>
+            <span><strong>{item.name}</strong><small>{item.status === 'saved' ? `入库 ${item.records} 条${item.detail ? ` · ${item.detail}` : ''}` : item.detail}</small></span>
           </li>
         ))}
       </ul>
@@ -45,25 +44,73 @@ export function DirectImportReceipt({ batch }: { batch: DirectImportBatch }) {
   )
 }
 
+function UploadGuide({ batch, importing, onUpload, onClose }: {
+  batch: DirectImportBatch | null
+  importing: boolean
+  onUpload: () => void
+  onClose: () => void
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    dialog?.showModal()
+    return () => dialog?.close()
+  }, [])
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="confirm-modal upload-guide-modal"
+      aria-labelledby="upload-guide-title"
+      aria-describedby="upload-guide-intro"
+      onCancel={(event) => { event.preventDefault(); onClose() }}
+    >
+      <header className="upload-guide-header">
+        <span className="upload-guide-icon" aria-hidden="true"><Upload /></span>
+        <div>
+          <p className="eyebrow">首次使用</p>
+          <h2 id="upload-guide-title">上传财税资料</h2>
+          <p id="upload-guide-intro">系统会识别企业和最新可分析月份，有资料缺口时先提示补全，再生成风险初筛报告。首份免费。</p>
+        </div>
+        <button type="button" className="upload-guide-close" aria-label="关闭上传引导" onClick={onClose}><X aria-hidden="true" /></button>
+      </header>
+      <dl className="upload-guide-requirements">
+        <div>
+          <dt>上传什么</dt>
+          <dd>财务报表、科目余额表、明细账、纳税申报表等原始资料。</dd>
+        </div>
+        <div>
+          <dt>文件格式</dt>
+          <dd>Excel（.xls、.xlsx）、Word（.doc、.docx）、PDF（文字可选中的 PDF 或扫描件），或包含 PDF 的 ZIP 压缩包。</dd>
+        </div>
+        <div>
+          <dt>文件要求</dt>
+          <dd>单个文件最大 8 MB，可多选。同一批只上传一家企业的资料，至少一份能识别企业全称，并保留所属期间和原始表头。需要辅助识别时，AI 会读取 Excel 列名、PDF 或 Word 表格片段，或扫描页。</dd>
+        </div>
+      </dl>
+      <button type="button" className="primary-button upload-guide-action" onClick={onUpload} disabled={importing}>
+        <Upload aria-hidden="true" /> {importing ? '正在解析...' : '上传资料'}
+      </button>
+      {batch && <DirectImportReceipt batch={batch} />}
+    </dialog>
+  )
+}
+
 export function FirstReportJourney({
-  clients, selectedClientId, sourceFileCount, storedSourceFileCount, recordCount, months, selectedMonthId,
-  summaryLoading, summaryError, batch, importing, reportPrice,
-  onSelectClient, onUploadCurrent, onUploadNew, onInspect, onSelectMonth,
-  onStartDetection, onRetrySummary,
+  clients, selectedClientId, sourceFileCount, storedSourceFileCount, recordCount, hasPeriods,
+  summaryLoading, summaryError, batch, importing, uploadGuideOpen, onUploadGuideChange,
+  onSelectClient, onUploadCurrent, onUploadNew, onInspect, onStartDetection, onRetrySummary,
 }: Props) {
   const client = clients.find((item) => item.id === selectedClientId)
-  const hasFiles = sourceFileCount > 0 || months.length > 0
   const visibleBatch = batch && (!batch.clientId || batch.clientId === selectedClientId) ? batch : null
-  const counts = visibleBatch ? summarizeDirectImport(visibleBatch) : null
-  const currentStep = !hasFiles ? 1 : !selectedMonthId ? 2 : 3
 
   return (
     <section className="first-report-journey page" aria-labelledby="journey-title">
       <header className="page-header journey-header">
         <div>
-          <p className="eyebrow">首次使用</p>
-          <h2 id="journey-title">完成第一份风险报告</h2>
-          <p>按当前企业的资料进度继续，已入库资料会保留。</p>
+          <h2 id="journey-title">上传财税资料</h2>
+          <p>支持 Excel、PDF、Word，可一次上传多份。需要时由 AI 辅助识别表格。</p>
         </div>
         {clients.length > 1 && (
           <label className="journey-client-switch">
@@ -75,74 +122,30 @@ export function FirstReportJourney({
         )}
       </header>
 
-      <ol className="journey-steps">
-        <li className={currentStep === 1 ? 'current' : 'complete'}>
-          <span className="journey-step-number" aria-hidden="true">1</span>
-          <div className="journey-step-body">
-            <div className="journey-step-heading">
-              <div>
-                <h3>准备资料</h3>
-                <p>选择这家企业的 Excel 或 PDF，可一次上传多份。</p>
-              </div>
-              <span className="journey-step-status">{summaryLoading ? '读取中' : counts?.failed ? hasFiles ? `${counts.failed}份未入库` : '上传失败' : storedSourceFileCount > 0 ? '原件已保存' : hasFiles ? '待补原件' : '待开始'}</span>
-            </div>
-            {client && <p className="journey-client-name">当前企业：<strong>{client.name}</strong></p>}
-            {hasFiles && !summaryLoading && <p className="journey-facts">已登记 {sourceFileCount} 份源文件 · 原件已保存 {storedSourceFileCount} 份 · {recordCount} 条标准记录</p>}
-            {hasFiles && !summaryLoading && storedSourceFileCount < sourceFileCount && <p className="journey-warning">{sourceFileCount - storedSourceFileCount} 份文件仅有登记信息，缺少可查看的原件。</p>}
-            {hasFiles && !summaryLoading && sourceFileCount === 0 && <p className="journey-warning">已有期间数据，但尚未保存原始文件；报告中的依据需要人工核对。</p>}
-            <div className="journey-actions">
-              <button type="button" className="primary-button" onClick={client ? onUploadCurrent : onUploadNew} disabled={importing}>
-                <Upload /> {importing ? '正在解析...' : client ? '补充当前企业资料' : '上传资料'}
-              </button>
-              {client && <button type="button" className="secondary-button" onClick={onUploadNew} disabled={importing}>上传新企业资料</button>}
-            </div>
-            {visibleBatch && <DirectImportReceipt batch={visibleBatch} />}
-          </div>
-        </li>
+      {client && clients.length === 1 && <p className="journey-facts">当前企业 <strong>{client.name}</strong></p>}
+      <div className="header-actions">
+        <button type="button" className="primary-button" onClick={client ? onUploadCurrent : () => onUploadGuideChange(true)} disabled={importing}>
+          <Upload aria-hidden="true" /> {importing ? '正在解析...' : client ? '补充当前企业资料' : '上传资料'}
+        </button>
+        {client && <button type="button" className="secondary-button" onClick={onUploadNew} disabled={importing}>上传新企业资料</button>}
+        {client && hasPeriods && !importing && <button type="button" className="secondary-button" onClick={onStartDetection}><FileText aria-hidden="true" /> 开始风险检测</button>}
+      </div>
 
-        <li className={currentStep === 2 ? 'current' : currentStep > 2 ? 'complete' : 'upcoming'}>
-          <span className="journey-step-number" aria-hidden="true">2</span>
-          <div className="journey-step-body">
-            <div className="journey-step-heading">
-              <div>
-                <h3>核对企业和月份</h3>
-                <p>确认资料归属，再选择有原始资料的分析月份。</p>
-              </div>
-              <span className="journey-step-status">{selectedMonthId ? '已选择' : hasFiles ? '待核对' : '等待资料'}</span>
-            </div>
-            {client && <p className="journey-facts">{client.name}{client.creditCode ? ` · ${client.creditCode}` : ' · 未识别到统一社会信用代码'}</p>}
-            {summaryError && <p className="journey-warning" role="alert">{summaryError} <button type="button" onClick={onRetrySummary}><RefreshCcw /> 重试</button></p>}
-            {hasFiles && !summaryLoading && (
-              <div className="journey-period-choice">
-                <label htmlFor="journey-month">分析月份</label>
-                <select id="journey-month" value={selectedMonthId} onChange={(event) => onSelectMonth(event.target.value)}>
-                  <option value="">请选择有资料的月份</option>
-                  {months.map((month) => <option key={month.id} value={month.id}>{month.label}</option>)}
-                </select>
-                <button type="button" className="secondary-button" onClick={onInspect}>查看资料归档</button>
-              </div>
-            )}
-            {hasFiles && !months.length && !summaryLoading && <p className="journey-warning">尚无可分析的月份，请查看未入库文件并补充资料。</p>}
-          </div>
-        </li>
-
-        <li className={currentStep === 3 ? 'current' : 'upcoming'}>
-          <span className="journey-step-number" aria-hidden="true">3</span>
-          <div className="journey-step-body">
-            <div className="journey-step-heading">
-              <div>
-                <h3>检测并生成报告</h3>
-                <p>先看风险与资料缺口，再决定是否保存报告。</p>
-              </div>
-              <span className="journey-step-status">{selectedMonthId ? '可以检测' : '等待月份'}</span>
-            </div>
-            <p className="journey-facts">{reportPrice}。检测不扣积分，保存新报告前会再次确认。</p>
-            <button type="button" className="primary-button" onClick={onStartDetection} disabled={!client || !selectedMonthId}>
-              <FileText /> 开始风险检测
-            </button>
-          </div>
-        </li>
-      </ol>
+      {visibleBatch && <DirectImportReceipt batch={visibleBatch} />}
+      {summaryLoading && <p className="journey-facts" role="status">正在读取资料归档…</p>}
+      {summaryError && <p className="journey-warning" role="alert">{summaryError} <button type="button" onClick={onRetrySummary}><RefreshCcw aria-hidden="true" /> 重试</button></p>}
+      {!summaryLoading && sourceFileCount > 0 && (
+        <>
+          <p className="journey-facts">已登记 {sourceFileCount} 份源文件 · 原件已保存 {storedSourceFileCount} 份 · {recordCount} 条标准记录</p>
+          {storedSourceFileCount < sourceFileCount && <p className="journey-warning">{sourceFileCount - storedSourceFileCount} 份文件仅有登记信息，缺少可查看的原件。</p>}
+          {!hasPeriods && <p className="journey-warning">尚无可分析的月份，请查看未入库文件并补充资料。</p>}
+        </>
+      )}
+      {!summaryLoading && !summaryError && hasPeriods && sourceFileCount === 0 && <p className="journey-warning">已有期间数据，但尚未保存原始文件。报告中的依据需要人工核对。</p>}
+      {!summaryLoading && (hasPeriods || sourceFileCount > 0) && <button type="button" className="text-button" onClick={onInspect}>查看资料归档</button>}
+      {uploadGuideOpen && clients.length === 0 && (
+        <UploadGuide batch={visibleBatch} importing={importing} onUpload={onUploadNew} onClose={() => onUploadGuideChange(false)} />
+      )}
     </section>
   )
 }

@@ -438,6 +438,7 @@ function stableHash(value) {
 
 function stableRecordBusinessKey(type, subtype, payload) {
   return [
+    ...(/^confirmed_(excel|document)_/.test(String(payload.templateId || '')) ? [payload.sourceSheetName, payload.sourcePageNo] : []),
     payload.sourceRowNo,
     payload.entryDate,
     payload.voucherNo,
@@ -689,6 +690,7 @@ async function saveStandardizedTaxData(db, auth, toolCall, client, body) {
     ...evidence,
     targetId: stabilized.idMap.get(normalizeString(evidence.targetId, 120)) || evidence.targetId,
   }))
+  const confirmedExcelMapping = Boolean(sourceFiles[0]?.evidence?.mappingHash)
   const conflicts = normalizeArray(args.conflicts, 80)
 
   await ensureTaxDataIntakeTables(db)
@@ -872,15 +874,18 @@ async function saveStandardizedTaxData(db, auth, toolCall, client, body) {
   await runStatements(db, evidenceFields.map((evidence) => {
     const targetField = normalizeString(evidence.targetField || evidence.field, 120)
     if (!targetField) return null
+    const evidenceId = confirmedExcelMapping
+      ? `excel_ev_${evidence.sourceFileId}_${evidence.targetId}_${targetField}`
+      : normalizeString(evidence.id || crypto.randomUUID(), 120)
     return db
       .prepare(
-        `INSERT INTO tax_data_evidence_fields (
+        `INSERT ${confirmedExcelMapping ? 'OR IGNORE ' : ''}INTO tax_data_evidence_fields (
           id, owner_user_id, batch_id, source_file_id, target_table, target_id, target_field,
           raw_value, normalized_value, confidence, sheet_name, row_no, column_no, page_no, note, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
       )
       .bind(
-        normalizeString(evidence.id || crypto.randomUUID(), 120),
+        evidenceId,
         auth.user.id,
         batchId,
         normalizeString(evidence.sourceFileId, 120),

@@ -55,4 +55,17 @@ describe('extractPdfTextPages', () => {
 
     expect(workerOptions.workerSrc).toBe('/assets/pdf.worker.js')
   })
+
+  it('hands scanned pages to the attachment reader and closes the PDF on OCR errors', async () => {
+    const { extractPdfTextPages } = await import('./pdfTextExtractor')
+    const page = { getTextContent: getTextContentMock, cleanup: cleanupMock }
+    getTextContentMock.mockResolvedValueOnce({ items: [{ str: 'text' }] }).mockResolvedValueOnce({ items: [] })
+    getPageMock.mockResolvedValue(page)
+    getDocumentMock.mockReturnValue({ promise: Promise.resolve({ numPages: 2, getPage: getPageMock, destroy: destroyMock }) })
+    const onEmptyPage = vi.fn().mockRejectedValue(new Error('render failed'))
+
+    await expect(extractPdfTextPages(new ArrayBuffer(0), onEmptyPage)).rejects.toThrow('render failed')
+    expect(onEmptyPage).toHaveBeenCalledExactlyOnceWith(page, 2)
+    expect(destroyMock).toHaveBeenCalledTimes(1)
+  })
 })

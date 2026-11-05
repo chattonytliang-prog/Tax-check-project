@@ -28,14 +28,14 @@ Workers 和 Pages -> tax-check-project -> 设置 -> 变量和密钥
 变量值：你的 DeepSeek API Key
 ```
 
-可选添加模型变量：
+项目默认使用 `deepseek-flash`，用于表格定位、扫描页识别及报告 AI 优化。已有部署若设置了旧模型，可以将覆盖值更新为：
 
 ```text
 变量名：DEEPSEEK_MODEL
-变量值：deepseek-v4-pro
+变量值：deepseek-flash
 ```
 
-保存后，需要重新部署一次 Pages。
+扫描页默认也使用 `deepseek-flash`；如曾显式设置 `DEEPSEEK_VISION_MODEL` 或 `VISION_PROVIDER`，请一并检查。保存后，需要重新部署一次 Pages。
 
 ## 3. 当前接口
 
