@@ -7,6 +7,8 @@ const toolLabels: Record<string, string> = {
   list_generated_files: '查找已生成的文件',
   read_generated_file: '读取上一版文件',
   generate_file: '生成下载文件',
+  search_conversation: '查找之前的约定',
+  read_conversation: '读取历史对话',
   get_business_metric: '查询业务指标',
   get_account_balance_accounts: '查询科目余额',
   get_tax_archive: '查询资料归档情况',

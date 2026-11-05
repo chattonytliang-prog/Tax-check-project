@@ -4,6 +4,7 @@ import { requireUser } from '../auth/_auth.js'
 import { analyzeImages, assistantBusinessTools } from './assistant.js'
 import { archivedSourceBucket, archivedSourceCache, findArchivedSources, prepareArchivedSources, readArchivedSources } from './_archived_sources.js'
 import { AssistantResponseError, assistantRuntimeError, runAssistant } from '../_assistant_runtime.js'
+import { normalizeConversation } from '../_assistant_context.js'
 
 const maxDocumentChars = 280_000
 const maxArchivedDocumentChars = 4_000_000
@@ -130,10 +131,7 @@ async function answerQuestion({ db, env, user, threadId, requestId, message, his
   ).bind(user.id, threadId, ...ids).all() : { results: [] }
   if (results.length !== ids.length) return badRequest('部分附件在当前对话中不可用，请重新上传后再问')
   if (!env.DEEPSEEK_API_KEY) return json({ error: 'AI 模型尚未配置' }, { status: 503 })
-  const previous = Array.isArray(history) ? history.slice(-10).map((entry) => ({
-    role: entry?.role === 'assistant' ? 'assistant' : 'user',
-    content: String(entry?.content || '').slice(0, 3000),
-  })).filter((entry) => entry.content.trim()) : []
+  const previous = normalizeConversation(history)
   const question = `${message}\n${previous.filter((entry) => entry.role === 'user').slice(-2).map((entry) => entry.content).join('\n')}`.slice(0, 5000)
   const rows = new Map(results.map((row) => [row.id, row]))
   const budget = Math.floor(maxContextChars / (ids.length + new Set(sourceIds).size))
@@ -157,7 +155,7 @@ async function answerQuestion({ db, env, user, threadId, requestId, message, his
     return result.rows
   }
   const result = await runAssistant({
-    db, env, user, threadId, requestId, message, history: previous, signal,
+    db, env, user, threadId, clientId: archive?.clientId, requestId, message, history: previous, signal,
     businessTools: archive?.clientId ? assistantBusinessTools(db, { user }, archive.clientId) : {},
     instructions: '核对提问期间，不得将其他期间数字作为答案。生成的文件要写明资料范围和原文出处。对比多份资料时逐份核对。',
     sources: [...ids, ...new Set(sourceIds)].map((id, index) => ({
@@ -204,7 +202,7 @@ export async function onRequestPost({ request, env }) {
     const context = { db, env, user: auth.user, threadId }
     if (archive?.action === 'prepare') {
       if (typeof message !== 'string' || !message.trim() || message.length > 4000) return badRequest('请输入 1-4000 字的问题')
-      return await prepareArchivedSources({ ...context, archive, message })
+      return await prepareArchivedSources({ ...context, archive, message, history })
     }
     return attachment && typeof attachment === 'object'
       ? await saveAttachment({ ...context, attachment, archive })

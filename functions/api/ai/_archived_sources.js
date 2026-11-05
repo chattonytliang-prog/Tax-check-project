@@ -3,6 +3,27 @@ import { badRequest, json } from '../_utils.js'
 const archiveCacheVersion = 'v1'
 const maxArchiveSources = 48
 
+export function archiveQuestionWithHistory(message, history = []) {
+  const resets = /全部期间|所有期间|所有年份|全部年份|不限定|不限期间|不要沿用|不沿用/
+  if (/20\d{2}\s*(?:年|[-/])/.test(message) || resets.test(message)) return message
+  const partialPeriod = /(?<!\d)(?:1[0-2]|0?[1-9])\s*月(?:\s*(?:到|至|[-—])\s*(?:1[0-2]|0?[1-9])\s*月)?|第?[一二三四1-4]\s*季度/g
+  let year = ''
+  let period = ''
+  for (const entry of Array.isArray(history) ? history : []) {
+    if (entry?.role !== 'user' || typeof entry.content !== 'string') continue
+    if (resets.test(entry.content)) { year = ''; period = '' }
+    const full = [...entry.content.matchAll(/(20\d{2})(?:\s*年(?:\s*(?:(?:1[0-2]|0?[1-9])\s*月(?:\s*(?:到|至|[-—])\s*(?:1[0-2]|0?[1-9])\s*月)?|第?[一二三四1-4]\s*季度))?|[-/]\d{1,2})/g)]
+    if (full.length) { year = full.at(-1)[1]; period = full.map((match) => match[0]).join('、') }
+    else if (year) {
+      const partial = [...entry.content.matchAll(partialPeriod)].at(-1)?.[0]
+      if (partial) period = `${year}年${partial}`
+    }
+  }
+  if (!year || !period) return message
+  const partial = [...message.matchAll(partialPeriod)].at(-1)?.[0]
+  return `${message}\n沿用对话期间：${partial ? `${year}年${partial}` : period}`
+}
+
 function questionPeriod(message) {
   const periods = [...String(message || '').matchAll(/(20\d{2})(?:\s*年\s*(?:(1[0-2]|0?[1-9])\s*月(?:\s*(?:到|至|[-—])\s*(1[0-2]|0?[1-9])\s*月)?|第?([1-4一二三四])\s*季度)?|[-/](1[0-2]|0?[1-9])(?!\d))/g)]
   if (!periods.length) return null
@@ -58,10 +79,10 @@ export async function archivedSourceCache(bucket, source) {
   return { version, key: `assistant-original-text/${archiveCacheVersion}/${version}` }
 }
 
-export async function prepareArchivedSources({ db, env, user, archive, message }) {
+export async function prepareArchivedSources({ db, env, user, archive, message, history }) {
   let sources
   try {
-    sources = await findArchivedSources(db, user.id, archive.clientId, { message })
+    sources = await findArchivedSources(db, user.id, archive.clientId, { message: archiveQuestionWithHistory(message, history) })
   } catch (error) {
     if (!/no such table: tax_data_source_files\b/i.test(String(error))) throw error
     sources = []

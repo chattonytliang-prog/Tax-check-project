@@ -1,6 +1,8 @@
 import { badRequest, json, nowIso, readJson, requireDb, serverError } from '../_utils.js'
 import { requireUser } from '../auth/_auth.js'
 import { DEEPSEEK_API_URL, DEFAULT_DEEPSEEK_MODEL } from '../_deepseek.js'
+import { excerptText, normalizeConversation, prepareAssistantContext } from '../_assistant_context.js'
+import { reserveAiCall } from '../_ai_budget.js'
 
 const memoryTableStatements = [
   `CREATE TABLE IF NOT EXISTS assistant_customer_memories (
@@ -26,13 +28,7 @@ function cleanText(value, maxLength = 1200) {
 }
 
 function normalizeMessages(value) {
-  return (Array.isArray(value) ? value : [])
-    .map((item) => ({
-      role: item?.role === 'assistant' ? 'assistant' : 'user',
-      content: cleanText(item?.content, 2000),
-    }))
-    .filter((item) => item.content)
-    .slice(-80)
+  return normalizeConversation(value)
 }
 
 function parseJsonObject(text) {
@@ -49,16 +45,15 @@ function parseJsonObject(text) {
   }
 }
 
-function fallbackCompression(messages, client) {
-  const facts = messages
+function fallbackCompression(messages, client, context) {
+  const facts = [...(context?.userAgreements || []), ...messages
     .map((item) => `${item.role === 'assistant' ? 'AI' : '用户'}：${item.content}`)
-    .join('\n')
-    .slice(-5000)
+  ].join('\n')
   return {
-    summary: `${client.name}当前对话已压缩。保留最近稳定上下文：\n${facts}`,
+    summary: `${client.name}对话原文节选（摘要服务暂不可用）：\n${excerptText(facts, 2500)}`,
     memories: [{
       key: `thread_summary_${new Date().toISOString().slice(0, 10)}`,
-      value: facts,
+      value: excerptText(facts, 1000),
       confidence: 'medium',
     }],
   }
@@ -68,8 +63,8 @@ async function ensureMemoryTables(db) {
   for (const statement of memoryTableStatements) await db.prepare(statement).run()
 }
 
-async function summarizeWithModel(env, client, messages) {
-  if (!env.DEEPSEEK_API_KEY) return fallbackCompression(messages, client)
+async function summarizeWithModel(env, client, messages, context) {
+  if (!env.DEEPSEEK_API_KEY) return fallbackCompression(messages, client, context)
   const response = await fetch(DEEPSEEK_API_URL, {
     method: 'POST',
     headers: { authorization: `Bearer ${env.DEEPSEEK_API_KEY}`, 'content-type': 'application/json' },
@@ -96,15 +91,16 @@ async function summarizeWithModel(env, client, messages) {
           content: JSON.stringify({
             client: { id: client.id, name: client.name },
             messages,
+            context,
           }),
         },
       ],
     }),
   })
-  if (!response.ok) return fallbackCompression(messages, client)
+  if (!response.ok) return fallbackCompression(messages, client, context)
   const data = await response.json()
   const parsed = parseJsonObject(data?.choices?.[0]?.message?.content || '')
-  if (!parsed?.summary || !Array.isArray(parsed.memories)) return fallbackCompression(messages, client)
+  if (!parsed?.summary || !Array.isArray(parsed.memories)) return fallbackCompression(messages, client, context)
   return parsed
 }
 
@@ -129,7 +125,10 @@ export async function onRequestPost({ request, env }) {
     if (!ownedClient) return badRequest('Client not found')
 
     await ensureMemoryTables(db)
-    const compressed = await summarizeWithModel(env, ownedClient, messages)
+    const quota = await reserveAiCall(db, auth.user, env)
+    if (quota) return quota
+    const prepared = await prepareAssistantContext({ db, env, user: auth.user, threadId: body.threadId, clientId: ownedClient.id, history: messages, message: '整理企业长期记忆', signal: request.signal })
+    const compressed = await summarizeWithModel(env, ownedClient, prepared.recent, prepared.context)
     const memories = (Array.isArray(compressed.memories) ? compressed.memories : [])
       .map((item) => ({
         key: cleanText(item.key || item.memoryKey, 80),
