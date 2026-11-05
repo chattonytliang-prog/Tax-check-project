@@ -28,6 +28,8 @@ The AI assistant is a business-data operator:
 - It cannot write or change tax rules, risk rules, rule formulas, users, auth, database schema, or code.
 - Business writes must be validated by the host app and recorded in audit logs.
 
+The assistant uses AI SDK for consecutive tool calls and downloadable file outputs. Read, analyze, and generate operations run without another approval prompt. See [AI 助手文件与工具](docs/AI助手文件与工具.md) for supported formats, storage bindings, and the required database migration.
+
 ## Memory
 
 Long-term project memory is maintained in:

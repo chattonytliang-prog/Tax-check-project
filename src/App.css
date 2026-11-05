@@ -6991,3 +6991,50 @@ textarea:focus {
     flex-direction: column;
   }
 }
+.assistant-outputs {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.assistant-tool-steps {
+  color: var(--text-muted, #667085);
+  font-size: 13px;
+}
+
+.assistant-tool-steps summary {
+  cursor: pointer;
+}
+
+.assistant-download-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #d8e1ee;
+  border-radius: 12px;
+  background: #f5f8fc;
+  color: #253b57;
+  text-decoration: none;
+}
+
+.assistant-download-card span {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 4px;
+}
+
+.assistant-download-card strong {
+  overflow-wrap: anywhere;
+}
+
+.assistant-download-card small {
+  color: #667085;
+}
+
+.assistant-download-card:hover,
+.assistant-download-card:focus-visible {
+  border-color: #426fa0;
+  background: #edf3fa;
+}

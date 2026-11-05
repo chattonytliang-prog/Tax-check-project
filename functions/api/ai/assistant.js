@@ -2,6 +2,7 @@ import { badRequest, json, requireDb, serverError } from '../_utils.js'
 import { requireUser } from '../auth/_auth.js'
 import { readAiRequest, reserveAiCall } from '../_ai_budget.js'
 import { DEEPSEEK_API_URL, DEFAULT_DEEPSEEK_MODEL } from '../_deepseek.js'
+import { assistantRuntimeError, runAssistant, sdkBusinessTools } from '../_assistant_runtime.js'
 
 const readOnlyAgentTools = [
   {
@@ -639,67 +640,26 @@ async function callVisionProvider(provider, images, promptText, maxTokens = 1800
   return { ok: true, value: { content, model: provider.model, provider: provider.name } }
 }
 
-async function runConversationalAssistant({ env, db, auth, model, client, message, history, assistantContext, reasoning, images = [] }) {
+async function runConversationalAssistant({ env, db, auth, client, message, history, assistantContext, images = [], threadId, requestId, signal }) {
   const vision = images.length ? await analyzeImages(env, images, message) : null
   const customerMemories = await loadCustomerMemories(db, auth, client.id)
   const userContent = vision
     ? `${message || '请查看这些截图并结合当前企业上下文回答。'}\n\n[视觉模型 ${vision.model} 的截图识别结果]\n${vision.content}`
     : message
-  const messages = [
-    { role: 'system', content: `${conversationalSystemPrompt(client, assistantContext)}\n客户长期记忆：${JSON.stringify(customerMemories)}\n只能使用本请求 tools 数组中声明的工具名。禁止输出 DSML、XML、伪工具调用或不存在的工具名；如果不能调用工具，就用中文直接说明已有事实和缺口。\nUnderstand the user message as natural language first. Do not treat the entire sentence as a metric name, table row name, or literal search key. Infer intent and period, call read-only tools when data is needed, then answer naturally in Chinese. When the user asks what accounts exist in an account balance table, how many account categories there are, or requests those accounts in a table, call get_account_balance_accounts for the period inherited from the conversation. Present returned facts directly. Do not replace this request with a tax-archive completeness summary. If the user explicitly asks to show all accounts, output every returned account in a Markdown table instead of asking which category they want.` },
-    ...history.slice(-30).map((item) => ({ role: item.role, content: item.content })),
-    { role: 'user', content: userContent },
-  ]
-  let response = await fetch(DEEPSEEK_API_URL, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${env.DEEPSEEK_API_KEY}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ model, messages, tools: readOnlyAgentTools, tool_choice: 'auto', temperature: 0.35, max_tokens: 1800, ...reasoning }),
+  return runAssistant({
+    env, db, user: auth.user, threadId, requestId, signal,
+    message: userContent, history, firstCallReserved: !vision,
+    instructions: `${conversationalSystemPrompt(client, assistantContext)}\n客户长期记忆：${JSON.stringify(customerMemories)}`,
+    businessTools: assistantBusinessTools(db, auth, client.id),
   })
-  if (!response.ok) throw new Error(`Conversational AI request failed: ${(await response.text()).slice(0, 300)}`)
-  let data = await response.json()
-  const assistantMessage = data?.choices?.[0]?.message || {}
-  if (Array.isArray(assistantMessage.tool_calls) && assistantMessage.tool_calls.length) {
-    messages.push({ role: 'assistant', content: assistantMessage.content || '', tool_calls: assistantMessage.tool_calls })
-    for (const toolCall of assistantMessage.tool_calls.slice(0, 6)) {
-      const result = await executeReadOnlyAgentTool(db, auth, toolCall, client.id)
-      messages.push({ role: 'tool', tool_call_id: toolCall.id, name: toolCall.function?.name, content: JSON.stringify(result) })
-    }
-    response = await fetch(DEEPSEEK_API_URL, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${env.DEEPSEEK_API_KEY}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ model, messages, tools: readOnlyAgentTools, tool_choice: 'none', temperature: 0.25, max_tokens: 5000, ...reasoning }),
-    })
-    if (!response.ok) throw new Error(`Conversational AI follow-up failed: ${(await response.text()).slice(0, 300)}`)
-    data = await response.json()
-  }
-  let answer = String(data?.choices?.[0]?.message?.content || '').trim()
-  if (containsRawToolMarkup(answer)) {
-    const repairResponse = await fetch(DEEPSEEK_API_URL, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${env.DEEPSEEK_API_KEY}`, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: 'system',
-            content: `${conversationalSystemPrompt(client, assistantContext)}\n客户长期记忆：${JSON.stringify(customerMemories)}\n你刚才输出了无效工具调用标记。现在必须只用普通中文回答，禁止输出任何工具调用、XML、DSML、JSON。基于已知上下文说明风险、缺失资料和下一步；不能确定的就明确说需要补资料。`,
-          },
-          { role: 'user', content: userContent },
-        ],
-        tool_choice: 'none',
-        temperature: 0.2,
-        max_tokens: 1800,
-        ...reasoning,
-      }),
-    })
-    if (repairResponse.ok) {
-      const repairData = await repairResponse.json()
-      const repaired = String(repairData?.choices?.[0]?.message?.content || '').trim()
-      if (repaired && !containsRawToolMarkup(repaired)) answer = repaired
-    }
-  }
-  if (!answer) throw new Error('Conversational AI returned an empty answer')
-  return { answer, usage: data.usage || null }
+}
+
+export function assistantBusinessTools(db, auth, clientId) {
+  return sdkBusinessTools(readOnlyAgentTools, (call) => {
+    const args = cleanToolArguments(call.function.arguments)
+    call.function.arguments = JSON.stringify({ ...args, clientId })
+    return executeReadOnlyAgentTool(db, auth, call, clientId)
+  })
 }
 
 function compactRisk(risk) {
@@ -986,18 +946,25 @@ export async function onRequestPost({ request, env }) {
 
     const parsedRequest = await readAiRequest(request, 16_777_216)
     if (parsedRequest.response) return parsedRequest.response
-    const { message = '', history = [], client = null, risks = [], report = null, assistantContext = null, images = [] } = parsedRequest.data
+    const { message = '', history = [], client = null, risks = [], report = null, assistantContext = null, images = [], threadId, requestId } = parsedRequest.data
     const cleanMessage = String(message || '').trim()
     const cleanHistory = normalizeHistory(history)
     const cleanAssistantContext = normalizeAssistantContext(assistantContext)
     const cleanImages = normalizeImageInputs(images)
     if (!cleanMessage || cleanMessage.length > 4000) return badRequest('请输入 1-4000 字的问题')
     if (!client?.id || !client?.name) return badRequest('Client id and name are required')
+    if (threadId !== undefined) {
+      if (typeof threadId !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(threadId)) return badRequest('当前对话无效')
+      const thread = await db.prepare('SELECT id FROM assistant_threads WHERE id = ? AND owner_user_id = ?').bind(threadId, auth.user.id).first()
+      if (!thread) return badRequest('当前对话不可用')
+    }
+    if (requestId !== undefined && (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(requestId))) return badRequest('请求标识无效')
 
     const ownedClient = await resolveReadableClient(db, auth, client)
     const clientVerified = Boolean(ownedClient)
 
-    if (ownedClient && !cleanImages.length) {
+    const fileRequest = /文件|下载|导出|xlsx|docx|csv|json|txt|Excel|Word|上一版|上次生成|再做一版/i.test(cleanMessage)
+    if (ownedClient && !cleanImages.length && !fileRequest) {
       const deterministicAccountList = await deterministicAccountBalanceListAnswer(db, auth, ownedClient, cleanMessage, cleanHistory)
       if (deterministicAccountList) {
         return json({
@@ -1033,16 +1000,18 @@ export async function onRequestPost({ request, env }) {
     const model = env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL
     const reasoning = reasoningConfig(cleanMessage)
     const isReadOnlyQuestion = isReadOnlyBusinessQuestion(cleanMessage)
-    if ((ownedClient && !isBusinessWriteRequest(cleanMessage)) || isReadOnlyQuestion) {
+    if (!isBusinessWriteRequest(cleanMessage) || isReadOnlyQuestion || (fileRequest && threadId)) {
       const conversationClient = ownedClient || client
       const conversational = await runConversationalAssistant({
-        env, db, auth, model, client: conversationClient, message: cleanMessage,
-        history: cleanHistory, assistantContext: cleanAssistantContext, reasoning, images: cleanImages,
+        env, db, auth, client: conversationClient, message: cleanMessage,
+        history: cleanHistory, assistantContext: cleanAssistantContext, images: cleanImages,
+        threadId, requestId: requestId || crypto.randomUUID(), signal: request.signal,
       })
       return json({
         answer: conversational.answer,
         draftPatch: {}, missingFields: [], toolCalls: [], suggestions: [], followUps: [],
         clientVerified, model, usage: conversational.usage,
+        artifacts: conversational.artifacts, toolSteps: conversational.toolSteps,
       })
     }
     const messages = [
@@ -1193,6 +1162,6 @@ export async function onRequestPost({ request, env }) {
       usage: data.usage || null,
     })
   } catch (error) {
-    return serverError(error)
+    return assistantRuntimeError(error) || serverError(error)
   }
 }
