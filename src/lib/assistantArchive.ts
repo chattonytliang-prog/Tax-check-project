@@ -1,5 +1,6 @@
 import { apiSend } from './apiClient'
 import { readAssistantAttachment } from './assistantAttachment'
+import type { AssistantFileResponse } from './assistantArtifacts'
 
 type ArchivePreparation = {
   files: { id: string; name: string; contentType: string | null; version: string; cached: boolean }[]
@@ -8,15 +9,16 @@ type ArchivePreparation = {
 }
 
 export async function askArchivedSources({
-  threadId, clientId, message, history, signal, onProgress,
+  threadId, requestId, clientId, message, history, signal, onProgress,
 }: {
   threadId: string
+  requestId?: string
   clientId: string
   message: string
   history: { role: string; content: string }[]
   signal: AbortSignal
   onProgress: (message: string) => void
-}) {
+}): Promise<AssistantFileResponse | null> {
   const options = { signal }
   const prepare = await apiSend<ArchivePreparation>('/api/ai/attachments', 'POST', {
     threadId, message, archive: { action: 'prepare', clientId },
@@ -51,8 +53,8 @@ export async function askArchivedSources({
     failed.length ? `部分原件未能读取：\n${failed.map((item) => `- ${item}`).join('\n')}` : '',
   ].filter(Boolean).join('\n\n')
   if (!sourceIds.length) return { answer: `没有读到可用于本轮回答的原文。\n\n${warning}`, excerpted: false }
-  const result = await apiSend<{ answer: string; excerpted: boolean }>('/api/ai/attachments', 'POST', {
-    threadId, message, history, archive: { clientId, sourceIds },
+  const result = await apiSend<AssistantFileResponse>('/api/ai/attachments', 'POST', {
+    threadId, requestId, message, history, archive: { clientId, sourceIds },
   }, options)
   return {
     ...result,

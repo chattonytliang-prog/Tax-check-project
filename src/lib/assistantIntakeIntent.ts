@@ -24,6 +24,10 @@ export function isAssistantWorkflowRequest(message: string) {
   return /^(?:请你?|帮我|给我|麻烦你?|能否|可以|先|现在|\s)*(?:(?:生成|出具).{0,12}报告|(?:开始|运行|执行)(?:基础合规|风险检测|分析|评估)|(?:确认|保存|更新|修改)(?:导入|草稿|档案|期间数据|企业信息)|资料已传完|按这个保存)/.test(message)
 }
 
+export function isAssistantFileRequest(message: string) {
+  return /xlsx|docx|\bcsv\b|\bjson\b|\btxt\b|excel|word|下载|导出|上一版|上次生成|再做一版|生成.{0,16}文件|保存[成为].{0,16}文件/i.test(message)
+}
+
 export function isBinaryAssistantQuestion(text: string) {
   return /(是否|有没有|有无|可否|能否|是不是|是否已|是否可以|可不可以)/.test(text)
 }

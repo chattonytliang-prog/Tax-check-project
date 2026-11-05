@@ -121,9 +121,11 @@ import {
 } from './lib/clientImportParser'
 import { extractPdfTextPages } from './lib/pdfTextExtractor'
 import { parseLocatedTaxDocument, parseTaxDataPdfText, parseTaxDataWorkbook, type ParsedTaxDataIntake } from './lib/taxDataIntakeParser'
-import { binaryAssistantReplyMessage, hasDirectIntakeAuthorization, inferAssistantThreadRenameTitle, instantAssistantReply, isArchiveChecklistQuestion, isAssistantWorkflowRequest, isBinaryAssistantQuestion } from './lib/assistantIntakeIntent'
+import { binaryAssistantReplyMessage, hasDirectIntakeAuthorization, inferAssistantThreadRenameTitle, instantAssistantReply, isArchiveChecklistQuestion, isAssistantFileRequest, isAssistantWorkflowRequest, isBinaryAssistantQuestion } from './lib/assistantIntakeIntent'
 import { assistantAttachmentAccept, maxAssistantAttachments, readAssistantAttachment } from './lib/assistantAttachment'
 import { askArchivedSources } from './lib/assistantArchive'
+import type { AssistantFileResponse, AssistantGeneratedFile, AssistantToolStep } from './lib/assistantArtifacts'
+import { AssistantOutputs } from './components/AssistantOutputs'
 import {
   classifyIntakeMaterial,
   detectIntakePeriod,
@@ -409,6 +411,8 @@ type AiAssistantResponse = {
   clientVerified?: boolean
   model: string
   usage?: unknown
+  artifacts?: AssistantGeneratedFile[]
+  toolSteps?: AssistantToolStep[]
 }
 
 type AiAssistantMessage = {
@@ -416,6 +420,8 @@ type AiAssistantMessage = {
   role: 'user' | 'assistant'
   content: string
   attachmentIds?: string[]
+  artifacts?: AssistantGeneratedFile[]
+  toolSteps?: AssistantToolStep[]
   response?: AiAssistantResponse
 }
 
@@ -12423,10 +12429,12 @@ function AiAssistantPage({
   const askAssistant = async (message = assistantInput) => {
     const cleanMessage = message.trim()
     if ((!cleanMessage && !assistantPendingFiles.length) || assistantLoading || !assistantThreadsHydrated) return
+    const fileRequest = isAssistantFileRequest(cleanMessage)
     const readingRequested = /^(?:请|帮我|麻烦|\s)*(阅读|读取|读一下|读一读|看一下|看看|查看|查询|列出|解读|总结|概括|对比|比较|回答|解释|查找|提取)/.test(cleanMessage)
       || (!assistantPendingFiles.length && /(?:什么|哪些|多少|何时|什么时候|是否|怎么|为什么)/.test(cleanMessage))
     const directIntake = !readingRequested && hasDirectIntakeAuthorization(cleanMessage)
-    const workflowRequest = directIntake || isAssistantWorkflowRequest(cleanMessage)
+      && (!fileRequest || /导入|入库|录入|建档|收录/.test(cleanMessage))
+    const workflowRequest = directIntake || (!fileRequest && isAssistantWorkflowRequest(cleanMessage))
     const cleaningRequested = assistantPendingFiles.length > 0 && /^(?:请|帮我|麻烦|\s)*(清洗|整理成草稿)/.test(cleanMessage)
     const thread = activeAssistantThread
     const attachmentQuestion = !directIntake && !cleaningRequested && thread && (
@@ -12461,12 +12469,12 @@ function AiAssistantPage({
       setAssistantLoading(true)
       setActiveAssistantMessages([...assistantMessages, userMessage])
       updateAssistantThreadTitle(cleanMessage || files[0]?.name || '附件问答')
-      const appendAnswer = (content: string) => setActiveAssistantMessages((current) => [
-        ...current, { id: crypto.randomUUID(), role: 'assistant', content },
+      const appendAnswer = (content: string, result?: AssistantFileResponse) => setActiveAssistantMessages((current) => [
+        ...current, { id: crypto.randomUUID(), role: 'assistant', content, artifacts: result?.artifacts, toolSteps: result?.toolSteps },
       ])
       try {
         if (files.length) {
-          await apiSend('/api/assistant/threads', 'POST', { threads: [thread] }, requestOptions)
+          await apiSend('/api/assistant/threads', 'POST', { threads: [{ ...thread, messages: [...assistantMessages, userMessage] }] }, requestOptions)
         }
         for (const file of files) {
           if (!isRunActive()) return
@@ -12490,15 +12498,16 @@ function AiAssistantPage({
         if (failed.length) appendAnswer(`以下附件未能读取：\n${failed.map((failure) => `- ${failure}`).join('\n')}`)
         if (files.length && !uploaded.length) return
         setAssistantNotice('')
-        const response = await apiSend<{ answer: string; excerpted: boolean }>('/api/ai/attachments', 'POST', {
+        const response = await apiSend<AssistantFileResponse>('/api/ai/attachments', 'POST', {
           threadId: thread.id,
+          requestId: userMessage.id,
           attachmentIds: [...assistantAttachmentIds, ...uploaded],
           recentAttachmentCount: uploaded.length,
           message: question,
           history: assistantMessages.map(({ role, content }) => ({ role, content })),
         }, requestOptions)
         if (!isRunActive()) return
-        appendAnswer(response.answer)
+        appendAnswer(response.answer, response)
         if (response.excerpted) setAssistantNotice('附件较长，本轮回答使用了原文摘录。可以继续按文件、页码或关键词追问。')
       } catch (error) {
         if (isRunActive()) setAssistantError(error instanceof Error ? error.message : String(error))
@@ -12600,7 +12609,7 @@ function AiAssistantPage({
       }
       return
     }
-    const readOnlyDataQuestion = isReadOnlyBusinessDataQuestion(cleanMessage)
+    const readOnlyDataQuestion = fileRequest || isReadOnlyBusinessDataQuestion(cleanMessage)
     const archiveClient = assistantThreadClient || (
       !thread?.clientId || thread.clientId === temporaryAssistantClient.id
         ? clients.find((client) => client.id === selectedClient.id)
@@ -12675,9 +12684,11 @@ function AiAssistantPage({
     setAssistantError('')
     setAssistantNotice('')
     try {
+      if (thread) await apiSend('/api/assistant/threads', 'POST', { threads: [{ ...thread, messages: nextMessages }] }, { signal: abortController.signal })
       if (!workflowRequest && thread && archiveClient && (!assistantDrafts.length || readOnlyDataQuestion)) {
         const archived = await askArchivedSources({
           threadId: thread.id,
+          requestId: nextMessages.at(-1)!.id,
           clientId: archiveClient.id,
           message: cleanMessage,
           history: assistantMessages.map(({ role, content }) => ({ role, content })),
@@ -12687,13 +12698,18 @@ function AiAssistantPage({
         if (!isRunActive()) return
         if (archived) {
           if (!assistantThreadClient) bindActiveAssistantThreadToClient(archiveClient)
-          setActiveAssistantMessages([...nextMessages, { id: crypto.randomUUID(), role: 'assistant', content: archived.answer }])
+          setActiveAssistantMessages([...nextMessages, {
+            id: crypto.randomUUID(), role: 'assistant', content: archived.answer,
+            artifacts: archived.artifacts, toolSteps: archived.toolSteps,
+          }])
           if (archived.excerpted) setAssistantNotice('原件较长，本轮使用了相关摘录。可以按文件名、页码或工作表继续追问。')
           return
         }
       }
       if (readOnlyDataQuestion && archiveClient && !assistantThreadClient) bindActiveAssistantThreadToClient(archiveClient)
       const response = await apiSend<AiAssistantResponse>('/api/ai/assistant', 'POST', {
+        threadId: thread?.id,
+        requestId: nextMessages.at(-1)!.id,
         message: cleanMessage,
         history: assistantMessages.map((item) => ({ role: item.role, content: item.content })),
         client: readOnlyDataQuestion ? (assistantThreadClient || selectedClient) : (assistantDrafts[0]?.client || assistantThreadClient || selectedClient),
@@ -12709,6 +12725,8 @@ function AiAssistantPage({
           role: 'assistant',
           content: sanitizeAssistantAnswer(response.answer),
           response,
+          artifacts: response.artifacts,
+          toolSteps: response.toolSteps,
         },
       ])
       const toolResults = await executeAssistantToolCalls(response)
@@ -12883,6 +12901,7 @@ function AiAssistantPage({
                         )
                       ))}
                     </div>
+                    <AssistantOutputs artifacts={item.artifacts} toolSteps={item.toolSteps} />
                     {item.response?.clientVerified === false ? (
                       <small>当前企业尚未入库，本轮先按临时内容处理。</small>
                     ) : null}
@@ -12942,7 +12961,7 @@ function AiAssistantPage({
                   event.preventDefault()
                   void askAssistant()
                 }}
-                placeholder="直接提问，助手会优先读取当前企业的归档原件。也可以拖入新文件。"
+                placeholder="拖入文件后直接提问，也可以让助手生成 Excel、Word 等文件供下载。"
               />
             </div>
             <div className="ai-assistant-actions">
