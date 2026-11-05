@@ -278,7 +278,7 @@ function reportDocumentFooterHtml(report: ReportDocumentHtmlInput) {
   const documentId = reportDocumentId({ clientName: report.clientName, createdAt: generatedAt })
   return `
     <footer class="document-footer">
-      <strong>合耀科技 HY AI 税务风控工作台</strong>
+      <strong>合耀科技税务风险检测</strong>
       <span>报告编号：${escapeHtml(documentId)}</span>
       <span>报告版本：V1.0</span>
       <span>报告状态：基于已提供资料的系统初筛版（待顾问复核）</span>

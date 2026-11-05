@@ -7302,7 +7302,7 @@ function App() {
       window.alert('该用户已被禁用，不能代入。')
       return
     }
-    if (!window.confirm(`确定进入「${user.username}」的工作台吗？`)) return
+    if (!window.confirm(`确定进入「${user.username}」的账户吗？`)) return
 
     try {
       const response = await apiSend<{ user: AuthUser }>('/api/admin/impersonate', 'POST', { userId: user.id })
@@ -7312,7 +7312,7 @@ function App() {
       setDataStatus('loading')
     } catch (error) {
       console.warn('Failed to impersonate user.', error)
-      window.alert('进入用户工作台失败。')
+      window.alert('进入用户账户失败。')
     }
   }
 
@@ -7347,9 +7347,9 @@ function App() {
           <div className="brand-mark">
             <img src="/heyao-logo.jpg" alt="合耀科技" />
           </div>
-          <p className="eyebrow">内部税务风控工作台</p>
-          <h1>合耀税务风控工作台</h1>
-          <p className="login-copy">导入企业真实财税资料，按证据范围完成检查，生成可复核、可流转的涉税风险初筛报告。</p>
+          <p className="eyebrow">税务风险检测</p>
+          <h1>合耀税务风险检测</h1>
+          <p className="login-copy">导入企业财税资料，检查涉税风险，查看报告和原始依据。</p>
           <form className="login-card" onSubmit={handleAuthSubmit}>
             <div className="auth-switch">
               <button type="button" className={authMode === 'login' ? 'active' : ''} onClick={() => setAuthMode('login')}>
@@ -7380,16 +7380,16 @@ function App() {
             </Field>
             {authError && <p className="auth-error">{authError}</p>}
             <button className="primary-button full" type="submit" disabled={authLoading}>
-              {authLoading ? '处理中...' : authMode === 'login' ? '登录工作台' : '注册并进入'}
+              {authLoading ? '处理中...' : authMode === 'login' ? '登录' : '注册并进入'}
             </button>
           </form>
         </section>
         <aside className="login-aside">
           <div>
             <span>合耀科技 HY AI</span>
-            <strong>把税务经验沉淀成可复核的风控流程</strong>
+            <strong>检查税务风险，核对原始依据</strong>
           </div>
-          <p>围绕企业财税画像、风险检查和报告流转，帮助财务负责人更快完成税务风险初筛。</p>
+          <p>整理企业资料、检查异常，并生成税务风险报告。</p>
         </aside>
         <SiteComplianceFooter className="login-compliance-footer" />
       </main>
@@ -7403,7 +7403,7 @@ function App() {
           <img src="/heyao-logo.jpg" alt="合耀科技" />
           <div>
             <strong>合耀科技</strong>
-            <span>税务风控工作台</span>
+            <span>税务风险检测</span>
           </div>
         </div>
         <button
@@ -10321,7 +10321,7 @@ function ClientForm({ client, clients, onChange }: { client: Client; clients: Cl
         <div className="section-title-row">
           <div>
             <h3>项目结构</h3>
-            <p className="section-helper">涉税风险初筛通常按主体分别建档；选择集团项目后，系统会在工作台和结果页生成集团口径汇总。</p>
+            <p className="section-helper">涉税风险初筛通常按主体分别建档；选择集团项目后，总览和结果页会显示集团汇总。</p>
             {renderSectionRequirementSummary(['项目口径'])}
           </div>
           {renderSectionActions('项目结构', 'Step 1', clearProjectSection)}
@@ -12739,7 +12739,7 @@ function AiAssistantPage({
     <section className="page assistant-page">
       <header className="page-header">
         <div>
-          <p className="eyebrow">AI 工作台</p>
+          <p className="eyebrow">财税问答</p>
           <h2>AI 财税助手</h2>
         </div>
       </header>
