@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { EChartsOption } from 'echarts'
 import { unzipSync } from 'fflate'
 import type { EChartsType } from 'echarts/core'
@@ -115,11 +115,12 @@ import {
   decodeClientImportText,
   parseClientImportText,
   parseClientImportWorkbook,
+  readExcelSheetsForMapping,
   type ImportMappingPreview,
   type ParsedClientImport,
 } from './lib/clientImportParser'
 import { extractPdfTextPages } from './lib/pdfTextExtractor'
-import { parseTaxDataPdfText, type ParsedTaxDataIntake } from './lib/taxDataIntakeParser'
+import { parseLocatedTaxDocument, parseTaxDataPdfText, parseTaxDataWorkbook, type ParsedTaxDataIntake } from './lib/taxDataIntakeParser'
 import { binaryAssistantReplyMessage, hasDirectIntakeAuthorization, inferAssistantThreadRenameTitle, instantAssistantReply, isArchiveChecklistQuestion, isAssistantWorkflowRequest, isBinaryAssistantQuestion } from './lib/assistantIntakeIntent'
 import { assistantAttachmentAccept, maxAssistantAttachments, readAssistantAttachment } from './lib/assistantAttachment'
 import { askArchivedSources } from './lib/assistantArchive'
@@ -158,9 +159,12 @@ import { apiDelete, apiGet, apiSend, apiUpload } from './lib/apiClient'
 import { explicitDerivedMetadata } from './lib/explicitDerivedFields'
 import { assertSameImportClient, findExistingImportClient, type DirectImportBatch, type DirectImportItem } from './lib/firstReportJourney'
 import { DirectImportReceipt, FirstReportJourney } from './components/FirstReportJourney'
+import { confirmedExcelSource } from './lib/excelMappingSchema'
+import { autoMapExcelSheet } from './lib/autoExcelMapping'
+import { confirmedTaxDocumentSource, taxDocumentLocatorInput } from './lib/taxDocumentMapping'
 import './App.css'
 
-type Page = 'dashboard' | 'assistant' | 'clients' | 'form' | 'result' | 'report' | 'reports' | 'wallet' | 'rules' | 'admin'
+type Page = 'dashboard' | 'assistant' | 'clients' | 'form' | 'result' | 'report-readiness' | 'report' | 'reports' | 'wallet' | 'rules' | 'admin'
 type RiskDetectionStep = 'client' | 'period' | 'confirm' | 'result'
 type TaxpayerType = '' | '小规模纳税人' | '一般纳税人' | '个体工商户'
 type ProjectScope = '单主体' | '集团项目'
@@ -1426,11 +1430,21 @@ function mergeTaxDataIntakes(intakes: ParsedTaxDataIntake[]): ParsedTaxDataIntak
 }
 
 function taxRecordFingerprint(record: ParsedTaxDataIntake['records'][number]) {
+  const confirmedMapping = /^confirmed_(excel|document)_/.test(String(record.payload.templateId || ''))
   const payload = Object.fromEntries(Object.entries(record.payload).filter(([key]) => ![
-    'sourcePageNo', 'sourceRowNo', 'sourceSheetName', 'archiveEntryName',
+    ...(!confirmedMapping ? ['sourcePageNo', 'sourceRowNo', 'sourceSheetName'] : []), 'archiveEntryName',
     'templateId', 'templateVersion', 'templateValidationStatus',
   ].includes(key)))
   return JSON.stringify([record.recordType, record.recordSubtype || '', record.periodStart || '', record.periodEnd || '', payload])
+}
+
+function isConfirmedImportMapping(parsed: ParsedClientImport) {
+  return parsed.detectedSourceType === confirmedExcelSource || parsed.detectedSourceType === confirmedTaxDocumentSource
+}
+
+async function sha256Hex(input: BufferSource) {
+  const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', input))
+  return Array.from(hash, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 function analysisPeriodFromDates(periodStart: string, periodEnd: string) {
@@ -3417,6 +3431,34 @@ function standardPeriodEntriesFromSummary(client: Client, summary: TaxDataSummar
   })
 }
 
+const reportCompletionSourceByField: Partial<Record<string, string>> = {
+  年销售收入: '年度利润表或销售明细',
+  月开票金额: '当月销项发票明细',
+  收款流水: '当月银行或第三方收款流水',
+  上季度收入: '上季度利润表',
+  理论增值税税额: '增值税申报表及附表',
+  工资薪金总额: '当月工资表',
+}
+
+function buildDetectionClient(client: Client, selectedEntries: ClientPeriodEntry[], availableEntries: ClientPeriodEntry[]) {
+  return deriveClientMetrics({
+    ...client,
+    ...summarizeCanonicalPeriodEntries(client, selectedEntries),
+    id: client.id,
+    name: client.name,
+    creditCode: client.creditCode,
+    region: client.region,
+    industry: client.industry,
+    taxpayerType: client.taxpayerType,
+    establishedAt: client.establishedAt,
+    projectScope: client.projectScope,
+    groupName: client.groupName,
+    entityRole: client.entityRole,
+    standardMetricCoverage: Array.from(new Set(selectedEntries.flatMap((entry) => entry.metricCoverage || []))),
+    periodEntries: availableEntries,
+  })
+}
+
 function applyExplicitDerivedPatch(client: Client, patch: Partial<Client>, reason: string) {
   const { fields: manualDerivedFields, reasons: manualDerivedReasons } = explicitDerivedMetadata(
     patch as Record<string, unknown>,
@@ -4933,7 +4975,11 @@ function App() {
   const [taxDataDetailLoading, setTaxDataDetailLoading] = useState(false)
   const [taxDataDetailError, setTaxDataDetailError] = useState('')
   const [taxDataDirectImporting, setTaxDataDirectImporting] = useState(false)
+  const [uploadGuideOpen, setUploadGuideOpen] = useState(true)
   const [directImportBatch, setDirectImportBatch] = useState<DirectImportBatch | null>(null)
+  const [importApproval, setImportApproval] = useState<{ companyName: string; files: Array<{ name: string; descriptions: string[] }>; saving: boolean } | null>(null)
+  const importApprovalResolver = useRef<((approved: boolean) => void) | null>(null)
+  const directImportRun = useRef<object | null>(null)
   const taxDataDirectImportInputRef = useRef<HTMLInputElement>(null)
   const directImportTargetRef = useRef<Client | null>(null)
   const taxDataDetailCache = useRef(new Map<string, TaxDataDetail>())
@@ -4952,6 +4998,10 @@ function App() {
     setTaxDataDetailError('')
     taxDataDetailCache.current.clear()
     setDirectImportBatch(null)
+    directImportRun.current = null
+    importApprovalResolver.current?.(false)
+    setTaxDataDirectImporting(false)
+    setUploadGuideOpen(true)
     directImportTargetRef.current = null
     setAdminUsers([])
     setAdjustingPointsUser(null)
@@ -4963,6 +5013,9 @@ function App() {
     reportRetryDraft.current = null
     setPage('dashboard')
   }, [])
+  useEffect(() => {
+    if (page !== 'report-readiness') importApprovalResolver.current?.(false)
+  }, [page])
   const canViewRuleLibrary = Boolean(
     authUser
     && !authUser.actor
@@ -5317,12 +5370,6 @@ function App() {
     if (sourceBacked.length) return sourceBacked
     return selectedClient.periodEntries.filter((entry) => entry.dataBasis === '标准资料')
   }, [activeTaxDataSummary, selectedClient])
-  const journeyMonths = useMemo(() => detectionPeriodEntries
-    .filter((entry) => entry.months.length === 1)
-    .map((entry) => ({ id: entry.id, label: entry.months[0], month: entry.months[0] }))
-    .sort((a, b) => b.month.localeCompare(a.month)), [detectionPeriodEntries])
-  const journeySelectedMonthId = selectedPeriodEntryIds.length === 1
-    && journeyMonths.some((month) => month.id === selectedPeriodEntryIds[0]) ? selectedPeriodEntryIds[0] : ''
   const selectedPeriodEntryIdSet = useMemo(() => new Set(selectedPeriodEntryIds), [selectedPeriodEntryIds])
   const selectedPeriodEntries = useMemo(() => {
     const selected = detectionPeriodEntries.filter((entry) => selectedPeriodEntryIdSet.has(entry.id))
@@ -5334,25 +5381,8 @@ function App() {
     ? `${formatMonthRange(selectedPeriodMonths)} | 已纳入 ${new Set(selectedPeriodMonths).size} 个有独立月度原始资料的月份`
     : '请选择已有档案期间'
   const selectedDetectionClient = useMemo(() => {
-    if (!selectedClient) return null
-    if (!selectedPeriodEntries.length) return null
-    const standardMetricCoverage = Array.from(new Set(selectedPeriodEntries.flatMap((entry) => entry.metricCoverage || [])))
-    return deriveClientMetrics({
-      ...selectedClient,
-      ...summarizeCanonicalPeriodEntries(selectedClient, selectedPeriodEntries),
-      id: selectedClient.id,
-      name: selectedClient.name,
-      creditCode: selectedClient.creditCode,
-      region: selectedClient.region,
-      industry: selectedClient.industry,
-      taxpayerType: selectedClient.taxpayerType,
-      establishedAt: selectedClient.establishedAt,
-      projectScope: selectedClient.projectScope,
-      groupName: selectedClient.groupName,
-      entityRole: selectedClient.entityRole,
-      standardMetricCoverage,
-      periodEntries: detectionPeriodEntries,
-    })
+    if (!selectedClient || !selectedPeriodEntries.length) return null
+    return buildDetectionClient(selectedClient, selectedPeriodEntries, detectionPeriodEntries)
   }, [detectionPeriodEntries, selectedClient, selectedPeriodEntries])
   const currentRisks = useMemo(() => (selectedDetectionClient ? detectRisks(selectedDetectionClient, managedRules) : []), [selectedDetectionClient, managedRules])
   const currentSkippedRules = useMemo(() => (selectedDetectionClient ? getSkippedRules(selectedDetectionClient, managedRules) : []), [selectedDetectionClient, managedRules])
@@ -5781,6 +5811,16 @@ function App() {
       .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, 'zh-CN'))
       .slice(0, 10)
   }, [currentSkippedRules])
+  const completionFields = page === 'report-readiness' ? Array.from(new Set([
+    ...currentReportIssues.map((issue) => issue.label),
+    ...currentMissingFieldRows.map((row) => row.name),
+  ])).slice(0, 6) : []
+  const completionMaterials = Array.from(new Set(completionFields.flatMap((label) => {
+    const source = reportCompletionSourceByField[label]
+    if (source) return [source]
+    return currentSkippedRules.find(({ rule, execution }) => rule.materials.length
+      && execution.missingFields.some((field) => fieldLabel(field) === label))?.rule.materials.slice(0, 1) || []
+  }))).slice(0, 4)
   const jumpToIntakeField = (label: string) => {
     if (selectedClient) {
       setEditingClient(deriveClientMetrics(selectedClient))
@@ -6068,9 +6108,10 @@ function App() {
   }
 
   const parseTaxDataDirectFile = async (file: File): Promise<ParsedClientImport> => {
-    if (!/\.(xlsx|xls|csv|tsv|txt|json|pdf|zip)$/i.test(file.name)) {
-      throw new Error('仅支持 Excel、PDF、ZIP、CSV、TSV、TXT、JSON')
+    if (!/\.(xlsx|xls|csv|tsv|txt|json|pdf|docx?|zip)$/i.test(file.name)) {
+      throw new Error('仅支持 Excel、PDF、Word、ZIP、CSV、TSV、TXT、JSON')
     }
+    if (/\.docx?$/i.test(file.name)) return { patch: {}, mappings: [], unmappedHeaders: [], detectedTables: [] }
     const buffer = await file.arrayBuffer()
     if (/\.(xlsx|xls)$/i.test(file.name)) return parseClientImportWorkbook(buffer, file.name)
     if (/\.zip$/i.test(file.name)) {
@@ -6094,13 +6135,16 @@ function App() {
       }
     }
     if (/\.pdf$/i.test(file.name)) {
+      const pages = await extractPdfTextPages(buffer)
+      const taxDataIntake = parseTaxDataPdfText(file.name, pages)
+      if (pages.some((page) => !page)) taxDataIntake.autoImportEligible = false
       return {
         patch: {},
         mappings: [],
         unmappedHeaders: [],
         detectedTables: ['PDF 文本提取'],
         detectedSourceType: 'PDF 税务资料',
-        taxDataIntake: parseTaxDataPdfText(file.name, await extractPdfTextPages(buffer)),
+        taxDataIntake,
       }
     }
     return parseClientImportText(decodeClientImportText(buffer))
@@ -6158,7 +6202,10 @@ function App() {
     return updated
   }
 
-  const saveTaxDataDirectImport = async (file: File, parsedImport: ParsedClientImport, material: AssistantRawMaterial, client: Client, fileHash: string) => {
+  const saveTaxDataDirectImport = async (
+    file: File, parsedImport: ParsedClientImport, material: AssistantRawMaterial, client: Client, fileHash: string,
+    isActive: () => boolean, pendingMappingHash?: string,
+  ) => {
     const intake = parsedImport.taxDataIntake
     if (!intake?.records.length) throw new Error('未解析出可入库标准记录')
     if (!intake.autoImportEligible) {
@@ -6171,7 +6218,20 @@ function App() {
     const periodEnds = intake.records.map((record) => record.periodEnd).filter(Boolean).sort()
     const periodStart = periodStarts[0] || client.periodStartDate
     const periodEnd = periodEnds.at(-1) || client.periodEndDate
-    const batchId = `direct:${crypto.randomUUID()}`
+    const confirmedMapping = isConfirmedImportMapping(parsedImport)
+    const mappingHash = confirmedMapping
+      ? await sha256Hex(new TextEncoder().encode(JSON.stringify({
+        records: intake.records.map(taxRecordFingerprint),
+        cells: intake.evidenceFields.map(({ sheetName, rowNo, columnNo, targetField, pageNo }) => (
+          pageNo && parsedImport.detectedSourceType === confirmedTaxDocumentSource
+            ? [sheetName, rowNo, columnNo, targetField, pageNo] : [sheetName, rowNo, columnNo, targetField]
+        )),
+      })))
+      : undefined
+    if (pendingMappingHash && mappingHash !== pendingMappingHash) {
+      throw new Error('此文件有一批尚未完成的入库记录，请按上次确认的表型、字段、行范围、期间和金额单位重试。')
+    }
+    const batchId = `direct:${confirmedMapping ? material.id : crypto.randomUUID()}`
     const sourceFile = {
       id: material.id,
       materialId: material.id,
@@ -6190,16 +6250,19 @@ function App() {
         recordCounts: intake.recordCounts,
         warnings: intake.warnings,
         templateMatches: intake.templateMatches,
+        mappingHash,
         autoImportEligible: intake.autoImportEligible,
         entry: 'direct_tax_data_import',
       },
     }
-    const chunkSize = 80
+    const chunkSize = confirmedMapping ? 30 : 80
     const offsets = Array.from({ length: Math.ceil(intake.records.length / chunkSize) }, (_, index) => index * chunkSize)
+    if (confirmedMapping) offsets.push(intake.records.length)
     for (const offset of offsets) {
+      if (!isActive()) return 0
       const records = intake.records.slice(offset, offset + chunkSize).map((record) => ({ ...record, sourceFileId: material.id }))
       const recordIds = new Set(records.map((record) => record.id))
-      const isLastChunk = offset + records.length >= intake.records.length
+      const isLastChunk = confirmedMapping ? offset === intake.records.length : offset + records.length >= intake.records.length
       const result = await apiSend<{ results: Array<{ name: string; status: string; message: string }> }>('/api/assistant/tools', 'POST', {
         toolCalls: [{
           name: 'save_standardized_tax_data',
@@ -6211,13 +6274,13 @@ function App() {
             periodStart,
             periodEnd,
             status: isLastChunk ? 'confirmed' : 'importing',
-            sourceFiles: [sourceFile],
+            sourceFiles: [{ ...sourceFile, parseStatus: confirmedMapping && !isLastChunk ? 'pending' : 'parsed' }],
             records,
             evidenceFields: intake.evidenceFields.filter((item) => recordIds.has(item.targetId)).map((item) => ({ ...item, sourceFileId: material.id })),
             conflicts: offset === 0 ? intake.conflicts : [],
             summary: { totalRecordCount: intake.records.length, recordCounts: intake.recordCounts, warnings: intake.warnings, source: 'direct_tax_data_import' },
           },
-          reason: `标准资料导入入口按固定模板入库：${file.name}`,
+          reason: confirmedMapping ? `${parsedImport.detectedSourceType}后入库：${file.name}` : `标准资料导入入口按固定模板入库：${file.name}`,
           requiresConfirmation: false,
         }],
         allowSave: true,
@@ -6234,32 +6297,119 @@ function App() {
     taxDataDirectImportInputRef.current?.click()
   }
 
+  const proposeExcelDirectImport = async (file: File, parsed: ParsedClientImport, client: Client | null, initialName: string, isActive: () => boolean) => {
+    const sheets = await readExcelSheetsForMapping(await file.arrayBuffer())
+    const intakes: ParsedTaxDataIntake[] = []
+    const descriptions: string[] = []
+    const company = { name: client?.name || initialName, creditCode: client?.creditCode || '' }
+    for (const sheet of sheets) {
+      if (!isActive()) break
+      const standard = parseTaxDataWorkbook(file.name, [sheet])
+      const identified = standard.profilePatch?.name
+      if (identified && !isInvalidImportedCompanyName(identified)) {
+        if (company.name) assertSameImportClient(company, standard.profilePatch || {})
+        company.name ||= identified
+        company.creditCode ||= standard.profilePatch?.creditCode || ''
+      }
+      if (standard.autoImportEligible) {
+        intakes.push(standard)
+        continue
+      }
+      if (standard.conflicts.some(({ conflictType }) => conflictType === 'invalid_calendar_date')
+        || standard.templateMatches.some(({ matched, validations }) => matched
+          && validations.some(({ code, status }) => code === 'record_integrity' && status === 'failed'))) {
+        throw new Error(`工作表「${sheet.name}」已有记录未通过日期或完整性校验，请修正源表后重试。`)
+      }
+      const mapped = await autoMapExcelSheet(sheet, file.name, async (headers) => {
+        const result = await apiSend<{ mapping: unknown }>('/api/ai/excel-mapping', 'POST', { headers })
+        return result.mapping
+      })
+      descriptions.push(mapped.description)
+      intakes.push(mapped.intake)
+    }
+    const intake = mergeTaxDataIntakes(intakes)
+    if (!intake.autoImportEligible || !company.name || isInvalidImportedCompanyName(company.name)) {
+      throw new Error('无法识别可入库的工作表或所属企业。')
+    }
+    intake.profilePatch = { ...intake.profilePatch, ...company }
+    return { parsedImport: { ...parsed, detectedSourceType: confirmedExcelSource, taxDataIntake: intake }, descriptions }
+  }
+
+  const proposeTaxDocumentImport = async (file: File, parsed: ParsedClientImport, client: Client | null, initialName: string, isActive: () => boolean) => {
+    const sections = await readAssistantAttachment(file)
+    const pdf = /\.pdf$/i.test(file.name)
+    const intakes: ParsedTaxDataIntake[] = []
+    const descriptions: string[] = []
+    const company = { name: client?.name || initialName, creditCode: client?.creditCode || '' }
+    for (const [index, section] of sections.entries()) {
+      if (!isActive()) break
+      if (!pdf && section.label !== '正文') continue
+      let text = section.text
+      if (!text && section.image) {
+        text = (await apiSend<{ text: string }>('/api/ai/tax-document-mapping', 'POST', { image: section.image })).text
+      }
+      if (!isActive() || !text.trim()) continue
+      const lines = text.split(/\r?\n/)
+      const { mapping } = await apiSend<{ mapping: unknown }>('/api/ai/tax-document-mapping', 'POST', { lines: taxDocumentLocatorInput(lines) })
+      if (mapping === null) {
+        descriptions.push(`${section.label} · 未识别到可入库表格`)
+        continue
+      }
+      const intake = parseLocatedTaxDocument(lines, mapping, {
+        label: section.label, pageNo: pdf ? index + 1 : undefined, scanned: Boolean(section.image), periodText: sections[0]?.text,
+      })
+      const { name, creditCode } = intake.profilePatch || {}
+      const identified = name && !isInvalidImportedCompanyName(name) ? name : undefined
+      if (company.name) assertSameImportClient(company, { name: identified, creditCode })
+      company.name ||= identified || ''
+      company.creditCode ||= creditCode || ''
+      intakes.push(intake)
+      descriptions.push(`${section.label} · ${intake.templateMatches[0].templateName} · ${intake.records.length} 条${section.image ? ' · 扫描识别' : ''}`)
+    }
+    const intake = mergeTaxDataIntakes(intakes)
+    if (!intake.autoImportEligible || !company.name || isInvalidImportedCompanyName(company.name)) {
+      throw new Error('无法核实可入库的表格或所属企业。')
+    }
+    intake.profilePatch = { ...intake.profilePatch, ...company }
+    return { parsedImport: { ...parsed, detectedSourceType: confirmedTaxDocumentSource, taxDataIntake: intake }, descriptions }
+  }
+
   const handleTaxDataDirectImport = async (fileList: FileList | null, targetClient: Client | null) => {
     const files = Array.from(fileList || [])
-    if (!files.length || taxDataDirectImporting) return
+    if (!files.length || directImportRun.current) return
+    const run = {}
+    directImportRun.current = run
+    const isActive = () => directImportRun.current === run
     setTaxDataDirectImporting(true)
-    setSelectedPeriodEntryIds([])
+    if (page !== 'report-readiness') setSelectedPeriodEntryIds([])
     let savedCount = 0
+    let mappedFileSaved = false
+    let mappingConfirmed = false
+    let failedBeforeConfirmation = 0
     let currentClient: Client | null = targetClient
     let items: DirectImportItem[] = []
     setDirectImportBatch({ total: files.length, processed: 0, clientId: currentClient?.id || null, items: [] })
     const addItem = (item: DirectImportItem) => {
+      if (!isActive()) return
       items = [...items, item]
       setDirectImportBatch({ total: files.length, processed: items.length, clientId: currentClient?.id || null, items })
     }
     const seenFileHashes = new Set<string>()
     const seenRecordFingerprints = new Set<string>()
     const deferredFiles: File[] = []
+    const importProposals: Array<{ file: File; parsed: ParsedClientImport; descriptions: string[] }> = []
     try {
-      const processFile = async (file: File, deferUnknownIdentity: boolean) => {
+      const processFile = async (file: File, deferUnknownIdentity: boolean, proposed?: ParsedClientImport) => {
+        if (!isActive()) return
         try {
-          const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer())))
-            .map((byte) => byte.toString(16).padStart(2, '0')).join('')
-          if (seenFileHashes.has(digest)) {
+          const digest = await sha256Hex(await file.arrayBuffer())
+          if (!proposed && seenFileHashes.has(digest)) {
             addItem({ name: file.name, status: 'duplicate', records: 0, detail: '与本次上传的另一份文件完全相同' })
             return
           }
-          const parsedImport = await parseTaxDataDirectFile(file)
+          const parsedImport = proposed || await parseTaxDataDirectFile(file)
+          const needsMapping = /\.(xlsx?|pdf|docx?)$/i.test(file.name)
+            && (!parsedImport.taxDataIntake?.records.length || !parsedImport.taxDataIntake.autoImportEligible)
           const profilePatch = coerceImportedClientPatch({
             ...inferClientPatchFromFileName(file.name),
             ...(parsedImport.patch || {}),
@@ -6270,7 +6420,7 @@ function App() {
               deferredFiles.push(file)
               return
             }
-            throw new Error('文件里没有识别到可建档的企业名称，请选择已有企业后重试')
+            if (!needsMapping) throw new Error('文件里没有识别到可建档的企业名称，请选择已有企业后重试')
           }
           seenFileHashes.add(digest)
           if (currentClient && !isInvalidImportedCompanyName(currentClient.name)) {
@@ -6282,9 +6432,12 @@ function App() {
           const knownClient = currentClient || (profilePatch.name && !isInvalidImportedCompanyName(profilePatch.name)
             ? findExistingImportClient(clients, { name: profilePatch.name, creditCode: profilePatch.creditCode })
             : undefined)
+          if (!isActive()) return
           let restoredMaterial: AssistantRawMaterial | null = null
+          let pendingMappingHash: string | undefined
           if (knownClient) {
-            const archived = await apiGet<{ duplicate: boolean; sourceFileId: string | null; fileName: string | null; stored: boolean; recordCount: number }>(`/api/tax-data/source?clientId=${encodeURIComponent(knownClient.id)}&fileHash=${digest}`)
+            const archived = await apiGet<{ duplicate: boolean; sourceFileId: string | null; fileName: string | null; stored: boolean; recordCount: number; pendingMappingHash?: string }>(`/api/tax-data/source?clientId=${encodeURIComponent(knownClient.id)}&fileHash=${digest}`)
+            if (!isActive()) return
             if (archived.duplicate) {
               currentClient = knownClient
               setSelectedClientId(knownClient.id)
@@ -6296,7 +6449,8 @@ function App() {
                 formData.append('file', file)
                 await apiUpload('/api/tax-data/source', formData)
               }
-              if (archived.recordCount > 0) {
+              pendingMappingHash = archived.pendingMappingHash
+              if (archived.recordCount > 0 && !pendingMappingHash) {
                 addItem({
                   name: file.name,
                   status: archived.stored ? 'duplicate' : 'repaired',
@@ -6316,6 +6470,15 @@ function App() {
               }
             }
           }
+          if (needsMapping) {
+            const propose = /\.xlsx?$/i.test(file.name) ? proposeExcelDirectImport : proposeTaxDocumentImport
+            const proposal = await propose(file, parsedImport, knownClient || null,
+              profilePatch.name && !isInvalidImportedCompanyName(profilePatch.name)
+                ? profilePatch.name : importProposals[0]?.parsed.taxDataIntake?.profilePatch?.name || '', isActive)
+            if (isActive()) importProposals.push({ file, parsed: proposal.parsedImport, descriptions: proposal.descriptions })
+            return
+          }
+          if (!isActive()) return
           const intake = parsedImport.taxDataIntake
           if (!intake?.records.length) throw new Error('未解析出可入库标准记录')
           if (!intake.autoImportEligible) throw new Error('模板校验未通过，请核对文件类型、期间和表头')
@@ -6340,12 +6503,15 @@ function App() {
             }
           }
           const material = restoredMaterial || await uploadTaxDataDirectMaterial(file)
+          if (!isActive()) return
           currentClient = await resolveClientForTaxDataDirectImport(currentClient, parsedImport, file.name)
-          const savedRecords = await saveTaxDataDirectImport(file, parsedImport, material, currentClient, digest)
+          const savedRecords = await saveTaxDataDirectImport(file, parsedImport, material, currentClient, digest, isActive, pendingMappingHash)
+          if (!isActive()) return
           currentClient = standardClientFromIntake(currentClient, parsedImport.taxDataIntake!)
           await persistClientUpdate(currentClient)
           for (const fingerprint of fileFingerprints) seenRecordFingerprints.add(fingerprint)
           savedCount += 1
+          if (isConfirmedImportMapping(parsedImport)) mappedFileSaved = true
           addItem({ name: file.name, status: 'saved', records: savedRecords, detail: '' })
         } catch (error) {
           addItem({ name: file.name, status: 'failed', records: 0, detail: error instanceof Error ? error.message : String(error) })
@@ -6353,21 +6519,73 @@ function App() {
       }
       for (const file of files) await processFile(file, true)
       for (const file of deferredFiles) await processFile(file, false)
+      if (!isActive()) return
+      if (importProposals.length) {
+        const initialProfile = importProposals[0].parsed.taxDataIntake?.profilePatch
+        const company = currentClient || { name: initialProfile?.name || '', creditCode: initialProfile?.creditCode || '' }
+        const matchingProposals = importProposals.filter(({ file, parsed }) => {
+          try {
+            assertSameImportClient(company, parsed.taxDataIntake?.profilePatch || {})
+            return true
+          } catch {
+            addItem({ name: file.name, status: 'failed', records: 0, detail: '该文件与本批资料的所属企业不一致。' })
+            return false
+          }
+        })
+        importProposals.splice(0, importProposals.length, ...matchingProposals)
+      }
+      if (importProposals.length) {
+        failedBeforeConfirmation = items.filter(({ status }) => status === 'failed').length
+        mappingConfirmed = await new Promise<boolean>((resolve) => {
+          importApprovalResolver.current = (approved) => {
+            importApprovalResolver.current = null
+            setImportApproval((current) => approved && current ? { ...current, saving: true } : null)
+            resolve(approved)
+          }
+          setImportApproval({
+            companyName: importProposals[0].parsed.taxDataIntake?.profilePatch?.name || '',
+            files: importProposals.map(({ file, descriptions }) => ({ name: file.name, descriptions })),
+            saving: false,
+          })
+          setPage('report-readiness')
+        })
+        if (!isActive()) return
+        if (mappingConfirmed) {
+          for (const proposal of importProposals) await processFile(proposal.file, false, proposal.parsed)
+        } else {
+          for (const { file } of importProposals) addItem({ name: file.name, status: 'failed', records: 0, detail: '待确认资料未入库。' })
+        }
+      }
       taxDataDetailCache.current.clear()
       if (currentClient?.id) {
         const refreshed = await apiGet<TaxDataSummary>(`/api/tax-data/summary?clientId=${encodeURIComponent(currentClient.id)}`)
+        if (!isActive()) return
         setTaxDataSummary(refreshed)
+        const importedClientId = currentClient.id
+        if (mappedFileSaved || !reports.some((report) => report.clientId === importedClientId)) {
+          if (savedCount && !importProposals.length && page !== 'report-readiness') setPage('dashboard')
+          const failedCount = items.filter(({ status }) => status === 'failed').length
+          if (!failedCount || (mappingConfirmed && mappedFileSaved && failedCount === failedBeforeConfirmation)) {
+            const opened = await openFirstReportAfterImport(currentClient, refreshed, mappingConfirmed)
+            if (opened) return
+          }
+        }
       }
-      const importedClientId = currentClient?.id
-      if (savedCount && importedClientId && !reports.some((report) => report.clientId === importedClientId)) setPage('dashboard')
+      if (mappingConfirmed) setPage(currentClient ? 'clients' : 'dashboard')
     } catch (error) {
+      if (!isActive()) return
       setDirectImportBatch((current) => current ? {
         ...current,
         error: `资料汇总读取失败，已入库文件不会丢失：${error instanceof Error ? error.message : String(error)}`,
       } : current)
+      if (mappingConfirmed) setPage(currentClient ? 'clients' : 'dashboard')
     } finally {
-      setTaxDataDirectImporting(false)
-      if (taxDataDirectImportInputRef.current) taxDataDirectImportInputRef.current.value = ''
+      if (isActive()) {
+        directImportRun.current = null
+        setImportApproval(null)
+        setTaxDataDirectImporting(false)
+        if (taxDataDirectImportInputRef.current) taxDataDirectImportInputRef.current.value = ''
+      }
     }
   }
 
@@ -6480,10 +6698,13 @@ function App() {
 
   const refreshPointWallet = async () => {
     try {
-      setPointWallet(await apiGet<PointWallet>('/api/points'))
+      const wallet = await apiGet<PointWallet>('/api/points')
+      setPointWallet(wallet)
       setPointWalletError('')
+      return wallet
     } catch {
       setPointWalletError('积分数据暂不可用，请稍后刷新。')
+      return null
     }
   }
 
@@ -6765,23 +6986,62 @@ function App() {
       void refreshPointWallet()
       return
     }
-    if (!pointWallet) return
+    if (!pointWallet || !selectedDetectionClient) return
     const expectedCostPoints = pointWallet.adminUnlimited || pointWallet.freeReportAvailable ? 0 : pointWallet.reportCost
     setReportConfirmOpen(false)
+    await saveRiskReport(selectedDetectionClient, selectedPeriodMonths, activeTaxDataSummary, expectedCostPoints, true)
+  }
 
-    const reportClient = deriveClientMetrics({ ...(selectedDetectionClient || selectedClient), periodEntries: [] })
+  const openFirstReportAfterImport = async (client: Client, summary: TaxDataSummary, approved = false) => {
+    const entries = standardPeriodEntriesFromSummary(client, summary)
+    const latestMonth = entries.filter((entry) => entry.months.length === 1)
+      .sort((left, right) => right.months[0].localeCompare(left.months[0]))[0]
+    if (!latestMonth || reportInFlight.current) return false
+
+    setSelectedClientId(client.id)
+    setSelectedPeriodEntryIds([latestMonth.id])
+    const detectionClient = buildDetectionClient(client, [latestMonth], entries)
+    if (!approved && (validateClientForReport(detectionClient).length || getSkippedRules(detectionClient, managedRules).length)) {
+      setPage('report-readiness')
+      return true
+    }
+    await saveImportedReport(detectionClient, latestMonth.months, summary)
+    return true
+  }
+
+  const saveImportedReport = async (client: Client, months: string[], summary: TaxDataSummary | null) => {
+    setRiskDetectionStep('result')
+    setPage('result')
+    setPointWallet(null)
+    const wallet = await refreshPointWallet()
+    if (!wallet || (!wallet.adminUnlimited && !wallet.freeReportAvailable)) {
+      setReportConfirmOpen(true)
+      return
+    }
+    await saveRiskReport(client, months, summary, 0, false)
+  }
+
+  const saveRiskReport = async (
+    client: Client,
+    months: string[],
+    summary: TaxDataSummary | null,
+    expectedCostPoints: number,
+    enrichWithAi: boolean,
+  ) => {
+    if (reportInFlight.current) return
+    const reportClient = deriveClientMetrics({ ...client, periodEntries: [] })
     const risks = detectRisks(reportClient, managedRules)
     const skippedRules = getSkippedRules(reportClient, managedRules)
     const evaluatedRuleCount = getSourceRules(managedRules).length
-    const archiveEvidence = activeTaxDataSummary ? {
-      sourceFileCount: activeTaxDataSummary.stats.sourceFileCount ?? Number.NaN,
-      storedSourceFileCount: activeTaxDataSummary.stats.storedSourceFileCount ?? Number.NaN,
-      linkedSourceFileCount: activeTaxDataSummary.stats.linkedSourceFileCount ?? Number.NaN,
-      recordCount: activeTaxDataSummary.stats.recordCount,
+    const archiveEvidence = summary ? {
+      sourceFileCount: summary.stats.sourceFileCount ?? Number.NaN,
+      storedSourceFileCount: summary.stats.storedSourceFileCount ?? Number.NaN,
+      linkedSourceFileCount: summary.stats.linkedSourceFileCount ?? Number.NaN,
+      recordCount: summary.stats.recordCount,
     } : null
     const periodEvidenceSources = buildReportPeriodEvidenceSources(
-      activeTaxDataSummary?.sourceFiles || [],
-      selectedPeriodMonths,
+      summary?.sourceFiles || [],
+      months,
     )
     const structuredReport = buildStructuredReport(
       reportClient,
@@ -6840,6 +7100,12 @@ function App() {
         void refreshPointWallet()
       }
       window.alert(message)
+      return
+    }
+
+    if (!enrichWithAi) {
+      setAiReportStage(null)
+      reportInFlight.current = false
       return
     }
 
@@ -7172,7 +7438,7 @@ function App() {
         )}
         <nav id="app-navigation" className="sidebar-nav" onClick={() => { setMobileMenuOpen(false); window.scrollTo(0, 0) }}>
           <div className="nav-group">
-            <button className={page === 'dashboard' ? 'active' : ''} onClick={() => setPage('dashboard')}>
+            <button className={page === 'dashboard' || page === 'report-readiness' ? 'active' : ''} onClick={() => setPage('dashboard')}>
               <LayoutDashboard /> 涉税风险总览
             </button>
           </div>
@@ -7222,7 +7488,7 @@ function App() {
           ref={taxDataDirectImportInputRef}
           type="file"
           multiple
-          accept=".xls,.xlsx,.pdf,.zip,.csv,.tsv,.txt,.json"
+          accept=".xls,.xlsx,.pdf,.doc,.docx,.zip,.csv,.tsv,.txt,.json"
           className="assistant-hidden-file-input"
           onChange={(event) => void handleTaxDataDirectImport(event.target.files, directImportTargetRef.current)}
         />
@@ -7234,24 +7500,30 @@ function App() {
           </section>
         ) : !selectedClient || !reports.some((report) => report.clientId === selectedClient.id) ? (
           <FirstReportJourney
-            clients={clients.map((client) => ({ id: client.id, name: client.name, creditCode: client.creditCode }))}
+            clients={clients}
             selectedClientId={selectedClient?.id || ''}
             sourceFileCount={activeTaxDataSummary?.stats.sourceFileCount || 0}
             storedSourceFileCount={activeTaxDataSummary?.stats.storedSourceFileCount || 0}
             recordCount={activeTaxDataSummary?.stats.recordCount || 0}
-            months={journeyMonths}
-            selectedMonthId={journeySelectedMonthId}
+            hasPeriods={detectionPeriodEntries.length > 0}
             summaryLoading={Boolean(selectedClient && !activeTaxDataSummary && !activeTaxDataSummaryError)}
             summaryError={activeTaxDataSummaryError}
             batch={directImportBatch}
             importing={taxDataDirectImporting}
-            reportPrice={!pointWallet ? '正在查询本次报告费用' : pointWallet.adminUnlimited ? '管理员生成报告免费' : pointWallet.freeReportAvailable ? '本账号首份报告免费' : `保存新报告需要 ${pointWallet.reportCost} 积分`}
+            uploadGuideOpen={uploadGuideOpen}
+            onUploadGuideChange={setUploadGuideOpen}
             onSelectClient={(id) => { setSelectedClientId(id); setSelectedPeriodEntryIds([]) }}
             onUploadCurrent={() => openDirectImport(selectedClient || null)}
             onUploadNew={() => openDirectImport(null)}
             onInspect={() => { setTaxDataViewMode('month'); setPage('clients') }}
-            onSelectMonth={(id) => setSelectedPeriodEntryIds(id ? [id] : [])}
-            onStartDetection={() => { setRiskDetectionStep('confirm'); setPage('result') }}
+            onStartDetection={() => {
+              if (!selectedClient) return
+              if (detectionPeriodEntries.length === 1) {
+                analyzePeriodEntry(selectedClient, detectionPeriodEntries[0])
+              } else {
+                openClientForPeriodSelection(selectedClient)
+              }
+            }}
             onRetrySummary={() => { setTaxDataSummaryError(null); setTaxDataSummaryReload((value) => value + 1) }}
           />
         ) : (
@@ -7946,6 +8218,69 @@ function App() {
               </div>
             </header>
             <ClientForm client={editingClient} clients={clients} onChange={setEditingClient} />
+          </section>
+        )}
+
+        {page === 'report-readiness' && importApproval && (
+          <section className="page">
+            <header className="page-header"><h2>生成风险初筛报告</h2></header>
+            <section className="panel">
+              <p><strong>{importApproval.companyName}</strong> 的以下资料已匹配。继续即确认入库，并使用可分析的资料生成报告。</p>
+              <ul>{importApproval.files.map(({ name, descriptions }, index) => (
+                <li key={`${name}-${index}`}><strong>{name}</strong><br />{descriptions.join('；')}</li>
+              ))}</ul>
+              <p className="section-helper">报告使用最新可分析月份。资料不足的事项会标为暂未判断。</p>
+              {directImportBatch?.items.some(({ status }) => status === 'failed') && <DirectImportReceipt batch={directImportBatch} />}
+              <button type="button" className="primary-button" disabled={importApproval.saving} onClick={() => importApprovalResolver.current?.(true)}>
+                {importApproval.saving ? '正在入库并生成…' : '用现有资料生成'}
+              </button>
+            </section>
+          </section>
+        )}
+        {page === 'report-readiness' && !importApproval && selectedClient && selectedDetectionClient && (
+          <section className="page">
+            <header className="page-header">
+              <div>
+                <p className="eyebrow">报告前检查</p>
+                <h2>数据补全建议</h2>
+                <p className="section-helper">{selectedClient.name} · {formatMonthRange(selectedPeriodMonths)}</p>
+              </div>
+            </header>
+            <section className="panel">
+              <div className="panel-title">
+                <div>
+                  <h3>优先补齐这些资料</h3>
+                  <p className="section-helper">可以补传相关期间的原始资料后重新检查，也可以先出报告。资料不足的事项会在报告中标为暂未判断。</p>
+                </div>
+              </div>
+              <div className="readiness-panel">
+                <div>
+                  <strong>缺少的数据</strong>
+                  <div className="chips">
+                    {completionFields.map((label) => <span key={label}>{label}</span>)}
+                  </div>
+                </div>
+                <div>
+                  <strong>建议补传的原件</strong>
+                  <div className="chips">
+                    {completionMaterials.map((material) => <span key={material}>{material}</span>)}
+                    {completionMaterials.length === 0 && <span>包含上述字段的原始资料</span>}
+                  </div>
+                </div>
+              </div>
+              {currentSkippedRules.length > 0 && <p className="section-helper">当前有 {currentSkippedRules.length} 项检查因资料不足暂未判断。</p>}
+              <div className="header-actions">
+                <button type="button" className="primary-button" disabled={taxDataDirectImporting} onClick={() => openDirectImport(selectedClient)}>
+                  <Plus /> 补传资料
+                </button>
+                <button type="button" className="secondary-button" disabled={taxDataDirectImporting} onClick={() => void saveImportedReport(selectedDetectionClient, selectedPeriodMonths, activeTaxDataSummary)}>
+                  用现有资料生成
+                </button>
+              </div>
+              {directImportBatch && (taxDataDirectImporting || directImportBatch.error || directImportBatch.items.some((item) => item.status === 'failed')) && (
+                <DirectImportReceipt batch={directImportBatch} />
+              )}
+            </section>
           </section>
         )}
 
@@ -12762,7 +13097,7 @@ function ReportPage({
         <div className="header-actions">
           {report.aiSource && !report.aiGenerated && (
             <button className="secondary-button" onClick={() => onRetryAi(report)} disabled={Boolean(aiStage)}>
-              <Sparkles /> 重试 AI 润色
+              <Sparkles /> {aiFailure ? '重试 AI 润色' : 'AI 润色'}
             </button>
           )}
           <button className="secondary-button" onClick={onGenerate} disabled={Boolean(aiStage)}>
@@ -12785,7 +13120,9 @@ function ReportPage({
         </div>
       </header>
       {!aiStage && report.aiSource && !report.aiGenerated && (
-        <p className="period-warning">当前展示已保存的标准报告。AI 润色未完成{aiFailure ? `：${aiFailure}` : ''}。重试不会再次扣积分。</p>
+        <p className="period-warning">{aiFailure
+          ? `当前展示已保存的标准报告。AI 润色未完成：${aiFailure}。重试不会再次扣积分。`
+          : '当前展示已保存的标准报告，可按需使用 AI 润色。'}</p>
       )}
       {legacyMethodology && (
         <div className="period-warning-list">

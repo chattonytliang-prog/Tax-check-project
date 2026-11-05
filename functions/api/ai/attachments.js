@@ -1,4 +1,5 @@
 import { aiUpstreamFailure, readAiRequest, reserveAiCall } from '../_ai_budget.js'
+import { DEEPSEEK_API_URL, DEFAULT_DEEPSEEK_MODEL } from '../_deepseek.js'
 import { badRequest, json, requireDb, serverError } from '../_utils.js'
 import { requireUser } from '../auth/_auth.js'
 import { analyzeImages } from './assistant.js'
@@ -152,8 +153,8 @@ async function answerQuestion({ db, env, user, threadId, message, history, attac
   }
   const quota = await reserveAiCall(db, user, env)
   if (quota) return quota
-  const model = env.DEEPSEEK_MODEL || 'deepseek-v4-pro'
-  const response = await fetch('https://api.deepseek.com/chat/completions', {
+  const model = env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL
+  const response = await fetch(DEEPSEEK_API_URL, {
     method: 'POST',
     headers: { authorization: `Bearer ${env.DEEPSEEK_API_KEY}`, 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -163,6 +164,7 @@ async function answerQuestion({ db, env, user, threadId, message, history, attac
         ...previous,
         { role: 'user', content: JSON.stringify({ question: message, attachments: sources }) },
       ],
+      thinking: { type: 'disabled' },
       temperature: 0.2,
       max_tokens: 5000,
     }),

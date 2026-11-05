@@ -30,7 +30,10 @@ export async function onRequestGet({ request, env }) {
       if (!/^[a-f0-9]{64}$/.test(fileHash)) return badRequest('fileHash must be a SHA-256 digest')
       await ensureTaxDataIntakeTables(db)
       const match = await db.prepare(
-        `SELECT id, file_name, storage_key FROM tax_data_source_files
+        `SELECT id, file_name, storage_key,
+          CASE WHEN parse_status = 'pending' AND json_valid(evidence_json)
+            THEN json_extract(evidence_json, '$.mappingHash') END AS pending_mapping_hash
+         FROM tax_data_source_files
          WHERE owner_user_id = ? AND client_id = ? AND file_hash = ? LIMIT 1`,
       ).bind(auth.user.id, clientId, fileHash).first()
       const record = match ? await db.prepare(
@@ -43,6 +46,7 @@ export async function onRequestGet({ request, env }) {
         fileName: match?.file_name || null,
         stored: Boolean(match?.storage_key),
         recordCount: Number(record?.count) || 0,
+        ...(match?.pending_mapping_hash ? { pendingMappingHash: match.pending_mapping_hash } : {}),
       }, { headers: { 'cache-control': 'no-store' } })
     }
     if (!sourceFileId) return badRequest('sourceFileId is required')

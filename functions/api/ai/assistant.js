@@ -1,9 +1,7 @@
 import { badRequest, json, requireDb, serverError } from '../_utils.js'
 import { requireUser } from '../auth/_auth.js'
 import { readAiRequest, reserveAiCall } from '../_ai_budget.js'
-
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
-const DEFAULT_MODEL = 'deepseek-v4-pro'
+import { DEEPSEEK_API_URL, DEFAULT_DEEPSEEK_MODEL } from '../_deepseek.js'
 
 const readOnlyAgentTools = [
   {
@@ -583,7 +581,8 @@ export async function analyzeImages(env, images, prompt, transcribe = false) {
   const qwenKey = env.QWEN_API_KEY || env.DASHSCOPE_API_KEY || env.VISION_API_KEY
   const providers = []
   const preferredProvider = String(env.VISION_PROVIDER || 'auto').toLowerCase()
-  if (preferredProvider !== 'deepseek' && qwenKey) {
+  const useDeepSeek = preferredProvider === 'deepseek' || (preferredProvider !== 'qwen' && env.DEEPSEEK_API_KEY)
+  if (!useDeepSeek && qwenKey) {
     const qwenModels = env.VISION_MODEL
       ? [env.VISION_MODEL]
       : ['qwen3-vl-plus', 'qwen3-vl-flash', 'qwen-vl-max-latest', 'qwen-vl-max', 'qwen-vl-plus-latest', 'qwen-vl-plus']
@@ -594,12 +593,13 @@ export async function analyzeImages(env, images, prompt, transcribe = false) {
       model,
     })
   }
-  if ((preferredProvider === 'deepseek' || !qwenKey) && env.DEEPSEEK_API_KEY) {
+  if (useDeepSeek && env.DEEPSEEK_API_KEY) {
     providers.push({
       name: 'DeepSeek',
       apiKey: env.DEEPSEEK_API_KEY,
       apiUrl: env.DEEPSEEK_VISION_API_URL || DEEPSEEK_API_URL,
-      model: env.DEEPSEEK_VISION_MODEL || env.DEEPSEEK_MODEL || DEFAULT_MODEL,
+      model: env.DEEPSEEK_VISION_MODEL || DEFAULT_DEEPSEEK_MODEL,
+      thinking: { type: 'disabled' },
     })
   }
   if (!providers.length) throw new Error('截图粘贴已启用，但视觉模型尚未配置。当前未发现可用于图片输入的 DEEPSEEK_API_KEY、QWEN_API_KEY、DASHSCOPE_API_KEY 或 VISION_API_KEY。')
@@ -628,6 +628,7 @@ async function callVisionProvider(provider, images, promptText, maxTokens = 1800
       }],
       temperature: 0.1,
       max_tokens: maxTokens,
+      thinking: provider.thinking,
     }),
   })
   if (!response.ok) return { ok: false, error: (await response.text()).slice(0, 300) }
@@ -1029,7 +1030,7 @@ export async function onRequestPost({ request, env }) {
 
     const quotaResponse = await reserveAiCall(db, auth.user, env)
     if (quotaResponse) return quotaResponse
-    const model = env.DEEPSEEK_MODEL || DEFAULT_MODEL
+    const model = env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL
     const reasoning = reasoningConfig(cleanMessage)
     const isReadOnlyQuestion = isReadOnlyBusinessQuestion(cleanMessage)
     if ((ownedClient && !isBusinessWriteRequest(cleanMessage)) || isReadOnlyQuestion) {

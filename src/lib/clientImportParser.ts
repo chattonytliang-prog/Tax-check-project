@@ -1,5 +1,5 @@
 import { conditionFields } from './ruleEngine'
-import { parseTaxDataWorkbook, type ParsedTaxDataIntake } from './taxDataIntakeParser'
+import { parseTaxDataWorkbook, type IntakeSheet, type ParsedTaxDataIntake } from './taxDataIntakeParser'
 
 export type ImportMappingPreview = {
   source: string
@@ -1166,4 +1166,22 @@ export async function parseClientImportWorkbook(buffer: ArrayBuffer, fileName = 
   return intakeSheets.length
     ? { ...parsed, taxDataIntake: parseTaxDataWorkbook(fileName, intakeSheets) }
     : parsed
+}
+
+export async function readExcelSheetsForMapping(buffer: ArrayBuffer): Promise<IntakeSheet[]> {
+  const XLSX = await import('@e965/xlsx')
+  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true, dense: true })
+  return workbook.SheetNames.flatMap((name) => {
+    const sheet = workbook.Sheets[name]
+    if (!sheet['!ref']) return []
+    const range = XLSX.utils.decode_range(sheet['!ref'])
+    if (range.e.r >= 25000 || range.e.c >= 256) {
+      throw new Error(`工作表「${name}」超出列映射范围（25,000 行、256 列），请分表后重试。`)
+    }
+    const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean | Date>>(sheet, {
+      header: 1, blankrows: true, defval: '', raw: false, dateNF: 'yyyy-mm-dd',
+      range: { ...range, s: { r: 0, c: 0 } },
+    }).map((row) => row.map((cell) => String(cell).trim()))
+    return rows.filter((row) => row.some(Boolean)).length >= 2 ? [{ name, rows }] : []
+  })
 }

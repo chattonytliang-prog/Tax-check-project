@@ -2440,8 +2440,7 @@ th {
   color: var(--muted);
 }
 
-.journey-client-switch select,
-.journey-period-choice select {
+.journey-client-switch select {
   min-height: 42px;
   max-width: 100%;
   padding: 8px 10px;
@@ -2451,94 +2450,113 @@ th {
   color: var(--ink);
 }
 
-.journey-steps {
-  list-style: none;
-  margin: 24px 0 0;
-  padding: 0;
-  border-top: 1px solid var(--line);
-}
-
-.journey-steps > li {
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  gap: 20px;
-  padding: 24px 12px;
-  border-bottom: 1px solid var(--line);
-}
-
-.journey-steps > li.current {
-  border-left: 3px solid var(--teal);
-  padding-left: 9px;
-  background: var(--surface-2);
-}
-
-.journey-step-number {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  color: var(--muted);
-  font-weight: 800;
-}
-
-.journey-steps > li.current .journey-step-number,
-.journey-steps > li.complete .journey-step-number {
-  border-color: var(--teal);
-  color: var(--teal);
-}
-
-.journey-step-body {
-  min-width: 0;
-}
-
-.journey-step-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: start;
-  gap: 16px;
-}
-
-.journey-step-heading h3 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.journey-step-heading p,
-.journey-facts,
-.journey-client-name {
-  margin: 6px 0 0;
+.journey-facts {
+  margin: 12px 0;
   color: var(--muted);
   line-height: 1.5;
 }
 
-.journey-step-status {
-  flex: none;
+.upload-guide-modal {
+  position: fixed;
+  inset: 0;
+  width: min(640px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: clamp(20px, 5vw, 36px);
+  gap: 24px;
+  border-radius: 20px;
+  color: var(--ink);
+}
+
+.upload-guide-modal:not([open]) {
+  display: none;
+}
+
+.upload-guide-modal::backdrop {
+  background: rgba(4, 18, 24, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+.upload-guide-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 14px;
+}
+
+.upload-guide-icon,
+.upload-guide-close {
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface-2);
   color: var(--teal);
-  font-size: 13px;
-  font-weight: 700;
 }
 
-.journey-actions,
-.journey-period-choice {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin-top: 16px;
+.upload-guide-icon {
+  width: 44px;
+  height: 44px;
 }
 
-.journey-period-choice label {
-  font-weight: 700;
+.upload-guide-close {
+  width: 36px;
+  height: 36px;
+  color: var(--muted);
 }
 
-.journey-period-choice select {
-  min-width: 210px;
+.upload-guide-close svg {
+  width: 18px;
+  height: 18px;
 }
 
-.journey-step-body > .primary-button {
-  margin-top: 16px;
+.upload-guide-header .eyebrow {
+  margin: 0 0 5px;
+}
+
+.upload-guide-header h2 {
+  margin: 0;
+  font-size: clamp(23px, 4vw, 32px);
+}
+
+#upload-guide-intro {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.upload-guide-requirements {
+  margin: 0;
+  padding: 4px clamp(12px, 3vw, 20px);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.upload-guide-requirements > div {
+  display: grid;
+  grid-template-columns: 4em minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px 0;
+  line-height: 1.6;
+}
+
+.upload-guide-requirements > div + div {
+  border-top: 1px solid var(--line);
+}
+
+.upload-guide-requirements dt {
+  font-weight: 800;
+}
+
+.upload-guide-requirements dd {
+  margin: 0;
+  color: var(--muted);
+}
+
+.upload-guide-action {
+  justify-content: center;
+  min-height: 48px;
 }
 
 .journey-import-receipt {
@@ -6746,31 +6764,6 @@ textarea:focus {
 }
 
 @media (max-width: 720px) {
-  .journey-steps > li {
-    grid-template-columns: 32px minmax(0, 1fr);
-    gap: 12px;
-    padding-right: 0;
-  }
-
-  .journey-step-number {
-    width: 30px;
-    height: 30px;
-  }
-
-  .journey-step-heading {
-    display: block;
-  }
-
-  .journey-step-status {
-    display: block;
-    margin-top: 8px;
-  }
-
-  .journey-period-choice select {
-    width: 100%;
-    min-width: 0;
-  }
-
   .login-panel h1 {
     font-size: 30px;
     line-height: 1.1;

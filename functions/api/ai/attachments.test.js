@@ -23,7 +23,6 @@ beforeEach(() => {
     ('thread-a', 'owner-a', 'A', '{}'), ('thread-b', 'owner-a', 'B', '{}'), ('thread-c', 'owner-b', 'C', '{}')`)
   env = {
     DEEPSEEK_API_KEY: 'test-only',
-    VISION_PROVIDER: 'deepseek',
     DEEPSEEK_VISION_API_URL: 'https://vision.example.test/completions',
     DB: {
       prepare(sql) {
@@ -169,6 +168,7 @@ describe('assistant attachment questions', () => {
   })
 
   it('retains scanned-page text for follow-ups and selects relevant passages in long sources', async () => {
+    env.QWEN_API_KEY = 'also-configured'
     const fetch = vi.fn(async (url) => completion(url.includes('vision.example.test') ? '扫描页记载编号 SA-901。' : '原文编号为 SA-901。'))
     vi.stubGlobal('fetch', fetch)
     const scan = await upload('扫描.pdf', [{ label: '第 4 页', text: '', image: 'data:image/jpeg;base64,YQ==' }])
@@ -178,7 +178,15 @@ describe('assistant attachment questions', () => {
     const response = await post({ message: '扫描页的编号和保函编号分别是什么？', attachmentIds: [scan, long] })
     expect(await response.json()).toMatchObject({ excerpted: true })
     expect(fetch).toHaveBeenCalledTimes(2)
-    const messages = JSON.parse(fetch.mock.calls[1][1].body).messages
+    expect(fetch.mock.calls[0][0]).toBe(env.DEEPSEEK_VISION_API_URL)
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({
+      model: 'deepseek-flash',
+      messages: [{ role: 'user', content: expect.arrayContaining([
+        { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,YQ==' } },
+      ]) }],
+    })
+    const { model, messages } = JSON.parse(fetch.mock.calls[1][1].body)
+    expect(model).toBe('deepseek-flash')
     const { attachments } = JSON.parse(messages.at(-1).content)
     expect(attachments[0].sections).toEqual([{ label: '第 4 页', text: '扫描页记载编号 SA-901。' }])
     expect(attachments[1].sections.some(({ text }) => text.includes('保函编号 BG-439'))).toBe(true)

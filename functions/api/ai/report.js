@@ -1,9 +1,7 @@
 import { badRequest, json, requireDb, serverError } from '../_utils.js'
 import { requireUser } from '../auth/_auth.js'
 import { aiUpstreamFailure, readAiRequest, reserveAiCall } from '../_ai_budget.js'
-
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
-const DEFAULT_MODEL = 'deepseek-v4-pro'
+import { DEEPSEEK_API_URL, DEFAULT_DEEPSEEK_MODEL } from '../_deepseek.js'
 
 function compactRisk(risk) {
   return {
@@ -151,7 +149,7 @@ export async function onRequestPost({ request, env }) {
     if (quotaResponse) return quotaResponse
 
     const establishmentFacts = calculateEstablishmentFacts(client)
-    const model = env.DEEPSEEK_MODEL || DEFAULT_MODEL
+    const model = env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL
     const requestOptions = {
       method: 'POST',
       headers: {
