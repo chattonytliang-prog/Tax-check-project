@@ -7353,7 +7353,7 @@ function App() {
       <main className="login-shell">
         <section className="login-panel">
           <div className="brand-mark">
-            <img src="/heyao-logo.jpg" alt="合耀科技" />
+            <img src="/heyao-icon-192.png" alt="合耀科技" />
           </div>
           <p className="eyebrow">税务风险检测</p>
           <h1>合耀税务风险检测</h1>
@@ -7408,7 +7408,7 @@ function App() {
     <div className="app-shell">
       <aside className={`sidebar${mobileMenuOpen ? ' mobile-menu-open' : ''}`}>
         <div className="sidebar-brand">
-          <img src="/heyao-logo.jpg" alt="合耀科技" />
+          <img src="/heyao-icon-192.png" alt="合耀科技" />
           <div>
             <strong>合耀科技</strong>
             <span>税务风险检测</span>
@@ -10723,7 +10723,10 @@ function StructuredReportPreview({
   return (
     <div className="structured-report">
       <section className="report-cover">
-        <p className="eyebrow">企业涉税风险初筛报告 · 基于已提供资料</p>
+        <div className="report-cover-heading">
+          <p className="eyebrow">企业涉税风险初筛报告 · 基于已提供资料</p>
+          <img src="/heyao-icon-192.png" alt="合耀科技" className="report-cover-brand" width={84} height={84} />
+        </div>
         <h1>{report.title}</h1>
         <div className="report-cover-meta">
           {report.scope.filter(isCustomerFacingReportFact).slice(0, 4).map((item) => (
