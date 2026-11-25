@@ -13,6 +13,11 @@ export function canCheckoutWithWechat(env, user) {
     && (env.WECHAT_PAY_ENABLED !== 'pilot' || user.id === env.WECHAT_PAY_PILOT_USER_ID?.trim()))
 }
 
+export function canCheckoutWithWechatTest(env, user) {
+  return canCheckoutWithWechat(env, user) && Boolean(env.WECHAT_PAY_TEST_USER_ID?.trim())
+    && user.id === env.WECHAT_PAY_TEST_USER_ID.trim() && user.username?.toLowerCase() === 'test2'
+}
+
 export function paymentConfig(env, requireEnabled = true) {
   if (!wechatConfigured({ ...env, WECHAT_PAY_ENABLED: requireEnabled ? env.WECHAT_PAY_ENABLED : 'true' })) throw new Error('PAYMENT_NOT_CONFIGURED')
   const url = new URL(env.WECHAT_NOTIFY_URL)

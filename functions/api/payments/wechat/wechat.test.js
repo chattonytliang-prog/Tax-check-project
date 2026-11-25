@@ -4,12 +4,15 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { decryptNotification, paymentConfig, settleWechat, verifyWechat, wechatRequest } from '../../_wechat.js'
 import { onRequestPost as notify } from './notify.js'
 import { onRequestPost as create } from './orders.js'
+import { onRequestPost as createTest } from './test-order.js'
 import { onRequestGet as config } from './config.js'
 import { onRequestGet as query } from './orders/[id].js'
 
 vi.mock('../../auth/_auth.js', () => ({ requireUser: async (request) => {
   const id = request.headers.get('x-test-user')
-  return id ? { user: { id, role: 'user', actor: request.headers.get('x-test-actor') } } : { response: new Response('', { status: 401 }) }
+  return id ? { user: { id, username: request.headers.get('x-test-username') || (id === 'u' ? 'test2' : id),
+    role: request.headers.get('x-test-role') || 'user', actor: request.headers.get('x-test-actor') } }
+    : { response: new Response('', { status: 401 }) }
 } }))
 
 let keys, env
@@ -48,6 +51,12 @@ function database() {
 function transaction(extra = {}) {
   return { out_trade_no: 'order123', mchid: '12345', appid: 'wx123', trade_state: 'SUCCESS', trade_type: 'NATIVE',
     amount: { total: 20000, currency: 'CNY' }, transaction_id: '1234567890', success_time: new Date().toISOString(), ...extra }
+}
+const origin = 'https://tax.heyaokeji.com'
+function migrateTestRecharge(db) {
+  db.sqlite.exec('BEGIN')
+  db.sqlite.exec(readFileSync(new URL('../../../../migrations/0015_wechat_test_recharge.sql', import.meta.url), 'utf8'))
+  db.sqlite.exec('COMMIT')
 }
 async function headers(body, timestamp = String(Math.floor(Date.now() / 1000))) {
   const nonce = 'nonce123'
@@ -223,5 +232,86 @@ describe('WeChat payment security and atomic credits', () => {
     expect((await wechatRequest(env, 'POST', '/v3/pay/transactions/native', { amount: { total: 20000 } })).code_url).toContain('weixin://')
     responseHeaders.set('Wechatpay-Signature', 'invalid')
     await expect(wechatRequest(env, 'GET', '/v3/test')).rejects.toThrow()
+  })
+
+  it('offers the 1-yuan endpoint only to the explicitly configured test2 account in its own session', async () => {
+    const db = database()
+    migrateTestRecharge(db)
+    const testEnv = { ...env, DB: db, WECHAT_PAY_TEST_USER_ID: 'u' }
+    const upstream = vi.fn()
+    vi.stubGlobal('fetch', upstream)
+    for (const [headers, code] of [
+      [{}, 401],
+      [{ 'x-test-user': 'other', 'x-test-username': 'test2' }, 403],
+      [{ 'x-test-user': 'u', 'x-test-username': 'renamed' }, 403],
+      [{ 'x-test-user': 'u', 'x-test-actor': 'admin' }, 403],
+      [{ 'x-test-user': 'u', 'x-test-role': 'admin' }, 403],
+    ]) {
+      const configs = await config({ request: new Request(`${origin}/api/payments/wechat/config`, { headers }), env: testEnv })
+      expect(await configs.json()).toEqual({ enabled: true, amountFen: 20000, points: 200 })
+      const request = new Request(`${origin}/api/payments/wechat/test-order`, {
+        method: 'POST', headers: { origin, ...headers }, body: JSON.stringify({ requestId: 'denied-request-123' }),
+      })
+      expect((await createTest({ request, env: testEnv })).status).toBe(code)
+    }
+    const testUser = { 'x-test-user': 'u' }
+    for (const [settings, offersTest] of [[env, false], [testEnv, true]]) {
+      const response = await config({ request: new Request(`${origin}/api/payments/wechat/config`, { headers: testUser }),
+        env: { ...settings, DB: db } })
+      expect(response.headers.get('cache-control')).toBe('no-store')
+      expect((await response.json()).test).toEqual(offersTest ? { amountFen: 100, points: 1 } : undefined)
+    }
+    expect(upstream).not.toHaveBeenCalled()
+    expect(db.sqlite.prepare('SELECT count(*) AS n FROM wechat_orders').get().n).toBe(1)
+  })
+
+  it('preserves paid history across migration and settles a separate 1-yuan order exactly once', async () => {
+    const db = database()
+    await settleWechat(db, transaction(), env)
+    const historicOrders = db.sqlite.prepare('SELECT * FROM wechat_orders').all()
+    const historicRecharges = db.sqlite.prepare('SELECT * FROM wechat_recharges').all()
+    migrateTestRecharge(db)
+    expect(db.sqlite.prepare('SELECT * FROM wechat_orders').all()).toEqual(historicOrders)
+    expect(db.sqlite.prepare('SELECT * FROM wechat_recharges').all()).toEqual(historicRecharges)
+    expect(db.sqlite.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    const wallet = () => db.sqlite.prepare("SELECT balance FROM point_wallets WHERE user_id='u'").get().balance
+    expect(wallet()).toBe(10200)
+    expect(() => db.sqlite.exec(`INSERT INTO wechat_orders (id,user_id,request_id,appid,mchid,amount_fen,points,expires_at)
+      VALUES ('invalid','u','invalid','wx123','12345',100,200,'2099-01-01')`)).toThrow()
+
+    const amounts = []
+    vi.stubGlobal('fetch', vi.fn(async (_url, options) => {
+      amounts.push(JSON.parse(options.body).amount.total)
+      const raw = JSON.stringify({ code_url: 'weixin://wxpay/test' })
+      return new Response(raw, { headers: await headers(raw) })
+    }))
+    const testEnv = { ...env, DB: db, WECHAT_PAY_TEST_USER_ID: 'u' }
+    const orderRequest = (endpoint, requestId) => new Request(`${origin}/api/payments/wechat/${endpoint}`, {
+      method: 'POST', headers: { origin, 'x-test-user': 'u' },
+      body: JSON.stringify({ requestId, amountFen: 100000, points: 500 }),
+    })
+    const testId = 'test-request-12345'
+    const testResponse = await createTest({ request: orderRequest('test-order', testId), env: testEnv })
+    expect(testResponse.status).toBe(200)
+    const { order } = await testResponse.json()
+    expect(order).toMatchObject({ status: 'pending', amountFen: 100, points: 1 })
+    const normal = await create({ request: orderRequest('orders', 'normal-request-123'), env: testEnv })
+    expect(normal.status).toBe(200)
+    expect((await normal.json()).order).toMatchObject({ status: 'pending', amountFen: 20000, points: 200 })
+    const retry = await createTest({ request: orderRequest('test-order', 'test-retry-12345'), env: testEnv })
+    expect((await retry.json()).order.id).toBe(order.id)
+    expect((await create({ request: orderRequest('orders', testId), env: testEnv })).status).toBe(409)
+    expect(amounts).toEqual([100, 20000])
+
+    const verified = transaction({ out_trade_no: order.id, transaction_id: '1234567891', amount: { total: 100, currency: 'CNY' } })
+    await expect(settleWechat(db, { ...verified, amount: { total: 20000, currency: 'CNY' } }, testEnv)).rejects.toThrow()
+    expect(wallet()).toBe(10200)
+    const body = JSON.stringify(await notification(verified))
+    const signed = await headers(body)
+    const callback = () => notify({ request: new Request(env.WECHAT_NOTIFY_URL, { method: 'POST', body, headers: signed }), env: testEnv })
+    expect((await Promise.all([callback(), callback()])).map(({ status }) => status)).toEqual([204, 204])
+    expect(wallet()).toBe(10201)
+    expect(db.sqlite.prepare('SELECT points FROM wechat_recharges WHERE order_id = ?').get(order.id).points).toBe(1)
+    expect(db.sqlite.prepare('SELECT count(*) AS n FROM wechat_recharges').get().n).toBe(2)
   })
 })

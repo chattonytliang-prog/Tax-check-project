@@ -2700,6 +2700,10 @@ th {
   overflow-wrap: anywhere;
 }
 
+.payment-test-panel {
+  margin-top: 16px;
+}
+
 .payment-code-panel button {
   margin: 4px 8px 4px 0;
 }
