@@ -4,6 +4,7 @@ import { unzipSync } from 'fflate'
 import type { EChartsType } from 'echarts/core'
 import type * as ThreeNamespace from 'three'
 import { WechatRecharge } from './components/WechatRecharge'
+import { LoginCrystalMotion } from './components/LoginCrystalMotion'
 import {
   AlertTriangle,
   BarChart3,
@@ -11,6 +12,8 @@ import {
   CheckCircle2,
   ClipboardList,
   Download,
+  Eye,
+  EyeOff,
   FileText,
   Folder,
   FolderOpen,
@@ -4916,10 +4919,16 @@ function RiskOrbit({
   )
 }
 
-function SiteComplianceFooter({ className = '' }: { className?: string }) {
+function SiteComplianceFooter({
+  className = '',
+  showOperator = true,
+}: {
+  className?: string
+  showOperator?: boolean
+}) {
   return (
     <footer className={`site-compliance-footer${className ? ` ${className}` : ''}`}>
-      <span>运营主体：北京翰昇咨询有限公司</span>
+      {showOperator && <span>运营主体：北京翰昇咨询有限公司</span>}
       <a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">
         京ICP备2026063322号-1
       </a>
@@ -4933,6 +4942,7 @@ function App() {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const [authUsername, setAuthUsername] = useState('')
   const [authPassword, setAuthPassword] = useState('')
+  const [authPasswordVisible, setAuthPasswordVisible] = useState(false)
   const [authError, setAuthError] = useState('')
   const [authLoading, setAuthLoading] = useState(true)
   const [page, setPage] = useState<Page>('dashboard')
@@ -7253,6 +7263,7 @@ function App() {
       setAuthUser(response.user)
       setLoggedIn(true)
       setAuthPassword('')
+      setAuthPasswordVisible(false)
       setDataStatus('loading')
     } catch (error) {
       console.warn('Authentication failed.', error)
@@ -7349,57 +7360,81 @@ function App() {
     : { field: '', operator: '=', value: '' }
 
   if (!loggedIn) {
+    const isLogin = authMode === 'login'
     return (
       <main className="login-shell">
-        <section className="login-panel">
-          <div className="brand-mark">
-            <img src="/heyao-icon-192.png" alt="合耀科技" />
-          </div>
-          <p className="eyebrow">税务风险检测</p>
-          <h1>合耀税务风险检测</h1>
-          <p className="login-copy">导入企业财税资料，检查涉税风险，查看报告和原始依据。</p>
-          <form className="login-card" onSubmit={handleAuthSubmit}>
-            <div className="auth-switch">
-              <button type="button" className={authMode === 'login' ? 'active' : ''} onClick={() => setAuthMode('login')}>
-                登录
-              </button>
-              <button type="button" className={authMode === 'register' ? 'active' : ''} onClick={() => setAuthMode('register')}>
-                注册
-              </button>
+        <header className="login-header">
+          <div className="login-brand">
+            <img src="/heyao-icon-192.png" width="48" height="48" alt="" />
+            <div className="login-brand-text">
+              <span>合耀科技</span>
+              <span className="login-product">税务风险检测</span>
             </div>
-            <Field label="用户名">
+          </div>
+        </header>
+        <div className="login-stage">
+          <section className="login-panel" aria-labelledby="login-title">
+            <h1 id="login-title" className={isLogin ? 'login-title-emphasis' : undefined}>{isLogin ? '账号登录' : '注册账号'}</h1>
+            <p className="login-copy">从资料出发，让税务风险有据可查。</p>
+            <form className="login-form" onSubmit={handleAuthSubmit} aria-busy={authLoading}>
+              <label className="login-label" htmlFor="login-username">用户名</label>
               <input
+                id="login-username"
+                name="username"
                 value={authUsername}
                 onChange={(event) => setAuthUsername(event.target.value)}
-                placeholder="3-32 位字母、数字或下划线"
+                placeholder={isLogin ? '请输入用户名' : '3–32 位字母、数字或下划线'}
                 autoComplete="username"
                 disabled={authLoading}
+                required
               />
-            </Field>
-            <Field label="密码">
-              <input
-                value={authPassword}
-                onChange={(event) => setAuthPassword(event.target.value)}
-                type="password"
-                placeholder="至少 6 位"
-                autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
+              <label className="login-label" htmlFor="login-password">密码</label>
+              <div className="login-password">
+                <input
+                  id="login-password"
+                  name="password"
+                  value={authPassword}
+                  onChange={(event) => setAuthPassword(event.target.value)}
+                  type={authPasswordVisible ? 'text' : 'password'}
+                  placeholder={isLogin ? '请输入密码' : '至少 6 位'}
+                  autoComplete={isLogin ? 'current-password' : 'new-password'}
+                  disabled={authLoading}
+                  required
+                />
+                <button
+                  className="login-password-toggle"
+                  type="button"
+                  aria-label={authPasswordVisible ? '隐藏密码' : '显示密码'}
+                  aria-controls="login-password"
+                  disabled={authLoading}
+                  onClick={() => setAuthPasswordVisible((visible) => !visible)}
+                >
+                  {authPasswordVisible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                </button>
+              </div>
+              {authError && <p className="login-error" role="alert">{authError}</p>}
+              <button className="login-submit" type="submit" disabled={authLoading}>
+                {authLoading ? '处理中…' : isLogin ? '登录' : '注册并进入'}
+              </button>
+            </form>
+            <p className="login-mode">
+              {isLogin ? '没有账号？' : '已有账号？'}
+              <button
+                type="button"
                 disabled={authLoading}
-              />
-            </Field>
-            {authError && <p className="auth-error">{authError}</p>}
-            <button className="primary-button full" type="submit" disabled={authLoading}>
-              {authLoading ? '处理中...' : authMode === 'login' ? '登录' : '注册并进入'}
-            </button>
-          </form>
-        </section>
-        <aside className="login-aside">
-          <div>
-            <span>合耀科技 HY AI</span>
-            <strong>检查税务风险，核对原始依据</strong>
-          </div>
-          <p>整理企业资料、检查异常，并生成税务风险报告。</p>
-        </aside>
-        <SiteComplianceFooter className="login-compliance-footer" />
+                onClick={() => {
+                  setAuthMode(isLogin ? 'register' : 'login')
+                  setAuthPasswordVisible(false)
+                  setAuthError('')
+                }}
+              >
+                {isLogin ? '注册' : '登录'}
+              </button>
+            </p>
+          </section>
+        </div>
+        <SiteComplianceFooter className="login-compliance-footer" showOperator={false} />
+        <LoginCrystalMotion />
       </main>
     )
   }
