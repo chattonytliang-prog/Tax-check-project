@@ -1,6 +1,6 @@
 import { json, requireDb } from '../../_utils.js'
 import { requireUser } from '../../auth/_auth.js'
-import { paymentConfig, paymentError, publicOrder, wechatRequest } from '../../_wechat.js'
+import { canCheckoutWithWechat, paymentConfig, paymentError, publicOrder, wechatRequest } from '../../_wechat.js'
 
 export async function onRequestPost({ request, env }) {
   try {
@@ -11,6 +11,7 @@ export async function onRequestPost({ request, env }) {
     const origin = request.headers.get('origin')
     if (origin !== new URL(request.url).origin) return json({ error: '无效请求来源' }, { status: 403 })
     paymentConfig(env)
+    if (!canCheckoutWithWechat(env, auth.user)) return json({ error: '微信支付尚未向当前账户开放。' }, { status: 403 })
     const { requestId } = await request.json()
     if (!/^[a-zA-Z0-9-]{16,64}$/.test(requestId || '')) return json({ error: '无效订单请求' }, { status: 400 })
     await db.prepare("UPDATE wechat_orders SET status = 'expired' WHERE user_id = ? AND status = 'pending' AND expires_at <= ?")

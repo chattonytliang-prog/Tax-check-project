@@ -3,7 +3,14 @@ const fields = ['WECHAT_MCH_ID', 'WECHAT_APP_ID', 'WECHAT_CERT_SERIAL', 'WECHAT_
   'WECHAT_API_V3_KEY', 'WECHAT_PUBLIC_KEY_ID', 'WECHAT_PUBLIC_KEY', 'WECHAT_NOTIFY_URL']
 
 export function wechatConfigured(env) {
-  return env.WECHAT_PAY_ENABLED === 'true' && fields.every((name) => typeof env[name] === 'string' && env[name].trim())
+  const enabled = env.WECHAT_PAY_ENABLED === 'true'
+    || (env.WECHAT_PAY_ENABLED === 'pilot' && Boolean(env.WECHAT_PAY_PILOT_USER_ID?.trim()))
+  return enabled && fields.every((name) => typeof env[name] === 'string' && env[name].trim())
+}
+
+export function canCheckoutWithWechat(env, user) {
+  return Boolean(user && !user.actor && user.role !== 'admin'
+    && (env.WECHAT_PAY_ENABLED !== 'pilot' || user.id === env.WECHAT_PAY_PILOT_USER_ID?.trim()))
 }
 
 export function paymentConfig(env, requireEnabled = true) {

@@ -4,6 +4,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { decryptNotification, paymentConfig, settleWechat, verifyWechat, wechatRequest } from '../../_wechat.js'
 import { onRequestPost as notify } from './notify.js'
 import { onRequestPost as create } from './orders.js'
+import { onRequestGet as config } from './config.js'
 import { onRequestGet as query } from './orders/[id].js'
 
 vi.mock('../../auth/_auth.js', () => ({ requireUser: async (request) => {
@@ -138,6 +139,30 @@ describe('WeChat payment security and atomic credits', () => {
     const db = database()
     expect((await query({ request: new Request('https://tax.heyaokeji.com', { headers: { 'x-test-user': 'other' } }),
       params: { id: 'order123' }, env: { ...env, DB: db } })).status).toBe(404)
+  })
+  it('opens pilot checkout only for the selected account in its own session', async () => {
+    const db = database()
+    const pilotEnv = { ...env, DB: db, WECHAT_PAY_ENABLED: 'pilot', WECHAT_PAY_PILOT_USER_ID: 'u' }
+    const url = 'https://tax.heyaokeji.com/api/payments/wechat/config'
+    for (const [headers, enabled] of [
+      [{}, false],
+      [{ 'x-test-user': 'other' }, false],
+      [{ 'x-test-user': 'u', 'x-test-actor': 'admin' }, false],
+      [{ 'x-test-user': 'u' }, true],
+    ]) {
+      const response = await config({ request: new Request(url, { headers }), env: pilotEnv })
+      expect((await response.json()).enabled).toBe(enabled)
+    }
+    const response = await create({
+      request: new Request('https://tax.heyaokeji.com/api/payments/wechat/orders', {
+        method: 'POST', headers: { 'x-test-user': 'other', origin: 'https://tax.heyaokeji.com' },
+        body: JSON.stringify({ requestId: '1234567890123456' }),
+      }),
+      env: pilotEnv,
+    })
+    expect(response.status).toBe(403)
+    expect(db.sqlite.prepare('SELECT count(*) AS n FROM wechat_orders').get().n).toBe(1)
+    expect(() => paymentConfig({ ...pilotEnv, WECHAT_PAY_PILOT_USER_ID: '' })).toThrow()
   })
   it('creates a fixed-price QR and reuses the same active order on retries', async () => {
     const db = database()
