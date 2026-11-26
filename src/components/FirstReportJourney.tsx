@@ -70,7 +70,7 @@ function UploadGuide({ batch, importing, onUpload, onClose }: {
         <span className="upload-guide-icon" aria-hidden="true"><Upload /></span>
         <div>
           <p className="eyebrow">首次使用</p>
-          <h2 id="upload-guide-title">上传财税资料</h2>
+          <h2 id="upload-guide-title">上传税务资料</h2>
           <p id="upload-guide-intro">系统会识别企业和最新可分析月份，有资料缺口时先提示补全，再生成风险初筛报告。首份免费。</p>
         </div>
         <button type="button" className="upload-guide-close" aria-label="关闭上传引导" onClick={onClose}><X aria-hidden="true" /></button>
@@ -109,7 +109,7 @@ export function FirstReportJourney({
     <section className="first-report-journey page" aria-labelledby="journey-title">
       <header className="page-header journey-header">
         <div>
-          <h2 id="journey-title">上传财税资料</h2>
+          <h2 id="journey-title">上传税务资料</h2>
           <p>支持 Excel、PDF、Word，可一次上传多份。需要时由 AI 辅助识别表格。</p>
         </div>
         {clients.length > 1 && (

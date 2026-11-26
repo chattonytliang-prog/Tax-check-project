@@ -171,6 +171,7 @@ import { confirmedExcelSource } from './lib/excelMappingSchema'
 import { autoMapExcelSheet } from './lib/autoExcelMapping'
 import { confirmedTaxDocumentSource, taxDocumentLocatorInput } from './lib/taxDocumentMapping'
 import './App.css'
+import './components/WorkspacePolish.css'
 
 type Page = 'dashboard' | 'assistant' | 'clients' | 'form' | 'result' | 'report-readiness' | 'report' | 'reports' | 'wallet' | 'rules' | 'admin'
 type RiskDetectionStep = 'client' | 'period' | 'confirm' | 'result'
@@ -4944,6 +4945,8 @@ function App() {
   const [riskDetectionStep, setRiskDetectionStep] = useState<RiskDetectionStep>('client')
   const [reportConfirmOpen, setReportConfirmOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [reportQuery, setReportQuery] = useState('')
+  const [showReportSources, setShowReportSources] = useState(false)
   const [ruleQuery, setRuleQuery] = useState('')
   const [ruleStatusFilter, setRuleStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
   const [ruleLevelFilter, setRuleLevelFilter] = useState<'all' | RiskLevel>('all')
@@ -4963,7 +4966,7 @@ function App() {
   const [taxDataDetailLoading, setTaxDataDetailLoading] = useState(false)
   const [taxDataDetailError, setTaxDataDetailError] = useState('')
   const [taxDataDirectImporting, setTaxDataDirectImporting] = useState(false)
-  const [uploadGuideOpen, setUploadGuideOpen] = useState(true)
+  const [uploadGuideOpen, setUploadGuideOpen] = useState(false)
   const [directImportBatch, setDirectImportBatch] = useState<DirectImportBatch | null>(null)
   const [importApproval, setImportApproval] = useState<{ companyName: string; files: Array<{ name: string; descriptions: string[] }>; saving: boolean } | null>(null)
   const importApprovalResolver = useRef<((approved: boolean) => void) | null>(null)
@@ -4972,6 +4975,9 @@ function App() {
   const directImportTargetRef = useRef<Client | null>(null)
   const taxDataDetailCache = useRef(new Map<string, TaxDataDetail>())
   const clearWorkspaceState = useCallback((preserveWallet = false) => {
+    setQuery('')
+    setReportQuery('')
+    setShowReportSources(false)
     setClients([])
     setReports([])
     setReportRiskResultCounts({})
@@ -4989,7 +4995,7 @@ function App() {
     directImportRun.current = null
     importApprovalResolver.current?.(false)
     setTaxDataDirectImporting(false)
-    setUploadGuideOpen(true)
+    setUploadGuideOpen(false)
     directImportTargetRef.current = null
     setAdminUsers([])
     setAdjustingPointsUser(null)
@@ -7438,43 +7444,32 @@ function App() {
           <div className="sidebar-user">
             <span>当前用户：{authUser.username}</span>
             {authUser.actor && <span>管理员代入：{authUser.actor.username}</span>}
-            <button
-              type="button"
-              className="sidebar-points"
-              title="查看积分明细并刷新余额"
-              onClick={() => { setPage('wallet'); setMobileMenuOpen(false); window.scrollTo(0, 0); void refreshPointWallet() }}
-            >
-              <Coins aria-hidden="true" />
-              <span>
-                <small>积分余额</small>
-                <strong>{pointWalletError ? '暂不可用' : !pointWallet ? '查询中' : pointWallet.adminUnlimited ? '管理员免费' : `${pointWallet.balance} 积分`}</strong>
-                {pointWallet?.freeReportAvailable && !pointWalletError && <small>首份报告免费</small>}
-              </span>
-            </button>
           </div>
         )}
         <nav id="app-navigation" className="sidebar-nav" onClick={() => { setMobileMenuOpen(false); window.scrollTo(0, 0) }}>
           <div className="nav-group">
             <button className={page === 'dashboard' || page === 'report-readiness' ? 'active' : ''} onClick={() => setPage('dashboard')}>
-              <LayoutDashboard /> 涉税风险总览
+              <LayoutDashboard /> 风险总览
             </button>
-          </div>
-          <div className="nav-group">
-            <span className="nav-group-label">工作区</span>
-            <button className={page === 'assistant' ? 'active' : ''} onClick={() => setPage('assistant')}>
-              <Sparkles /> AI 财税助手
-            </button>
-            <button className={page === 'clients' ? 'active' : ''} onClick={() => setPage('clients')}>
+            <button className={page === 'clients' || page === 'form' ? 'active' : ''} onClick={() => setPage('clients')}>
               <Building2 /> 企业档案
             </button>
             <button className={page === 'result' ? 'active' : ''} onClick={openRiskDetectionPage}>
               <Gauge /> 风险检测
             </button>
-            <button className={page === 'reports' || page === 'report' ? 'active' : ''} onClick={() => setPage('reports')}>
+            <button className={page === 'reports' || page === 'report' ? 'active' : ''} onClick={() => { setShowReportSources(false); setPage('reports') }}>
               <FileText /> 报告
             </button>
-            <button className={page === 'wallet' ? 'active' : ''} onClick={() => setPage('wallet')}>
+          </div>
+          <div className="nav-group">
+            <button className={page === 'assistant' ? 'active' : ''} onClick={() => setPage('assistant')}>
+              <Sparkles /> AI 税务助手
+            </button>
+            <button className={page === 'wallet' ? 'active' : ''} onClick={() => { setPage('wallet'); void refreshPointWallet() }}>
               <Coins /> 积分
+              <span className="nav-balance" title={pointWallet?.freeReportAvailable && !pointWalletError ? '首份报告免费' : undefined}>
+                {pointWalletError ? '暂不可用' : !pointWallet ? '查询中' : pointWallet.adminUnlimited ? '不限' : pointWallet.balance.toLocaleString('zh-CN')}
+              </span>
             </button>
             {canViewRuleLibrary && (
               <button className={page === 'rules' ? 'active' : ''} onClick={() => setPage('rules')}>
@@ -7500,7 +7495,7 @@ function App() {
         </nav>
       </aside>
 
-      <main className="workspace">
+      <main className="workspace workspace-polish" data-page={page}>
         <input
           ref={taxDataDirectImportInputRef}
           type="file"
@@ -7547,13 +7542,10 @@ function App() {
           <section className="page">
             <header className="page-header">
               <div>
-                <p className="eyebrow">税务总览</p>
-                <h2>涉税风险总览</h2>
+                <h2>风险总览</h2>
+                <p className="workspace-page-description">查看企业风险、期间资料和待复核事项。</p>
               </div>
               <div className="header-actions">
-                <button className="secondary-button" onClick={() => setPage('reports')}>
-                  <FileText /> 查看报告
-                </button>
                 <button
                   className="primary-button"
                   onClick={() => openDirectImport(null)}
@@ -7592,11 +7584,6 @@ function App() {
                 >
                   全部期间
                 </button>
-                <div className="boss-period-mode-cue" aria-label="期间选择口径">
-                  <span>全部期间</span>
-                  <span>手动起止</span>
-                  <span>连续月份</span>
-                </div>
               </div>
             </section>
             <section className="boss-period-brief" aria-label="本次检查口径">
@@ -7630,16 +7617,14 @@ function App() {
                 <p>{bossDashboard.actions[0]}</p>
               </div>
               <div className="dashboard-next-actions">
-                <button className="primary-button" onClick={bossDashboard.missingDataClients > 0 ? () => setPage('clients') : openRiskDetectionPage}>
-                  <Gauge /> {bossDashboard.missingDataClients > 0 ? '查看企业档案' : '继续检测'}
-                </button>
-                <button className="secondary-button" onClick={() => setPage(reports.length > 0 ? 'reports' : 'clients')}>
-                  <FileText /> {reports.length > 0 ? '查看报告' : '选择企业'}
+                <button className="primary-button" onClick={bossDashboard.missingDataClients > 0 ? () => setPage('clients') : !bossDashboard.topRisks.length && reports.length ? () => { setShowReportSources(false); setPage('reports') } : openRiskDetectionPage}>
+                  <Gauge /> {bossDashboard.missingDataClients > 0 ? '查看企业档案' : !bossDashboard.topRisks.length && reports.length ? '查看报告' : '继续检测'}
                 </button>
               </div>
-              <div className="dashboard-next-list">
-                {bossDashboard.actions.map((item) => <span key={item}>{item}</span>)}
-              </div>
+              {bossDashboard.actions.length > 1 && <details className="dashboard-details">
+                <summary>更多处理建议</summary>
+                <ul>{bossDashboard.actions.slice(1).map((item) => <li key={item}>{item}</li>)}</ul>
+              </details>}
             </section>
             <div className="analytics-grid executive-analytics">
               <EChartPanel
@@ -7676,9 +7661,6 @@ function App() {
                 <div className="boss-actions">
                   <button className="primary-button boss-period-report-action" onClick={openBossPeriodReportFlow}>
                     <FileText /> {bossPeriodActive ? '生成当前期间报告' : reports.length ? '查看税务报告' : '生成健康报告'}
-                  </button>
-                  <button className="secondary-button" onClick={() => setPage('clients')}>
-                    <Building2 /> 进入企业档案
                   </button>
                 </div>
               </div>
@@ -7724,14 +7706,6 @@ function App() {
                     )}
                   </div>
                 </div>
-                <div className="boss-panel">
-                  <div className="panel-title">
-                    <h3>下一步动作</h3>
-                  </div>
-                  <ol className="boss-action-list">
-                    {bossDashboard.actions.map((item) => <li key={item}>{item}</li>)}
-                  </ol>
-                </div>
               </div>
             </section>
             <div className="stat-grid">
@@ -7740,14 +7714,13 @@ function App() {
               <StatCard label="当前复算风险" value={stats.detections} icon={<AlertTriangle />} tone="orange" />
               <StatCard label="高风险企业" value={stats.high} icon={<Gauge />} tone="red" />
             </div>
-            <div className="two-column">
-              <section className="panel">
+            <section className="panel recent-enterprise-risks">
                 <div className="panel-title">
-                  <h3>最近企业风险</h3>
-                  <button className="text-button" onClick={() => setPage('clients')}>查看全部</button>
+                  <h3>企业风险速览</h3>
+                  <button className="text-button" onClick={() => { setQuery(''); setPage('clients') }}>查看全部</button>
                 </div>
                 <div className="compact-list">
-                  {clientRows.map(({ client, risks, level }) => (
+                  {allClientRows.slice(0, 6).map(({ client, risks, level }) => (
                     <button
                       key={client.id}
                       className="compact-row"
@@ -7764,19 +7737,7 @@ function App() {
                     </button>
                   ))}
                 </div>
-              </section>
-              <section className="panel dark-panel">
-                <Sparkles />
-                <h3>涉税风险初筛流程</h3>
-                <p>从企业财税画像出发，先完成基础检查，再由 AI 辅助复核数据疑点并生成可流转报告。</p>
-                <ul>
-                  <li>录入企业基础、经营、发票和人员数据</li>
-                  <li>集团项目按主体分别建档，汇总查看多主体风险</li>
-                  <li>自动识别增值税、所得税、发票和资金风险</li>
-                  <li>生成“基于已提供资料”的风险初筛报告并支持 Word 导出</li>
-                </ul>
-              </section>
-            </div>
+            </section>
             {groupSummaries.length > 0 && (
               <section className="panel group-panel">
                 <div className="panel-title">
@@ -7822,41 +7783,80 @@ function App() {
           <section className="page">
             <header className="page-header">
               <div>
-                <p className="eyebrow">企业档案</p>
-                <h2>企业档案与期间数据</h2>
+                <h2>企业档案</h2>
+                <p className="workspace-page-description">管理企业、归档资料和各期数据。</p>
               </div>
               <div className="header-actions">
                 <button
-                  type="button"
-                  className="secondary-button"
+                  className="primary-button"
                   onClick={() => openDirectImport(null)}
                   disabled={taxDataDirectImporting}
                 >
-                  <FileText /> 上传新企业资料
+                  <Plus /> {taxDataDirectImporting ? '正在解析…' : '上传新企业资料'}
                 </button>
-                <button
-                  className="primary-button"
-                  onClick={() => openDirectImport(selectedClient || null)}
-                  disabled={taxDataDirectImporting}
-                >
-                  <Plus /> {taxDataDirectImporting ? '正在解析...' : selectedClient ? '补充当前企业资料' : '上传资料'}
-                </button>
-                <button className="ghost-button" title="手工档案不参与原始资料风险检测" onClick={() => { setEditingClient(blankDraftClient()); setPage('form') }}>
-                  手工建档
-                </button>
+                <details className="workspace-actions workspace-actions--header">
+                  <summary>更多</summary>
+                  <div className="workspace-action-list">
+                    <button title="手工档案不参与原始资料风险检测" onClick={() => { setEditingClient(blankDraftClient()); setPage('form') }}>手工建档</button>
+                  </div>
+                </details>
               </div>
             </header>
-            <div className="toolbar">
-              <Search />
-              <input placeholder="搜索企业名称、统一社会信用代码或集团项目" value={query} onChange={(event) => setQuery(event.target.value)} />
-            </div>
+            <section className="panel client-directory" aria-labelledby="client-directory-title">
+              <div className="panel-title">
+                <h3 id="client-directory-title">企业列表 <small>{clientRows.length} 家</small></h3>
+                <label className="report-search">
+                  <Search aria-hidden="true" />
+                  <input type="search" aria-label="搜索企业" placeholder="搜索企业名称、信用代码或集团" value={query} onChange={(event) => setQuery(event.target.value)} />
+                </label>
+              </div>
+              {clientRows.length ? <div className="table-panel compact-table">
+                <table aria-labelledby="client-directory-title">
+                  <thead><tr>
+                    <th scope="col">企业</th>
+                    <th scope="col">归档期间</th>
+                    <th scope="col">风险等级</th>
+                    <th scope="col">操作</th>
+                  </tr></thead>
+                  <tbody>
+                    {clientRows.map(({ client, level, report }) => (
+                      <tr key={client.id}>
+                        <td>
+                          <strong>{client.name}</strong>
+                          <small>{[client.creditCode, getGroupName(client) || getProjectScope(client)].filter(Boolean).join(' · ')}</small>
+                        </td>
+                        <td>{client.periodEntries.length ? `${client.periodEntries.length} 期` : '未归档'}<small>{report ? '报告已生成' : '暂无报告'}</small></td>
+                        <td><LevelBadge level={level} /></td>
+                        <td>
+                          <div className="client-directory-actions">
+                            <button type="button" className="secondary-button compact-button" onClick={() => {
+                              setSelectedClientId(client.id)
+                              setSelectedPeriodEntryIds([])
+                              requestAnimationFrame(() => document.getElementById('current-client-heading')?.focus())
+                            }}>查看档案</button>
+                            <details className="workspace-actions workspace-actions--inline" name="client-directory-actions">
+                              <summary aria-label={`${client.name}：更多操作`}>更多</summary>
+                              <div className="workspace-action-list">
+                                <button type="button" onClick={() => { setEditingClient(deriveClientMetrics(client)); setPage('form') }}>编辑档案</button>
+                                <button type="button" className="danger-action" onClick={() => void deleteClient(client)}><Trash2 /> 删除档案</button>
+                              </div>
+                            </details>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div> : <p className="section-helper" role="status">{dataStatus === 'loading' ? '正在读取企业…' : dataStatus === 'fallback' ? '暂时无法读取企业档案。' : query.trim() ? '没有匹配的企业。' : '暂无企业档案，上传原始资料后即可建档。'}</p>}
+            </section>
             {directImportBatch && (!directImportBatch.clientId || directImportBatch.clientId === selectedClient?.id) && <DirectImportReceipt batch={directImportBatch} />}
             {selectedClient && (
               <section className="panel archive-overview-panel">
                 <div className="panel-title">
                   <div>
                     <p className="eyebrow">当前企业</p>
-                    <h3>{selectedClient.name}</h3>
+                    <h3 id="current-client-heading" tabIndex={-1}>{selectedClient.name}</h3>
+                    <p className="workspace-client-meta">{[selectedClient.industry, selectedClient.taxpayerType, selectedClient.region].map((value) => readableImportedText(value)).filter(Boolean).join(' · ')}</p>
                     <p className="section-helper">
                       已归档 {selectedClient.periodEntries.length} 期数据。风险检测使用已入库的原始标准资料。
                     </p>
@@ -7870,17 +7870,7 @@ function App() {
                         setPage('form')
                       }}
                     >
-                      编辑档案
-                    </button>
-                    <button
-                      type="button"
-                      className="primary-button compact-button"
-                      onClick={() => {
-                        setEditingClient(deriveClientMetrics(selectedClient))
-                        setPage('form')
-                      }}
-                    >
-                      手工记录期间
+                      编辑档案与手工期间
                     </button>
                   </div>
                 </div>
@@ -8156,65 +8146,6 @@ function App() {
                 )}
               </section>
             )}
-            <div className="table-panel">
-              <table>
-                <thead>
-                  <tr>
-                    <th>企业名称</th>
-                    <th>项目口径</th>
-                    <th>行业</th>
-                    <th>纳税人类型</th>
-                    <th>地区</th>
-                    <th>期间数据</th>
-                    <th>风险等级</th>
-                    <th>报告</th>
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clientRows.map(({ client, level, report }) => (
-                    <tr key={client.id}>
-                      <td>
-                        <strong>{client.name}</strong>
-                        <small>{client.creditCode}</small>
-                      </td>
-                      <td>
-                        <strong>{getProjectScope(client)}</strong>
-                        <small>{getGroupName(client) || getEntityRole(client)}</small>
-                      </td>
-                      <td>{readableImportedText(client.industry, '未填写')}</td>
-                      <td>{readableImportedText(client.taxpayerType, '未填写')}</td>
-                      <td>{readableImportedText(client.region, '未填写')}</td>
-                      <td>{client.periodEntries.length ? `${client.periodEntries.length} 期` : '未归档'}</td>
-                      <td><LevelBadge level={level} /></td>
-                      <td>{report ? '已生成' : '未生成'}</td>
-                      <td className="row-actions">
-                        <button
-                          onClick={() => {
-                            setSelectedClientId(client.id)
-                            setSelectedPeriodEntryIds([])
-                            setPage('clients')
-                          }}
-                        >
-                          查看
-                        </button>
-                        <button
-                          onClick={() => {
-                            setEditingClient(deriveClientMetrics(client))
-                            setPage('form')
-                          }}
-                        >
-                          编辑
-                        </button>
-                        <button className="danger-action" onClick={() => deleteClient(client)}>
-                          <Trash2 /> 删除
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           </section>
         )}
 
@@ -8222,8 +8153,7 @@ function App() {
           <section className="page">
             <header className="page-header">
               <div>
-                <p className="eyebrow">数据录入</p>
-                <h2>企业档案与期间数据</h2>
+                <h2>编辑档案与期间数据</h2>
               </div>
               <div className="header-actions">
                 <button className="secondary-button danger-secondary" onClick={clearEditingClient}>
@@ -8301,14 +8231,25 @@ function App() {
           </section>
         )}
 
+        {page === 'result' && !selectedClient && <section className="page">
+          <header className="page-header"><h2>风险检测</h2></header>
+          <section className="panel report-ledger-empty" role={dataStatus === 'loading' ? 'status' : undefined}>
+            <Gauge aria-hidden="true" />
+            <h3>{dataStatus === 'loading' ? '正在读取企业…' : dataStatus === 'fallback' ? '暂时无法读取企业' : '暂无可检测的企业'}</h3>
+            {dataStatus === 'fallback' ? <button type="button" className="secondary-button" onClick={() => window.location.reload()}>重试</button>
+              : dataStatus !== 'loading' && <><p>上传企业的原始申报资料或财务报表后即可检测。</p>
+                <button type="button" className="primary-button" onClick={() => openDirectImport(null)}><Plus /> 上传企业资料</button></>}
+          </section>
+        </section>}
+
         {page === 'result' && selectedClient && (
           <section className="page">
             <header className="page-header">
               <div>
-                <p className="eyebrow">风险检测</p>
-                <h2>按企业和期间发起检测</h2>
+                <h2>风险检测</h2>
+                <p className="workspace-page-description">选择企业和期间，核对范围后查看检测结果。</p>
               </div>
-              <div className="header-actions">
+              {riskDetectionStep === 'result' && <div className="header-actions">
                 <button
                   className="secondary-button"
                   onClick={() => {
@@ -8318,10 +8259,10 @@ function App() {
                 >
                   <RefreshCcw /> 编辑资料
                 </button>
-                <button className="primary-button" onClick={() => createReport()} disabled={riskDetectionStep !== 'result' || Boolean(aiReportStage)}>
+                <button className="primary-button" onClick={() => createReport()} disabled={Boolean(aiReportStage)}>
                   <Sparkles /> {aiReportStage === 'saving' ? '正在核验积分并保存...' : aiReportStage === 'reviewing' ? 'AI 正在复核数据...' : aiReportStage === 'generating' ? 'AI 正在生成报告...' : '生成报告'}
                 </button>
-              </div>
+              </div>}
             </header>
             <div className="risk-stepper" aria-label="风险检测流程">
               {[
@@ -8332,6 +8273,7 @@ function App() {
               ].map(([step, label], index) => (
                 <span
                   key={step}
+                  aria-current={riskDetectionStep === step ? 'step' : undefined}
                   className={riskDetectionStep === step ? 'active' : ['client', 'period', 'confirm', 'result'].indexOf(riskDetectionStep) > index ? 'done' : ''}
                 >
                   <i>{index + 1}</i>{label}
@@ -8363,7 +8305,7 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {clientRows.map(({ client, level }) => (
+                    {allClientRows.map(({ client, level }) => (
                       <tr key={`risk-source-${client.id}`}>
                         <td>
                           <strong>{client.name}</strong>
@@ -8782,6 +8724,7 @@ function App() {
             storedRiskCount={reportPageReport ? reportRiskResultCounts[reportPageReport.id] : undefined}
             client={reportPageClient}
             risks={reportPageRisks}
+            onBack={() => { setShowReportSources(false); setPage('reports'); window.scrollTo(0, 0) }}
             onGenerate={() => {
               if (selectedReport && !clients.some((client) => client.id === selectedReport.clientId)) {
                 window.alert('这份历史报告未匹配到当前企业档案，可继续查看或导出；如需重新生成，请先恢复对应企业档案。')
@@ -8798,131 +8741,99 @@ function App() {
           />
         )}
 
-        {page === 'reports' && (
-          <section className="page">
+        {page === 'reports' && (() => {
+          const term = reportQuery.trim().toLocaleLowerCase()
+          const visibleReports = reports.filter((report) => report.clientName.toLocaleLowerCase().includes(term))
+          return <section className="page reports-center">
             <header className="page-header">
               <div>
-                <p className="eyebrow">报告记录</p>
-                <h2>历史初筛报告</h2>
+                <h2>报告</h2>
+                <p className="workspace-page-description">查看、导出已归档的税务风险报告。</p>
               </div>
+              <button type="button" className={showReportSources ? 'secondary-button' : 'primary-button'} aria-expanded={showReportSources} aria-controls="report-sources" onClick={() => setShowReportSources((open) => !open)}>
+                {showReportSources ? <X /> : <Plus />} {showReportSources ? '收起生成选项' : '生成报告'}
+              </button>
             </header>
-            <section className="panel archive-overview-panel">
+            <section id="report-sources" className="panel report-source-panel" hidden={!showReportSources} aria-labelledby="report-sources-title">
               <div className="panel-title">
                 <div>
-                  <p className="eyebrow">生成报告</p>
-                  <h3>选择已有档案数据</h3>
-                  <p className="section-helper">报告必须基于已保存的企业档案和连续期间数据生成。先选择企业，再确认单月、季度、连续多月或全年范围。</p>
+                  <h3 id="report-sources-title">选择企业</h3>
+                  <p className="section-helper">先选企业，再选单月、季度、连续多月或全年。</p>
                 </div>
-                <button
-                  type="button"
-                  className="primary-button compact-button"
-                  onClick={() => {
-                    setEditingClient(blankDraftClient())
-                    setPage('form')
-                  }}
-                >
-                  <Plus /> 录入新数据
+                <button type="button" className="secondary-button compact-button" onClick={() => openDirectImport(null)} disabled={taxDataDirectImporting}>
+                  <Plus /> 上传新企业资料
                 </button>
               </div>
-              <div className="table-panel compact-table">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>企业名称</th>
-                      <th>期间数据</th>
-                      <th>当前复算等级</th>
-                      <th>报告状态</th>
-                      <th>操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {clientRows.map(({ client, level, report }) => {
-                      const archivedRiskCount = report ? reportRiskList(report).length : 0
-                      const storedRiskCount = report ? reportRiskResultCounts[report.id] : undefined
-                      const countMismatch = report ? reportRiskStorageMismatch(report, storedRiskCount) : null
-                      return (
-                        <tr key={`report-source-${client.id}`}>
-                          <td>
-                            <strong>{client.name}</strong>
-                            <small>{client.creditCode}</small>
-                          </td>
-                          <td>{client.periodEntries.length ? `${client.periodEntries.length} 期` : '未归档'}</td>
-                          <td><LevelBadge level={level} /></td>
-                          <td>
-                            {report ? (report.structured?.methodology === 'source-backed-v2' ? '已录入数据初筛' : '历史口径（建议重算）') : '未生成'}
-                            {report && <small>归档报告 {archivedRiskCount} 项风险</small>}
-                            {countMismatch && <small>数据库关联 {countMismatch.storedCount} 项，数量待复核</small>}
-                          </td>
-                          <td className="row-actions">
-                            <button onClick={() => openClientForPeriodSelection(client)}>
-                              选择期间
-                            </button>
-                            {report && (
-                              <button
-                                onClick={() => {
-                                  setSelectedReportId(report.id)
-                                  setSelectedClientId(client.id)
-                                  setSelectedPeriodEntryIds([])
-                                  setPage('report')
-                                }}
-                              >
-                                查看报告
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              {allClientRows.length ? <ul className="report-source-list">
+                {allClientRows.map(({ client }) => <li key={client.id}>
+                  <div><strong>{client.name}</strong>{client.creditCode && <small>{client.creditCode}</small>}</div>
+                  <button type="button" className="secondary-button compact-button" onClick={() => openClientForPeriodSelection(client)}>选择期间</button>
+                </li>)}
+              </ul> : <p className="section-helper">暂无企业档案，上传原始资料后即可选择期间。</p>}
             </section>
-            <div className="report-grid">
-              {reports.map((report) => {
-                const archivedRiskCount = reportRiskList(report).length
-                const storedRiskCount = reportRiskResultCounts[report.id]
-                const countMismatch = reportRiskStorageMismatch(report, storedRiskCount)
-                return (
-                  <article className="report-card" key={report.id}>
-                    <LevelBadge level={report.riskLevel} />
-                    <h3>{report.clientName}</h3>
-                    <p>{report.createdAt}</p>
-                    <p>归档报告 {archivedRiskCount} 项风险{Number.isInteger(storedRiskCount) ? ` · 数据库关联 ${storedRiskCount} 项` : ''}</p>
-                    {countMismatch && <p className="report-count-warning" role="alert">数量不一致，打开报告后按明细核对。</p>}
-                    <div className="report-actions">
-                      <button
-                        onClick={() => {
-                          setSelectedReportId(report.id)
-                          setSelectedClientId(report.clientId)
-                          setSelectedPeriodEntryIds([])
-                          setPage('report')
-                        }}
-                      >
-                        查看
-                      </button>
-                      <button onClick={() => downloadWord(report, storedRiskCount)}>
-                        <Download /> Word
-                      </button>
-                      <button onClick={() => printReportPdf(report, storedRiskCount)}>
-                        <Printer /> PDF
-                      </button>
-                      <button className="danger-action" onClick={() => deleteReport(report)}>
-                        <Trash2 /> 删除
-                      </button>
-                    </div>
-                  </article>
-                )
-              })}
-              {!reports.length && (
-                <div className="empty-state wide">
-                  <FileText />
-                  <h3>还没有报告</h3>
-                  <p>先选择一个企业，在风险结果页生成报告。</p>
-                </div>
-              )}
-            </div>
+            <section className="report-ledger" aria-labelledby="report-ledger-title">
+              <div className="report-ledger-header">
+                <h3 id="report-ledger-title">历史报告 <small>{reports.length} 份</small></h3>
+                {reports.length > 0 && <label className="report-search">
+                  <Search aria-hidden="true" />
+                  <input type="search" aria-label="按企业搜索报告" placeholder="按企业搜索报告" value={reportQuery} onChange={(event) => setReportQuery(event.target.value)} />
+                </label>}
+              </div>
+              {visibleReports.length ? <table className="report-ledger-table" role="table" aria-labelledby="report-ledger-title">
+                <thead role="rowgroup"><tr role="row">
+                  <th scope="col" role="columnheader">企业 / 审阅期间</th>
+                  <th scope="col" role="columnheader">风险结果</th>
+                  <th scope="col" role="columnheader">生成时间</th>
+                  <th scope="col" role="columnheader">操作</th>
+                </tr></thead>
+                <tbody role="rowgroup">
+                  {visibleReports.map((report) => {
+                    const storedRiskCount = reportRiskResultCounts[report.id]
+                    const countMismatch = reportRiskStorageMismatch(report, storedRiskCount)
+                    const scope = report.structured?.scope
+                    const period = Array.isArray(scope) ? scope.find((item) => item?.label === '审阅期间')?.value : undefined
+                    return <tr key={report.id} role="row">
+                      <th scope="row" role="rowheader">
+                        <strong>{report.clientName}</strong>
+                        {typeof period === 'string' && period && <small>{period}</small>}
+                      </th>
+                      <td role="cell">
+                        <div className="report-ledger-risk"><LevelBadge level={report.riskLevel} /><span>{reportRiskList(report).length} 项风险</span></div>
+                        {report.structured?.methodology !== 'source-backed-v2' && <small>历史口径</small>}
+                        {countMismatch && <small className="report-count-warning">数据库关联 {countMismatch.storedCount} 项，待核对</small>}
+                      </td>
+                      <td role="cell" className="report-ledger-date"><span className="report-mobile-label">生成时间：</span>{report.createdAt}</td>
+                      <td role="cell">
+                        <div className="report-ledger-actions">
+                          <button type="button" className="secondary-button compact-button" onClick={() => {
+                            setSelectedReportId(report.id)
+                            setSelectedClientId(report.clientId)
+                            setSelectedPeriodEntryIds([])
+                            setPage('report')
+                          }}>查看报告</button>
+                          <details className="workspace-actions" name="history-report-actions">
+                            <summary aria-label={`${report.clientName} ${report.createdAt}：更多操作`}>更多</summary>
+                            <div className="workspace-action-list">
+                              <button type="button" onClick={() => downloadWord(report, storedRiskCount)}><Download /> 导出 Word</button>
+                              <button type="button" onClick={() => printReportPdf(report, storedRiskCount)}><Printer /> 打印 / PDF</button>
+                              <button type="button" className="danger-action" onClick={() => void deleteReport(report)}><Trash2 /> 删除报告</button>
+                            </div>
+                          </details>
+                        </div>
+                      </td>
+                    </tr>
+                  })}
+                </tbody>
+              </table> : <div className="report-ledger-empty" role={reports.length || dataStatus === 'loading' ? 'status' : undefined}>
+                <FileText aria-hidden="true" />
+                <h4>{dataStatus === 'loading' ? '正在读取报告…' : dataStatus === 'fallback' && !reports.length ? '暂时无法读取报告' : reports.length ? '没有匹配的报告' : '暂无历史报告'}</h4>
+                {reports.length ? <button type="button" className="secondary-button compact-button" onClick={() => setReportQuery('')}>清空搜索</button>
+                  : dataStatus === 'fallback' ? <button type="button" className="secondary-button compact-button" onClick={() => window.location.reload()}>重试</button>
+                    : dataStatus !== 'loading' && <p>点击「生成报告」，选择企业和审阅期间。</p>}
+              </div>}
+            </section>
           </section>
-        )}
+        })()}
 
         {page === 'wallet' && <PointsWallet key={authUser?.id} wallet={pointWallet} error={pointWalletError}
           onRefresh={() => void refreshPointWallet()}>
@@ -8948,8 +8859,8 @@ function App() {
           <section className="page">
             <header className="page-header">
               <div>
-                <p className="eyebrow">账号管理</p>
                 <h2>用户与积分管理</h2>
+                <p className="workspace-page-description">维护账号状态、权限和积分额度。</p>
               </div>
               <button className="secondary-button" onClick={refreshAdminUsers}>
                 <RefreshCcw /> 刷新
@@ -9046,8 +8957,8 @@ function App() {
           <section className="page">
             <header className="page-header">
               <div>
-                <p className="eyebrow">规则库</p>
-                <h2>规则库后台</h2>
+                <h2>规则库</h2>
+                <p className="workspace-page-description">查询规则版本、适用范围和启用状态。</p>
               </div>
               <div className="header-actions">
                 <button className="secondary-button" onClick={refreshRules}>
@@ -12734,8 +12645,8 @@ function AiAssistantPage({
     <section className="page assistant-page">
       <header className="page-header">
         <div>
-          <p className="eyebrow">财税问答</p>
-          <h2>AI 财税助手</h2>
+          <h2>AI 税务助手</h2>
+          <p className="workspace-page-description">围绕企业资料，问税务问题、查风险依据。</p>
         </div>
       </header>
       <div className="assistant-workspace">
@@ -12822,9 +12733,14 @@ function AiAssistantPage({
             <button type="button" onClick={() => void runAssistantReportGeneration()}>
               <FileText /> 生成报告
             </button>
-            <button type="button" onClick={() => void compressActiveAssistantThread()} disabled={assistantMemoryLoading || assistantLoading || assistantMessages.length < 2}>
-              <Sparkles /> {assistantMemoryLoading ? '压缩中' : '压缩记忆'}
-            </button>
+            <details className="workspace-actions workspace-actions--assistant">
+              <summary>更多工具</summary>
+              <div className="workspace-action-list">
+                <button type="button" onClick={() => void compressActiveAssistantThread()} disabled={assistantMemoryLoading || assistantLoading || assistantMessages.length < 2}>
+                  <Sparkles /> {assistantMemoryLoading ? '压缩中' : '压缩记忆'}
+                </button>
+              </div>
+            </details>
             <span>{dataCompleteness.label} · {dataCompleteness.score}% · {risks.length} 项风险线索</span>
           </div>
           <div
@@ -13004,6 +12920,7 @@ function ReportPage({
   storedRiskCount,
   client,
   risks,
+  onBack,
   onGenerate,
   onRetryAi,
   onUpdateRemediationTask,
@@ -13014,6 +12931,7 @@ function ReportPage({
   storedRiskCount?: number
   client: Client
   risks: RiskResult[]
+  onBack: () => void
   onGenerate: () => void
   onRetryAi: (report: Report) => void
   onUpdateRemediationTask: (input: ReportRemediationUpdateInput) => Promise<void>
@@ -13087,18 +13005,10 @@ function ReportPage({
     <section className="page">
       <header className="page-header">
         <div>
-          <p className="eyebrow">报告预览</p>
+          <button type="button" className="workspace-back-link" onClick={onBack}>← 返回报告列表</button>
           <h2>{client.name}</h2>
         </div>
         <div className="header-actions">
-          {report.aiSource && !report.aiGenerated && (
-            <button className="secondary-button" onClick={() => onRetryAi(report)} disabled={Boolean(aiStage)}>
-              <Sparkles /> {aiFailure ? '重试 AI 润色' : 'AI 润色'}
-            </button>
-          )}
-          <button className="secondary-button" onClick={onGenerate} disabled={Boolean(aiStage)}>
-            <Sparkles /> {aiMessage || '重新生成'}
-          </button>
           <button
             className="primary-button"
             disabled={Boolean(aiStage)}
@@ -13106,13 +13016,16 @@ function ReportPage({
           >
             <Download /> 导出 Word
           </button>
-          <button
-            className="secondary-button"
-            disabled={Boolean(aiStage)}
-            onClick={() => printReportPdf(report, storedRiskCount)}
-          >
-            <Printer /> 打印 / PDF
-          </button>
+          <details className="workspace-actions workspace-actions--header">
+            <summary>更多</summary>
+            <div className="workspace-action-list">
+              <button type="button" disabled={Boolean(aiStage)} onClick={() => printReportPdf(report, storedRiskCount)}><Printer /> 打印 / PDF</button>
+              {report.aiSource && !report.aiGenerated && <button type="button" onClick={() => onRetryAi(report)} disabled={Boolean(aiStage)}>
+                <Sparkles /> {aiFailure ? '重试 AI 润色' : 'AI 润色'}
+              </button>}
+              <button type="button" onClick={onGenerate} disabled={Boolean(aiStage)}><RefreshCcw /> {aiMessage || '重新生成'}</button>
+            </div>
+          </details>
         </div>
       </header>
       {!aiStage && report.aiSource && !report.aiGenerated && (
