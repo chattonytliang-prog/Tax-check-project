@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUpRight, RefreshCcw } from 'lucide-react'
+import { RefreshCcw } from 'lucide-react'
 import { apiGet, apiSend } from '../lib/apiClient'
 import { alipayOrderIdPattern } from '../lib/alipayCheckout'
+import { WalletPaymentTier, WalletRechargeButton } from './PointsWallet'
 
 const endpoint = '/api/payments/alipay'
 
@@ -14,6 +15,7 @@ export function AlipayRecharge({ userId, returnOrderId, onPaid }: {
 }) {
   const storageKey = `alipay-checkout-${userId}`
   const [config, setConfig] = useState<Config | null>(null)
+  const [configFailed, setConfigFailed] = useState(false)
   const [orderId, setOrderId] = useState(() => returnOrderId || sessionStorage.getItem(storageKey))
   const [order, setOrder] = useState<Order | null>(null)
   const [busy, setBusy] = useState(false)
@@ -24,7 +26,7 @@ export function AlipayRecharge({ userId, returnOrderId, onPaid }: {
   useEffect(() => {
     let active = true
     apiGet<Config>(`${endpoint}/config`).then((value) => { if (active) setConfig(value) })
-      .catch(() => { if (active) setConfig({ enabled: false, amountFen: 20000, points: 200 }) })
+      .catch(() => { if (active) setConfigFailed(true) })
     return () => { active = false }
   }, [])
 
@@ -108,24 +110,28 @@ export function AlipayRecharge({ userId, returnOrderId, onPaid }: {
     finally { setBusy(false) }
   }
 
-  if (!config?.enabled && !config?.test && !orderId && !error) return null
-  const amount = (config?.amountFen ?? 20000) / 100
   const disabled = busy || Boolean(orderId && !order)
-  return <section className="payment-code-panel" aria-label="支付宝充值">
-    <h3>支付宝充值</h3>
-    <p>在电脑浏览器打开支付宝收银台，付款确认后自动加积分。</p>
-    {order?.status === 'paid' && <p role="status">付款成功，{order.points} 积分已到账。</p>}
-    {orderId && order?.status !== 'paid' && <>
-      <p className="payment-order-number">订单：{orderId}{order && ` · ${order.amountFen / 100} 元 / ${order.points} 积分`}</p>
-      <p role="status">{order?.status === 'expired' ? '付款链接已到期。如已付款，请先查询到账。' : '正在等待支付宝确认。如已付款，请勿重复支付。'}</p>
-      <button className="secondary-button" type="button" onClick={() => void checkOrder()} disabled={busy}><RefreshCcw />查询到账</button>
-    </>}
-    {error && <p role="alert">{error}</p>}
-    {config?.enabled && <button className="primary-button" type="button" onClick={() => void openCheckout('orders')} disabled={disabled}>
-      <ArrowUpRight />{order?.status === 'pending' && order.amountFen === config.amountFen ? `继续支付 ${amount} 元` : `支付宝支付 ${amount} 元`}
-    </button>}
-    {config?.test && <button className="secondary-button" type="button" onClick={() => void openCheckout('test-order')} disabled={disabled}>
-      <ArrowUpRight />{order?.status === 'pending' && order.amountFen === config.test.amountFen ? '继续支付 1 元测试订单' : '支付宝测试支付 1 元（+1 积分）'}
-    </button>}
-  </section>
+  return <div className="wallet-checkout">
+    {config && <WalletPaymentTier amountFen={config.amountFen} points={config.points}>
+      <WalletRechargeButton provider="alipay" unavailable={!config.enabled} disabled={disabled}
+        pending={order?.status === 'pending' && order.amountFen === config.amountFen}
+        onClick={() => void openCheckout('orders')} />
+    </WalletPaymentTier>}
+    {config?.test && <WalletPaymentTier amountFen={config.test.amountFen} points={config.test.points} test>
+      <WalletRechargeButton provider="alipay" test disabled={disabled}
+        pending={order?.status === 'pending' && order.amountFen === config.test.amountFen}
+        onClick={() => void openCheckout('test-order')} />
+    </WalletPaymentTier>}
+    {!config && !orderId && <p className="wallet-channel-state" role={configFailed ? 'alert' : 'status'}>
+      {configFailed ? '暂时无法查询支付宝，请刷新页面重试。' : '正在查询支付状态…'}
+    </p>}
+    {order?.status === 'paid' && <p className="wallet-notice wallet-notice--success" role="status">付款成功，{order.points} 积分已到账。</p>}
+    {orderId && order?.status !== 'paid' && <div className="wallet-order">
+      <p className="wallet-order-title" role="status">{order?.status === 'expired' ? '付款链接已到期' : '等待支付宝付款确认'}</p>
+      <p>如已付款，请先查询到账，不要重复付款。</p>
+      <p className="wallet-order-code">{order && <span>¥{order.amountFen / 100} · {order.points} 积分</span>}订单号 <code>{orderId}</code></p>
+      <button className="wallet-pay-button wallet-pay-button--secondary" type="button" onClick={() => void checkOrder()} disabled={busy}><RefreshCcw aria-hidden="true" />查询到账</button>
+    </div>}
+    {error && <p role="alert" className="wallet-notice wallet-notice--error">{error}</p>}
+  </div>
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { QrCode, RefreshCcw } from 'lucide-react'
 import { apiGet, apiSend } from '../lib/apiClient'
+import { WalletPaymentTier, WalletRechargeButton } from './PointsWallet'
 
 type Order = { id: string; status: 'pending' | 'expired' | 'paid'; codeUrl: string | null; expiresAt: string; points: number; amountFen: number }
 type Denomination = { amountFen: number; points: number }
@@ -113,26 +114,29 @@ function WechatCheckout({ storageKey, onPaid, amountFen, points, enabled, config
   }
 
   const expired = order && now >= Date.parse(order.expiresAt)
-  const amount = amountFen / 100
-  return <div className={isTest ? 'payment-code-panel payment-test-panel' : 'payment-code-panel'}>
-    <h3>{isTest ? '微信测试充值' : '微信充值'} {amount} 元</h3>
-    <p>到账后增加 {points} 积分。{isTest && '此入口仅供 test2 测试。'}</p>
-    {enabled === false && <p>微信支付尚未启用，暂不能付款。</p>}
-    {configFailed && <p role="alert">支付状态查询失败，请刷新页面重试。</p>}
-    {enabled === null && !error && !configFailed && <p>正在查询支付状态...</p>}
-    {order?.status === 'paid' ? <p role="status">付款成功，{order.points} 积分已到账。</p> : <>
-      {qr && qr.orderId === order?.id && !expired && <img src={qr.url} width={280} height={280} style={{ maxWidth: '100%', height: 'auto' }} alt="本次充值订单的微信支付二维码" />}
-      {order && <><p className="payment-order-number">订单：{order.id}</p><p>{expired ? '二维码已到期；如已付款，请查询到账状态。' : '请使用微信扫码付款，系统自动核实到账。'}</p></>}
-    </>}
-    {error && <p role="alert" className="period-warning">{error}</p>}
-    {(!order || order.status === 'paid') && <button className="primary-button" disabled={!enabled || busy} onClick={() => {
-      if (order?.status === 'paid') requestId.current = crypto.randomUUID()
-      void createOrder()
-    }}><QrCode />{busy ? '正在下单...' : isTest ? `微信测试支付 ${amount} 元` : `微信支付 ${amount} 元`}</button>}
-    {order && order.status !== 'paid' && <button className="secondary-button" disabled={busy} onClick={() => void checkOrder()}><RefreshCcw />查询到账</button>}
-    {expired && order?.status !== 'paid' && <button className="secondary-button" disabled={!enabled || busy} onClick={() => {
-      requestId.current = crypto.randomUUID()
-      void createOrder()
-    }}><QrCode />重新下单</button>}
+  return <div className="wallet-checkout">
+    {(enabled || order) ? <WalletPaymentTier amountFen={amountFen} points={points} test={isTest}>
+      {(!order || order.status === 'paid') && <WalletRechargeButton provider="wechat" test={isTest}
+        disabled={!enabled} busy={busy} onClick={() => {
+          if (order?.status === 'paid') requestId.current = crypto.randomUUID()
+          void createOrder()
+        }} />}
+      {order && order.status !== 'paid' && <button type="button" className="wallet-pay-button wallet-pay-button--secondary"
+        disabled={busy} onClick={() => void checkOrder()}><RefreshCcw aria-hidden="true" />查询到账</button>}
+    </WalletPaymentTier> : <p className="wallet-channel-state" role={configFailed ? 'alert' : 'status'}>
+      {configFailed ? '暂时无法查询微信支付，请稍后刷新。' : enabled === null ? '正在查询支付状态…' : '当前账号暂未开放微信支付。'}
+    </p>}
+    {order?.status === 'paid' && <p className="wallet-notice wallet-notice--success" role="status">付款成功，{order.points} 积分已到账。</p>}
+    {order && order.status !== 'paid' && <div className="wallet-order">
+      <p className="wallet-order-title" role="status">{expired ? '二维码已到期' : '等待微信付款确认'}</p>
+      <p>{expired ? '如已付款，请先查询到账，不要重复付款。' : '请使用微信扫码；如已付款，请勿重复支付。'}</p>
+      {qr && qr.orderId === order.id && !expired && <img className="wallet-order-qr" src={qr.url} width={168} height={168} alt="本次充值订单的微信支付二维码" />}
+      <p className="wallet-order-code">订单号 <code>{order.id}</code></p>
+      {expired && <button type="button" className="wallet-pay-button wallet-pay-button--secondary" disabled={!enabled || busy} onClick={() => {
+        requestId.current = crypto.randomUUID()
+        void createOrder()
+      }}><QrCode aria-hidden="true" />重新下单</button>}
+    </div>}
+    {error && <p role="alert" className="wallet-notice wallet-notice--error">{error}</p>}
   </div>
 }

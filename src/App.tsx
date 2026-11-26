@@ -5,6 +5,7 @@ import type { EChartsType } from 'echarts/core'
 import type * as ThreeNamespace from 'three'
 import { WechatRecharge } from './components/WechatRecharge'
 import { AlipayRecharge } from './components/AlipayRecharge'
+import { PointsWallet, WalletPaymentMethod, type PointWallet } from './components/PointsWallet'
 import { getReturnedAlipayOrder } from './lib/alipayCheckout'
 import { LoginGlassArchive } from './components/LoginGlassArchive'
 import {
@@ -1204,40 +1205,6 @@ type AdminUser = {
   clientsCount: number
   reportsCount: number
   pointBalance: number
-}
-
-type PointTransaction = {
-  id: string
-  delta: number
-  source: 'report' | 'admin_adjustment' | 'wechat_recharge' | 'alipay_recharge'
-  reportId: string | null
-  actorUserId: string | null
-  note: string
-  createdAt: string
-}
-
-type PointWallet = {
-  balance: number
-  freeReportAvailable: boolean
-  adminUnlimited: boolean
-  reportCost: number
-  transactions: PointTransaction[]
-}
-
-
-function formatPointTime(value: string) {
-  const date = new Date(value.includes('T') ? value : `${value.replace(' ', 'T')}Z`)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(date)
 }
 
 const emptyClient: Client = {
@@ -8957,78 +8924,25 @@ function App() {
           </section>
         )}
 
-        {page === 'wallet' && (
-          <section className="page">
-            <header className="page-header">
-              <div>
-                <p className="eyebrow">报告积分</p>
-                <h2>积分账户</h2>
-              </div>
-              <button className="secondary-button" onClick={() => void refreshPointWallet()}>
-                <RefreshCcw /> 刷新
-              </button>
-            </header>
-            <div className="wallet-overview">
-              <div>
-                <span>可用积分</span>
-                <strong>{pointWallet?.adminUnlimited ? '管理员免费' : pointWallet ? pointWallet.balance : '—'}</strong>
-              </div>
-              <div>
-                <span>本次报告</span>
-                <strong>{!pointWallet ? '查询中' : pointWallet.adminUnlimited || pointWallet.freeReportAvailable ? '免费' : '200 积分'}</strong>
-              </div>
-              <div>
-                <span>兑换规则</span>
-                <strong>1 元 = 1 积分</strong>
-              </div>
-            </div>
-            {pointWalletError && <p className="period-warning">{pointWalletError}</p>}
-            <div className="wallet-layout">
-              <div className="wallet-rules">
-                <h3>使用规则</h3>
-                <p>每个普通账号的首份报告免费，之后每生成一份新报告扣 200 积分；查看和重新导出已有报告不扣分。</p>
-                <p>删除报告不会返还已使用的免费次数或积分。管理员账号生成报告免费；管理员代入普通用户时，按该用户账户计费。</p>
-                <p>充值 200 元对应 200 积分，可生成一份付费报告。系统确认付款成功后积分自动到账。</p>
-              </div>
-              {!pointWallet?.adminUnlimited && (
-                <div className="payment-methods">
-                  {authUser && !authUser.actor && authUser.role !== 'admin' && <>
-                    <WechatRecharge userId={authUser.id} onPaid={() => void refreshPointWallet()} />
-                    <AlipayRecharge key={authUser.id} userId={authUser.id} returnOrderId={alipayReturnOrder}
-                      onPaid={() => {
-                        const url = new URL(window.location.href)
-                        if (url.searchParams.has('alipay_order')) {
-                          url.searchParams.delete('alipay_order')
-                          window.history.replaceState(window.history.state, '', url)
-                          setAlipayReturnOrder(null)
-                        }
-                        void refreshPointWallet()
-                      }} />
-                  </>}
-                </div>
-              )}
-            </div>
-            <div className="table-panel wallet-history">
-              <h3>积分流水</h3>
-              <table>
-                <thead><tr><th>时间</th><th>类型</th><th>变动</th><th>说明</th></tr></thead>
-                <tbody>
-                  {pointWallet?.transactions.map((entry) => (
-                    <tr key={entry.id}>
-                      <td>{formatPointTime(entry.createdAt)}</td>
-                      <td>{entry.source === 'report' ? '报告扣分' : entry.source === 'wechat_recharge' ? '微信充值' : entry.source === 'alipay_recharge' ? '支付宝充值' : '管理员调整'}</td>
-                      <td className={entry.delta > 0 ? 'point-positive' : 'point-negative'}>{entry.delta > 0 ? '+' : ''}{entry.delta}</td>
-                      <td>{entry.note}</td>
-                    </tr>
-                  ))}
-                  {pointWallet && !pointWallet.transactions.length && (
-                    <tr><td colSpan={4}>暂无积分流水</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
+        {page === 'wallet' && <PointsWallet key={authUser?.id} wallet={pointWallet} error={pointWalletError}
+          onRefresh={() => void refreshPointWallet()}>
+          {!pointWallet?.adminUnlimited && authUser && !authUser.actor && authUser.role !== 'admin' && <>
+            <WalletPaymentMethod provider="wechat">
+              <WechatRecharge userId={authUser.id} onPaid={() => void refreshPointWallet()} />
+            </WalletPaymentMethod>
+            <WalletPaymentMethod provider="alipay">
+              <AlipayRecharge userId={authUser.id} returnOrderId={alipayReturnOrder} onPaid={() => {
+                const url = new URL(window.location.href)
+                if (url.searchParams.has('alipay_order')) {
+                  url.searchParams.delete('alipay_order')
+                  window.history.replaceState(window.history.state, '', url)
+                  setAlipayReturnOrder(null)
+                }
+                void refreshPointWallet()
+              }} />
+            </WalletPaymentMethod>
+          </>}
+        </PointsWallet>}
 
         {page === 'admin' && canUseAdmin && (
           <section className="page">
