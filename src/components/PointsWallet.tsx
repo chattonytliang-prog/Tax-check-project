@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react'
-import { ArrowDownLeft, Coins, FileText, History, QrCode, RefreshCcw, SlidersHorizontal } from 'lucide-react'
+import { useId, useState, type ReactNode } from 'react'
+import { ArrowDownLeft, ChevronDown, Coins, FileText, History, QrCode, RefreshCcw, SlidersHorizontal } from 'lucide-react'
 import './PointsWallet.css'
 
 const sources = {
@@ -169,4 +169,51 @@ export function WalletRechargeButton({ provider, test, disabled, unavailable, pe
     <QrCode aria-hidden="true" />
     <span>{label}{unavailable && <small>暂未开放</small>}</span>
   </button>
+}
+
+export function WalletRechargePanel({ provider, defaultOpen, children }: {
+  provider: 'wechat' | 'alipay'; defaultOpen?: boolean; children: ReactNode
+}) {
+  // Native details allows keyboard access and leaves issued orders mounted for status checks.
+  return <details className="wallet-recharge-panel" open={defaultOpen ? true : undefined}>
+    <summary><QrCode aria-hidden="true" /><span>{provider === 'wechat' ? '微信充值' : '支付宝充值'}</span><ChevronDown aria-hidden="true" /></summary>
+    <div className="wallet-recharge-panel-body">{children}</div>
+  </details>
+}
+
+export function WalletAmountPicker({ disabled, busy, onConfirm, label }: {
+  disabled?: boolean; busy?: boolean; onConfirm: (yuan: number) => void; label: string
+}) {
+  const group = useId()
+  const [mode, setMode] = useState<200 | 600 | 1000 | 'custom'>(200)
+  const [custom, setCustom] = useState('')
+  const digits = custom.trim()
+  const value = mode === 'custom' ? /^\d{1,4}$/.test(digits) ? Number(digits) : 0 : mode
+  const valid = Number.isInteger(value) && value >= 200 && value <= 1000
+  return <form className="wallet-amount-form" onSubmit={event => {
+    event.preventDefault()
+    if (!disabled && !busy && valid) onConfirm(value)
+  }}>
+    <fieldset disabled={disabled || busy}>
+      <legend>选择充值金额</legend>
+      <div className="wallet-amount-options">
+        {([200, 600, 1000, 'custom'] as const).map(option => <label key={option}>
+          <input type="radio" name={group} checked={mode === option} onChange={() => setMode(option)} />
+          <span>{option === 'custom' ? '自定义' : `¥${pointsNumber.format(option)}`}</span>
+        </label>)}
+      </div>
+      {mode === 'custom' && <label className="wallet-custom-amount">
+        <span>自定义金额（元）</span>
+        <input inputMode="numeric" placeholder="200–1000" value={custom}
+          aria-describedby={`${group}-hint`} onChange={event => setCustom(event.target.value)} />
+        <span id={`${group}-hint`} className="wallet-amount-hint">可输入 200 至 1000 元的整数。</span>
+      </label>}
+    </fieldset>
+    <div className="wallet-amount-total">
+      <span aria-live="polite">{valid ? <>支付 <strong>¥{pointsNumber.format(value)}</strong> · 到账 <strong>{pointsNumber.format(value)} 积分</strong></> : '请输入有效金额'}</span>
+      <button className="wallet-pay-button" type="submit" disabled={disabled || busy || !valid}>
+        <QrCode aria-hidden="true" />{busy ? '正在下单…' : label}
+      </button>
+    </div>
+  </form>
 }

@@ -1,5 +1,6 @@
 import { json, requireDb } from '../../_utils.js'
 import { requireUser } from '../../auth/_auth.js'
+import { rechargeRangeError, standardRecharge } from '../../_recharge_amount.js'
 import { alipayCheckout, alipayCheckoutUrl, alipayError, alipaySettings, canCheckoutWithAlipay, noStore, publicAlipayOrder } from '../../_alipay.js'
 
 export function onRequestPost(context) {
@@ -20,11 +21,13 @@ export async function createAlipayOrder({ request, env }, checkout) {
     if (typeof body?.requestId !== 'string' || !/^[a-zA-Z0-9-]{16,64}$/.test(body.requestId)) {
       return alipayError('无效订单请求', 400)
     }
+    const price = checkout === alipayCheckout ? standardRecharge(body.rechargeYuan) : checkout
+    if (!price) return alipayError(rechargeRangeError, 400)
     const userId = auth.user.id
     const now = new Date().toISOString()
     const byRequest = () => db.prepare('SELECT * FROM alipay_orders WHERE user_id = ? AND request_id = ?').bind(userId, body.requestId).first()
     const pending = () => db.prepare("SELECT * FROM alipay_orders WHERE user_id = ? AND amount_fen = ? AND status = 'pending' AND expires_at > ?")
-      .bind(userId, checkout.amountFen, now).first()
+      .bind(userId, price.amountFen, now).first()
     await db.prepare("UPDATE alipay_orders SET status = 'expired' WHERE user_id = ? AND status = 'pending' AND expires_at <= ?").bind(userId, now).run()
     let order = await byRequest() || await pending()
     if (!order) {
@@ -32,11 +35,14 @@ export async function createAlipayOrder({ request, env }, checkout) {
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
       await db.prepare(`INSERT OR IGNORE INTO alipay_orders
         (id,user_id,request_id,app_id,seller_id,amount_fen,points,expires_at) VALUES (?,?,?,?,?,?,?,?)`)
-        .bind(id, userId, body.requestId, settings.appId, settings.sellerId, checkout.amountFen, checkout.points, expiresAt).run()
+        .bind(id, userId, body.requestId, settings.appId, settings.sellerId, price.amountFen, price.points, expiresAt).run()
       order = await byRequest() || await pending()
     }
+    if (!order && checkout === alipayCheckout && await db.prepare("SELECT id FROM alipay_orders WHERE user_id = ? AND amount_fen >= 20000 AND status = 'pending'").bind(userId).first()) {
+      return alipayError('还有一笔不同金额的支付宝充值订单待付款，请先核对原订单，待其到期后再选择新金额。', 409)
+    }
     if (!order) throw new Error('ALIPAY_ORDER_CREATION_FAILED')
-    if (order.amount_fen !== checkout.amountFen || order.points !== checkout.points) {
+    if (order.amount_fen !== price.amountFen || order.points !== price.points) {
       return alipayError('该请求编号已用于其他充值档位。', 409)
     }
     const summary = publicAlipayOrder(order)

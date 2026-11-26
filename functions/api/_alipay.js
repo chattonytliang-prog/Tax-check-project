@@ -60,7 +60,7 @@ export async function alipayCheckoutUrl(order, settings) {
     biz_content: JSON.stringify({
       out_trade_no: order.id, product_code: 'FAST_INSTANT_TRADE_PAY', seller_id: settings.sellerId,
       total_amount: (order.amount_fen / 100).toFixed(2),
-      subject: order.points === 1 ? '税务风控报告积分测试充值1积分' : '税务风控报告积分充值200积分',
+      subject: order.points === 1 ? '税务风控报告积分测试充值1积分' : `税务风控报告积分充值${order.points}积分`,
       time_expire: alipayTime(new Date(order.expires_at)),
     }),
   }

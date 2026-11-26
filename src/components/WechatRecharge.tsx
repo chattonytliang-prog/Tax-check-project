@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
-import { QrCode, RefreshCcw } from 'lucide-react'
+import { RefreshCcw } from 'lucide-react'
 import { apiGet, apiSend } from '../lib/apiClient'
-import { WalletPaymentTier, WalletRechargeButton } from './PointsWallet'
+import { WalletAmountPicker, WalletPaymentTier, WalletRechargeButton, WalletRechargePanel } from './PointsWallet'
 
 type Order = { id: string; status: 'pending' | 'expired' | 'paid'; codeUrl: string | null; expiresAt: string; points: number; amountFen: number }
 type Denomination = { amountFen: number; points: number }
@@ -20,13 +20,13 @@ export function WechatRecharge({ userId, onPaid }: { userId: string; onPaid: () 
 
   const current = status?.userId === userId ? status : null
   const config = current?.config
-  return <div>
+  return <WalletRechargePanel provider="wechat">
     <WechatCheckout key={userId} storageKey={`wechat-checkout-${userId}`} onPaid={onPaid}
       amountFen={config?.amountFen ?? 20000} points={config?.points ?? 200} enabled={config?.enabled ?? null}
       configFailed={Boolean(current && !config)} />
     {config?.enabled && config.test && <WechatCheckout key={`${userId}-test`} storageKey={`wechat-checkout-${userId}-test`}
       onPaid={onPaid} {...config.test} enabled isTest />}
-  </div>
+  </WalletRechargePanel>
 }
 
 function WechatCheckout({ storageKey, onPaid, amountFen, points, enabled, configFailed, isTest = false }: Denomination & {
@@ -38,7 +38,7 @@ function WechatCheckout({ storageKey, onPaid, amountFen, points, enabled, config
   const [error, setError] = useState('')
   const [now, setNow] = useState(() => Date.now())
   const onPaidRef = useRef(onPaid)
-  const requestId = useRef(crypto.randomUUID())
+  const requestId = useRef({ id: '', yuan: 0 })
   useEffect(() => { onPaidRef.current = onPaid }, [onPaid])
 
   useEffect(() => {
@@ -87,16 +87,22 @@ function WechatCheckout({ storageKey, onPaid, amountFen, points, enabled, config
     }
   }, [order?.status, storageKey])
 
-  async function createOrder() {
-    if (busy) return
+  async function createOrder(yuan: number, newOrder = false) {
+    if (!enabled || busy) return
+    if (newOrder || !requestId.current.id || requestId.current.yuan !== yuan) {
+      requestId.current = { id: crypto.randomUUID(), yuan }
+    }
     setBusy(true)
     setError('')
     try {
       const endpoint = isTest ? 'test-order' : 'orders'
-      const result = await apiSend<{ order: Order }>(`/api/payments/wechat/${endpoint}`, 'POST', { requestId: requestId.current })
+      const result = await apiSend<{ order: Order }>(`/api/payments/wechat/${endpoint}`, 'POST', {
+        requestId: requestId.current.id, ...(!isTest && { rechargeYuan: yuan }),
+      })
+      if (result.order.amountFen !== yuan * 100 || result.order.points !== yuan) throw new Error('订单金额不匹配，未显示付款码。')
       setOrder(result.order)
       setNow(Date.now())
-      sessionStorage.setItem(storageKey, result.order.id)
+      if (result.order.status === 'pending') sessionStorage.setItem(storageKey, result.order.id)
     } catch (cause) { setError(cause instanceof Error ? cause.message : '下单失败，请重试。') }
     finally { setBusy(false) }
   }
@@ -113,17 +119,15 @@ function WechatCheckout({ storageKey, onPaid, amountFen, points, enabled, config
     finally { setBusy(false) }
   }
 
-  const expired = order && now >= Date.parse(order.expiresAt)
+  const expired = order && (order.status === 'expired' || now >= Date.parse(order.expiresAt))
+  const hasActiveOrder = order?.status === 'pending' && !expired
   return <div className="wallet-checkout">
-    {(enabled || order) ? <WalletPaymentTier amountFen={amountFen} points={points} test={isTest}>
-      {(!order || order.status === 'paid') && <WalletRechargeButton provider="wechat" test={isTest}
-        disabled={!enabled} busy={busy} onClick={() => {
-          if (order?.status === 'paid') requestId.current = crypto.randomUUID()
-          void createOrder()
-        }} />}
-      {order && order.status !== 'paid' && <button type="button" className="wallet-pay-button wallet-pay-button--secondary"
-        disabled={busy} onClick={() => void checkOrder()}><RefreshCcw aria-hidden="true" />查询到账</button>}
-    </WalletPaymentTier> : <p className="wallet-channel-state" role={configFailed ? 'alert' : 'status'}>
+    {enabled && !hasActiveOrder && (isTest ?
+      <WalletPaymentTier amountFen={amountFen} points={points} test>
+        <WalletRechargeButton provider="wechat" test busy={busy} onClick={() => void createOrder(points, Boolean(order))} />
+      </WalletPaymentTier> :
+      <WalletAmountPicker label="生成微信付款码" busy={busy} onConfirm={yuan => void createOrder(yuan, Boolean(order))} />)}
+    {!enabled && !order && <p className="wallet-channel-state" role={configFailed ? 'alert' : 'status'}>
       {configFailed ? '暂时无法查询微信支付，请稍后刷新。' : enabled === null ? '正在查询支付状态…' : '当前账号暂未开放微信支付。'}
     </p>}
     {order?.status === 'paid' && <p className="wallet-notice wallet-notice--success" role="status">付款成功，{order.points} 积分已到账。</p>}
@@ -131,11 +135,9 @@ function WechatCheckout({ storageKey, onPaid, amountFen, points, enabled, config
       <p className="wallet-order-title" role="status">{expired ? '二维码已到期' : '等待微信付款确认'}</p>
       <p>{expired ? '如已付款，请先查询到账，不要重复付款。' : '请使用微信扫码；如已付款，请勿重复支付。'}</p>
       {qr && qr.orderId === order.id && !expired && <img className="wallet-order-qr" src={qr.url} width={168} height={168} alt="本次充值订单的微信支付二维码" />}
-      <p className="wallet-order-code">订单号 <code>{order.id}</code></p>
-      {expired && <button type="button" className="wallet-pay-button wallet-pay-button--secondary" disabled={!enabled || busy} onClick={() => {
-        requestId.current = crypto.randomUUID()
-        void createOrder()
-      }}><QrCode aria-hidden="true" />重新下单</button>}
+      <p className="wallet-order-code"><span>¥{order.amountFen / 100} · {order.points} 积分</span>订单号 <code>{order.id}</code></p>
+      <button type="button" className="wallet-pay-button wallet-pay-button--secondary"
+        disabled={busy} onClick={() => void checkOrder()}><RefreshCcw aria-hidden="true" />查询到账</button>
     </div>}
     {error && <p role="alert" className="wallet-notice wallet-notice--error">{error}</p>}
   </div>

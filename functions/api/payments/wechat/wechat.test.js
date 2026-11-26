@@ -314,4 +314,39 @@ describe('WeChat payment security and atomic credits', () => {
     expect(db.sqlite.prepare('SELECT points FROM wechat_recharges WHERE order_id = ?').get(order.id).points).toBe(1)
     expect(db.sqlite.prepare('SELECT count(*) AS n FROM wechat_recharges').get().n).toBe(2)
   })
+
+  it('signs custom whole-yuan orders, preserves history, and rejects conflicting pending amounts', async () => {
+    const db = database()
+    await settleWechat(db, transaction(), env)
+    migrateTestRecharge(db)
+    const history = db.sqlite.prepare('SELECT * FROM wechat_recharges').all()
+    for (const file of ['0016_alipay_recharge.sql', '0017_recharge_amounts.sql']) {
+      db.sqlite.exec(readFileSync(new URL(`../../../../migrations/${file}`, import.meta.url), 'utf8'))
+    }
+    expect(db.sqlite.prepare('SELECT * FROM wechat_recharges').all()).toEqual(history)
+    expect(db.sqlite.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    const wallet = () => db.sqlite.prepare("SELECT balance FROM point_wallets WHERE user_id='u'").get().balance
+    expect(wallet()).toBe(10200)
+    const amounts = []
+    vi.stubGlobal('fetch', vi.fn(async (_url, options) => {
+      amounts.push(JSON.parse(options.body).amount.total)
+      const raw = JSON.stringify({ code_url: 'weixin://wxpay/test' })
+      return new Response(raw, { headers: await headers(raw) })
+    }))
+    const testEnv = { ...env, DB: db, WECHAT_PAY_TEST_USER_ID: 'u' }
+    const place = (rechargeYuan, requestId, method = create) => method({ env: testEnv, request: new Request(`${origin}/api/payments/wechat/orders`, {
+      method: 'POST', headers: { origin, 'x-test-user': 'u' }, body: JSON.stringify({ requestId, rechargeYuan, points: 999 }),
+    }) })
+    for (const yuan of [1, 199, 540.5, '600', 1001]) expect((await place(yuan, 'bad-flex-order-01')).status).toBe(400)
+    const { order } = await (await place(781, 'custom-order-781')).json()
+    expect(order).toMatchObject({ amountFen: 78100, points: 781 })
+    expect((await place(1000, 'custom-order-1000')).status).toBe(409)
+    expect((await (await place(1000, 'test-flex-order01', createTest)).json()).order.points).toBe(1)
+    const valid = transaction({ out_trade_no: order.id, transaction_id: '1234567888', amount: { total: 78100, currency: 'CNY' } })
+    await settleWechat(db, valid, testEnv)
+    await settleWechat(db, valid, testEnv)
+    expect(wallet()).toBe(10981)
+    expect((await (await place(1000, 'custom-order-1000')).json()).order.points).toBe(1000)
+    expect(amounts).toEqual([78100, 100, 100000])
+  })
 })

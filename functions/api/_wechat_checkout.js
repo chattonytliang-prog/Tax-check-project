@@ -1,5 +1,6 @@
 import { json, requireDb } from './_utils.js'
 import { requireUser } from './auth/_auth.js'
+import { rechargeRangeError, standardRecharge } from './_recharge_amount.js'
 import { canCheckoutWithWechat, canCheckoutWithWechatTest, paymentConfig, paymentError, publicOrder, wechatRequest } from './_wechat.js'
 
 export const standardCheckout = Object.freeze({ amountFen: 20000, points: 200, description: '税务风控报告积分充值200积分' })
@@ -18,12 +19,14 @@ export async function createWechatOrder({ request, env }, checkout) {
     }
     paymentConfig(env)
     if (!canCheckoutWithWechat(env, auth.user)) return json({ error: '微信支付尚未向当前账户开放。' }, { status: 403 })
-    const { requestId } = await request.json()
-    if (!/^[a-zA-Z0-9-]{16,64}$/.test(requestId || '')) return json({ error: '无效订单请求' }, { status: 400 })
+    const { requestId, rechargeYuan } = (await request.json().catch(() => null)) ?? {}
+    if (typeof requestId !== 'string' || !/^[a-zA-Z0-9-]{16,64}$/.test(requestId)) return json({ error: '无效订单请求' }, { status: 400 })
+    const price = checkout === testCheckout ? testCheckout : standardRecharge(rechargeYuan)
+    if (!price) return json({ error: rechargeRangeError }, { status: 400 })
     await db.prepare("UPDATE wechat_orders SET status = 'expired' WHERE user_id = ? AND status = 'pending' AND expires_at <= ?")
       .bind(auth.user.id, new Date().toISOString()).run()
     const findPending = () => db.prepare(`SELECT * FROM wechat_orders WHERE user_id = ? AND amount_fen = ?
-      AND status = 'pending' AND expires_at > ?`).bind(auth.user.id, checkout.amountFen, new Date().toISOString()).first()
+      AND status = 'pending' AND expires_at > ?`).bind(auth.user.id, price.amountFen, new Date().toISOString()).first()
     let order = await db.prepare('SELECT * FROM wechat_orders WHERE user_id = ? AND request_id = ?')
       .bind(auth.user.id, requestId).first()
     if (!order) {
@@ -36,12 +39,15 @@ export async function createWechatOrder({ request, env }, checkout) {
       await db.prepare(`INSERT OR IGNORE INTO wechat_orders
         (id, user_id, request_id, appid, mchid, amount_fen, points, expires_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, auth.user.id, requestId, env.WECHAT_APP_ID, env.WECHAT_MCH_ID,
-          checkout.amountFen, checkout.points, expiresAt).run()
+          price.amountFen, price.points, expiresAt).run()
       order = await db.prepare('SELECT * FROM wechat_orders WHERE user_id = ? AND request_id = ?').bind(auth.user.id, requestId).first()
       if (!order) order = await findPending()
+      if (!order && checkout !== testCheckout && await db.prepare("SELECT id FROM wechat_orders WHERE user_id = ? AND amount_fen >= 20000 AND status = 'pending'").bind(auth.user.id).first()) {
+        return json({ error: '还有一笔不同金额的微信充值订单待付款，请先核对原订单，待其到期后再选择新金额。' }, { status: 409 })
+      }
       if (!order) throw new Error('ORDER_RETRY_REQUIRED')
     }
-    if (order.amount_fen !== checkout.amountFen || order.points !== checkout.points) {
+    if (order.amount_fen !== price.amountFen || order.points !== price.points) {
       return json({ error: '该请求编号已用于其他充值档位。' }, { status: 409 })
     }
     if (order.status === 'paid' || Date.parse(order.expires_at) <= Date.now()) {
@@ -49,7 +55,7 @@ export async function createWechatOrder({ request, env }, checkout) {
     }
     if (!order.code_url) {
       const result = await wechatRequest(env, 'POST', '/v3/pay/transactions/native', {
-        appid: order.appid, mchid: order.mchid, description: checkout.description,
+        appid: order.appid, mchid: order.mchid, description: price.description,
         out_trade_no: order.id, time_expire: order.expires_at, notify_url: env.WECHAT_NOTIFY_URL,
         amount: { total: order.amount_fen, currency: 'CNY' },
       })

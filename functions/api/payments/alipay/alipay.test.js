@@ -56,9 +56,9 @@ function request(path, { method = 'GET', data, headers = {}, user = 'user', doma
   return new Request(`${domain}${path}`, { method, headers: { ...(user ? { 'x-test-user': user } : {}), ...headers }, body: data })
 }
 
-function place(env, { user = 'user', source = origin, role = 'user', actor = '', username = '', test = false, requestId = 'request-id-000001' } = {}) {
+function place(env, { user = 'user', source = origin, role = 'user', actor = '', username = '', test = false, requestId = 'request-id-000001', rechargeYuan } = {}) {
   return (test ? createTest : create)({ env, request: request(`/api/payments/alipay/${test ? 'test-order' : 'orders'}`, { user, method: 'POST',
-    headers: { origin: source, 'x-test-role': role, 'x-test-actor': actor, 'x-test-username': username }, data: JSON.stringify({ requestId, amountFen: 1, points: 999 }) }) })
+    headers: { origin: source, 'x-test-role': role, 'x-test-actor': actor, 'x-test-username': username }, data: JSON.stringify({ requestId, amountFen: 1, points: 999, rechargeYuan }) }) })
 }
 
 function noticeFields(order, extra = {}) {
@@ -78,6 +78,37 @@ async function notice(env, fields, { mutate, signer = providerKeys.privateKey } 
 const balance = DB => DB.sqlite.prepare("SELECT balance FROM point_wallets WHERE user_id = 'user'").get().balance
 
 describe('Alipay website recharge', () => {
+  it('preserves history, accepts whole-yuan amounts, and credits signed 600-yuan orders once', async () => {
+    const DB = database()
+    const env = { ...settings, DB, ALIPAY_PAY_TEST_USER_ID: 'user' }
+    const prior = (await (await place(env)).json()).order
+    expect(await (await notice(env, noticeFields(prior))).text()).toBe('success')
+    const history = DB.sqlite.prepare('SELECT * FROM alipay_recharges').all()
+    for (const file of ['0011_wechat_recharge.sql', '0015_wechat_test_recharge.sql', '0017_recharge_amounts.sql']) {
+      DB.sqlite.exec(readFileSync(new URL(`../../../../migrations/${file}`, import.meta.url), 'utf8'))
+    }
+    expect(DB.sqlite.prepare('SELECT * FROM alipay_recharges').all()).toEqual(history)
+    expect(balance(DB)).toBe(207)
+    expect(DB.sqlite.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    for (const rechargeYuan of [null, '600', 1, 199, 200.5, 1001]) {
+      expect((await place(env, { rechargeYuan, requestId: 'request-invalid-01' })).status).toBe(400)
+    }
+    const standard = await (await place(env, { rechargeYuan: 600, requestId: 'new-amount-600-01' })).json()
+    expect(standard.order).toMatchObject({ amountFen: 60000, points: 600 })
+    expect(JSON.parse(new URL(standard.checkoutUrl).searchParams.get('biz_content'))).toMatchObject({ total_amount: '600.00' })
+    expect((await place(env, { rechargeYuan: 721, requestId: 'new-amount-721-01' })).status).toBe(409)
+    expect((await (await place(env, { rechargeYuan: 600, requestId: 'new-amount-600-02' })).json()).order.id).toBe(standard.order.id)
+    const test = await (await place(env, { rechargeYuan: 1000, test: true, requestId: 'new-amount-test01' })).json()
+    expect(test.order).toMatchObject({ points: 1, amountFen: 100 })
+    const paidFields = noticeFields(standard.order, { trade_no: '202600011100000000000321', total_amount: '600.00' })
+    expect((await notice(env, { ...paidFields, total_amount: '200.00' })).status).toBe(500)
+    expect(await (await notice(env, paidFields)).text()).toBe('success')
+    expect(await (await notice(env, paidFields)).text()).toBe('success')
+    expect(balance(DB)).toBe(807)
+    const custom = await (await place(env, { rechargeYuan: 721, requestId: 'new-amount-721-02' })).json()
+    expect(custom.order).toMatchObject({ amountFen: 72100, points: 721 })
+  })
+
   it('only advertises checkout with an authenticated personal user, explicit switch, keys, schema and production origin', async () => {
     const DB = database()
     const read = (env, options) => config({ env, request: request('/api/payments/alipay/config', options) }).then(res => res.json())
