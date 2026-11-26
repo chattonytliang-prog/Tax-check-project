@@ -1,0 +1,42 @@
+.login-glass-archive {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 80% 84%, #a7c5ea52, #a7c5ea00 38%),
+    radial-gradient(ellipse at 87% 52%, #dceafb, #dceafb00 70%),
+    #fff;
+}
+
+.login-glass-archive canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.login-archive-toggle { display: none; }
+
+@media (min-width: 721px) and (prefers-reduced-motion: no-preference) {
+  .login-archive-toggle {
+    position: absolute;
+    inset: auto var(--login-gutter) 18px auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    pointer-events: auto;
+    min-height: 44px;
+    padding-inline: 12px;
+    border: 1px solid #d7e2f5;
+    border-radius: 7px;
+    background: #fff;
+    color: #334976;
+    font-size: 13px;
+  }
+
+  .login-archive-toggle svg { width: 15px; height: 15px; }
+  .login-archive-toggle:hover { background: #edf4ff; }
+}

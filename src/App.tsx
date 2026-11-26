@@ -6,7 +6,7 @@ import type * as ThreeNamespace from 'three'
 import { WechatRecharge } from './components/WechatRecharge'
 import { AlipayRecharge } from './components/AlipayRecharge'
 import { getReturnedAlipayOrder } from './lib/alipayCheckout'
-import { LoginCrystalMotion } from './components/LoginCrystalMotion'
+import { LoginGlassArchive } from './components/LoginGlassArchive'
 import {
   AlertTriangle,
   BarChart3,
@@ -7381,7 +7381,7 @@ function App() {
         </header>
         <div className="login-stage">
           <section className="login-panel" aria-labelledby="login-title">
-            <h1 id="login-title" className={isLogin ? 'login-title-emphasis' : undefined}>{isLogin ? '账号登录' : '注册账号'}</h1>
+            <h1 id="login-title">{isLogin ? '账号登录' : '注册账号'}</h1>
             <p className="login-copy">从资料出发，让税务风险有据可查。</p>
             <form className="login-form" onSubmit={handleAuthSubmit} aria-busy={authLoading}>
               <label className="login-label" htmlFor="login-username">用户名</label>
@@ -7441,7 +7441,7 @@ function App() {
           </section>
         </div>
         <SiteComplianceFooter className="login-compliance-footer" showOperator={false} />
-        <LoginCrystalMotion />
+        <LoginGlassArchive />
       </main>
     )
   }
