@@ -3,7 +3,7 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['functions/api/points/points.test.js'],
+    include: ['functions/api/points/points.test.js', 'functions/api/payments/alipay/alipay.test.js'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary'],

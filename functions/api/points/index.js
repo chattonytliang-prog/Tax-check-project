@@ -30,6 +30,13 @@ export async function onRequestGet({ request, env }) {
         FROM wechat_recharges WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`).bind(auth.user.id).all()
       rechargeRows = recharges.results
     }
+    const alipayTable = await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'alipay_recharges'").first()
+    if (alipayTable) {
+      const recharges = await db.prepare(`SELECT order_id AS id, points AS delta, 'alipay_recharge' AS source,
+        NULL AS report_id, NULL AS actor_user_id, '支付宝充值' AS note, created_at
+        FROM alipay_recharges WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`).bind(auth.user.id).all()
+      rechargeRows.push(...recharges.results)
+    }
     const history = [...results, ...rechargeRows].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 50)
     return json({
       balance: wallet.balance,

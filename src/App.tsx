@@ -4,6 +4,8 @@ import { unzipSync } from 'fflate'
 import type { EChartsType } from 'echarts/core'
 import type * as ThreeNamespace from 'three'
 import { WechatRecharge } from './components/WechatRecharge'
+import { AlipayRecharge } from './components/AlipayRecharge'
+import { getReturnedAlipayOrder } from './lib/alipayCheckout'
 import { LoginCrystalMotion } from './components/LoginCrystalMotion'
 import {
   AlertTriangle,
@@ -1207,7 +1209,7 @@ type AdminUser = {
 type PointTransaction = {
   id: string
   delta: number
-  source: 'report' | 'admin_adjustment' | 'wechat_recharge'
+  source: 'report' | 'admin_adjustment' | 'wechat_recharge' | 'alipay_recharge'
   reportId: string | null
   actorUserId: string | null
   note: string
@@ -4945,7 +4947,8 @@ function App() {
   const [authPasswordVisible, setAuthPasswordVisible] = useState(false)
   const [authError, setAuthError] = useState('')
   const [authLoading, setAuthLoading] = useState(true)
-  const [page, setPage] = useState<Page>('dashboard')
+  const [alipayReturnOrder, setAlipayReturnOrder] = useState(getReturnedAlipayOrder)
+  const [page, setPage] = useState<Page>(() => getReturnedAlipayOrder() ? 'wallet' : 'dashboard')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [clients, setClients] = useState<Client[]>([])
   const [selectedClientId, setSelectedClientId] = useState('')
@@ -5001,7 +5004,7 @@ function App() {
   const taxDataDirectImportInputRef = useRef<HTMLInputElement>(null)
   const directImportTargetRef = useRef<Client | null>(null)
   const taxDataDetailCache = useRef(new Map<string, TaxDataDetail>())
-  const clearWorkspaceState = useCallback(() => {
+  const clearWorkspaceState = useCallback((preserveWallet = false) => {
     setClients([])
     setReports([])
     setReportRiskResultCounts({})
@@ -5023,13 +5026,15 @@ function App() {
     directImportTargetRef.current = null
     setAdminUsers([])
     setAdjustingPointsUser(null)
-    setPointWallet(null)
-    setPointWalletError('')
+    if (!preserveWallet) {
+      setPointWallet(null)
+      setPointWalletError('')
+    }
     setManagedRules([])
     setRestrictedRuleCount(0)
     setAiReportFailure(null)
     reportRetryDraft.current = null
-    setPage('dashboard')
+    setPage((current) => preserveWallet && current === 'wallet' ? current : 'dashboard')
   }, [])
   useEffect(() => {
     if (page !== 'report-readiness') importApprovalResolver.current?.(false)
@@ -5142,7 +5147,8 @@ function App() {
           setAuthLoading(false)
           return
         }
-        clearWorkspaceState()
+        // A reports or clients API outage must not interrupt a payment return or balance lookup.
+        clearWorkspaceState(true)
         setDataStatus('fallback')
       }
     }
@@ -7262,6 +7268,7 @@ function App() {
       clearWorkspaceState()
       setAuthUser(response.user)
       setLoggedIn(true)
+      if (alipayReturnOrder) setPage('wallet')
       setAuthPassword('')
       setAuthPasswordVisible(false)
       setDataStatus('loading')
@@ -8981,11 +8988,23 @@ function App() {
                 <h3>使用规则</h3>
                 <p>每个普通账号的首份报告免费，之后每生成一份新报告扣 200 积分；查看和重新导出已有报告不扣分。</p>
                 <p>删除报告不会返还已使用的免费次数或积分。管理员账号生成报告免费；管理员代入普通用户时，按该用户账户计费。</p>
-                <p>充值 200 元对应 200 积分，可生成一份付费报告。请使用微信支付，系统确认付款成功后积分自动到账。</p>
+                <p>充值 200 元对应 200 积分，可生成一份付费报告。系统确认付款成功后积分自动到账。</p>
               </div>
               {!pointWallet?.adminUnlimited && (
                 <div className="payment-methods">
-                {authUser && !authUser.actor && <WechatRecharge userId={authUser.id} onPaid={() => void refreshPointWallet()} />}
+                  {authUser && !authUser.actor && authUser.role !== 'admin' && <>
+                    <WechatRecharge userId={authUser.id} onPaid={() => void refreshPointWallet()} />
+                    <AlipayRecharge key={authUser.id} userId={authUser.id} returnOrderId={alipayReturnOrder}
+                      onPaid={() => {
+                        const url = new URL(window.location.href)
+                        if (url.searchParams.has('alipay_order')) {
+                          url.searchParams.delete('alipay_order')
+                          window.history.replaceState(window.history.state, '', url)
+                          setAlipayReturnOrder(null)
+                        }
+                        void refreshPointWallet()
+                      }} />
+                  </>}
                 </div>
               )}
             </div>
@@ -8997,7 +9016,7 @@ function App() {
                   {pointWallet?.transactions.map((entry) => (
                     <tr key={entry.id}>
                       <td>{formatPointTime(entry.createdAt)}</td>
-                      <td>{entry.source === 'report' ? '报告扣分' : entry.source === 'wechat_recharge' ? '微信充值' : '管理员调整'}</td>
+                      <td>{entry.source === 'report' ? '报告扣分' : entry.source === 'wechat_recharge' ? '微信充值' : entry.source === 'alipay_recharge' ? '支付宝充值' : '管理员调整'}</td>
                       <td className={entry.delta > 0 ? 'point-positive' : 'point-negative'}>{entry.delta > 0 ? '+' : ''}{entry.delta}</td>
                       <td>{entry.note}</td>
                     </tr>
