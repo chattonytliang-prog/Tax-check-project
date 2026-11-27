@@ -6,6 +6,9 @@ import type * as ThreeNamespace from 'three'
 import { WechatRecharge } from './components/WechatRecharge'
 import { AlipayRecharge } from './components/AlipayRecharge'
 import { PointsWallet, WalletPaymentMethod, type PointWallet } from './components/PointsWallet'
+import { WarningIndicatorCatalog } from './components/WarningIndicatorCatalog'
+import { FilingValidationPage } from './components/FilingValidationPage'
+import { duplicatePersonnelRuleCodes, enterpriseRuleLevel, participatesInEnterpriseScoring } from './lib/enterpriseRulePolicy'
 import { getReturnedAlipayOrder } from './lib/alipayCheckout'
 import { LoginGlassArchive } from './components/LoginGlassArchive'
 import {
@@ -173,7 +176,7 @@ import { confirmedTaxDocumentSource, taxDocumentLocatorInput } from './lib/taxDo
 import './App.css'
 import './components/WorkspacePolish.css'
 
-type Page = 'dashboard' | 'assistant' | 'clients' | 'form' | 'result' | 'report-readiness' | 'report' | 'reports' | 'wallet' | 'rules' | 'admin'
+type Page = 'dashboard' | 'assistant' | 'clients' | 'form' | 'result' | 'filing' | 'report-readiness' | 'report' | 'reports' | 'wallet' | 'rules' | 'admin'
 type RiskDetectionStep = 'client' | 'period' | 'confirm' | 'result'
 type TaxpayerType = '' | '小规模纳税人' | '一般纳税人' | '个体工商户'
 type ProjectScope = '单主体' | '集团项目'
@@ -3050,18 +3053,6 @@ function basicComplianceFindings(client: Client): BasicComplianceFinding[] {
     })
   }
 
-  if (hasPositive(client.outputTax) && hasPositive(client.inputTax) && hasPositive(client.vatTaxPayable)) {
-    const theoreticalVat = client.outputTax - client.inputTax
-    const gap = Math.abs(theoreticalVat - client.vatTaxPayable)
-    findings.push({
-      title: '增值税勾稽关系',
-      level: gap > Math.max(100, Math.abs(theoreticalVat) * 0.1) ? 'warning' : 'ok',
-      detail: gap > Math.max(100, Math.abs(theoreticalVat) * 0.1)
-        ? `销项税减进项税与申报应纳税额存在差异，差额约 ${money(gap)}，需核对留抵、转出、减免或预缴。`
-        : '销项税、进项税和应纳税额勾稽关系未见明显异常。',
-    })
-  }
-
   return findings
 }
 
@@ -3703,7 +3694,11 @@ function hydrateManagedRules(managed: ManagedRule[] = []) {
   })
   const customRules = managed.filter((rule) => !builtInCodes.has(rule.code))
 
-  return [...hydratedBuiltIns, ...customRules].sort((a, b) => a.code.localeCompare(b.code, 'zh-CN'))
+  return [...hydratedBuiltIns, ...customRules].map((rule) => ({
+    ...rule,
+    enabled: rule.enabled && participatesInEnterpriseScoring(rule.code),
+    level: enterpriseRuleLevel(rule.code, rule.level),
+  })).sort((a, b) => a.code.localeCompare(b.code, 'zh-CN'))
 }
 
 function riskRuleExecution(client: Client, rule: RiskRule) {
@@ -3720,7 +3715,7 @@ function getSourceRules(managed: ManagedRule[] = []) {
     .filter((rule) => rule.enabled && isExecutableCondition(rule.conditionJson))
     .map(managedRuleToRisk)
 
-  return executableRules.length ? executableRules : allBuiltInRules
+  return executableRules
 }
 
 const duplicateRiskGroups = [
@@ -3736,6 +3731,7 @@ function consolidateRisks(risks: RiskRule[]) {
       duplicates.forEach((code) => removeCodes.add(code))
     }
   })
+  duplicatePersonnelRuleCodes(risks.map((risk) => risk.code)).forEach((code) => removeCodes.add(code))
 
   return risks.filter((risk) => !removeCodes.has(risk.code))
 }
@@ -6762,6 +6758,8 @@ function App() {
 
     const payload = {
       ...ruleDraft,
+      enabled: ruleDraft.enabled && participatesInEnterpriseScoring(ruleDraft.code),
+      level: enterpriseRuleLevel(ruleDraft.code, ruleDraft.level),
       materials: ruleDraft.materials,
     }
 
@@ -6801,6 +6799,7 @@ function App() {
   }
 
   const toggleManagedRule = async (rule: ManagedRule) => {
+    if (!participatesInEnterpriseScoring(rule.code)) return
     try {
       await apiSend<{ ok: true; enabled: boolean }>(`/api/rules/${rule.code}/toggle`, 'POST', {})
       await refreshRules()
@@ -6820,10 +6819,10 @@ function App() {
             code: rule.code,
             name: rule.name,
             taxType: rule.taxType,
-            level: rule.level,
+            level: enterpriseRuleLevel(rule.code, rule.level),
             basis: rule.basis,
             suggestion: rule.suggestion,
-            enabled: true,
+            enabled: participatesInEnterpriseScoring(rule.code),
             conditionText: rule.caseRef,
             conditionJson: riskRuleCondition(rule),
             requiredFields: rule.requiredFields || [],
@@ -6839,7 +6838,7 @@ function App() {
   }
 
   const importCandidateRules = async () => {
-    if (!window.confirm('确定导入脱敏候选规则吗？同编号 ON 规则会更新为可执行并启用。')) return
+    if (!window.confirm('确定导入脱敏候选规则吗？同编号 ON 规则会更新，暂缓评分的规则继续停用。')) return
 
     try {
       await Promise.all(
@@ -6848,10 +6847,10 @@ function App() {
             code: rule.code,
             name: rule.name,
             taxType: rule.taxType,
-            level: rule.level,
+            level: enterpriseRuleLevel(rule.code, rule.level),
             basis: rule.basis,
             suggestion: rule.suggestion,
-            enabled: true,
+            enabled: participatesInEnterpriseScoring(rule.code),
             conditionText: rule.caseRef,
             conditionJson: riskRuleCondition(rule),
             requiredFields: rule.requiredFields || [],
@@ -7455,7 +7454,10 @@ function App() {
               <Building2 /> 企业档案
             </button>
             <button className={page === 'result' ? 'active' : ''} onClick={openRiskDetectionPage}>
-              <Gauge /> 风险检测
+              <Gauge /> 企业风险评估
+            </button>
+            <button className={page === 'filing' ? 'active' : ''} onClick={() => setPage('filing')}>
+              <ShieldCheck /> 申报前校验
             </button>
             <button className={page === 'reports' || page === 'report' ? 'active' : ''} onClick={() => { setShowReportSources(false); setPage('reports') }}>
               <FileText /> 报告
@@ -8231,8 +8233,13 @@ function App() {
           </section>
         )}
 
+        {page === 'filing' && <FilingValidationPage key={selectedClient?.id || 'no-client'}
+          clients={clients} selectedClientId={selectedClient?.id || ''} onSelectClient={(id) => { setSelectedClientId(id); setSelectedPeriodEntryIds([]) }}
+          sources={activeTaxDataSummary?.sourceFiles || []} loading={dataStatus === 'loading' || Boolean(selectedClient && !activeTaxDataSummary && !activeTaxDataSummaryError)}
+          sourceError={activeTaxDataSummaryError || (dataStatus === 'fallback' ? '企业档案暂时无法读取。' : undefined)} />}
+
         {page === 'result' && !selectedClient && <section className="page">
-          <header className="page-header"><h2>风险检测</h2></header>
+          <header className="page-header"><h2>企业风险评估</h2></header>
           <section className="panel report-ledger-empty" role={dataStatus === 'loading' ? 'status' : undefined}>
             <Gauge aria-hidden="true" />
             <h3>{dataStatus === 'loading' ? '正在读取企业…' : dataStatus === 'fallback' ? '暂时无法读取企业' : '暂无可检测的企业'}</h3>
@@ -8246,8 +8253,8 @@ function App() {
           <section className="page">
             <header className="page-header">
               <div>
-                <h2>风险检测</h2>
-                <p className="workspace-page-description">选择企业和期间，核对范围后查看检测结果。</p>
+                <h2>企业风险评估</h2>
+                <p className="workspace-page-description">分析经营风险线索并生成报告。核对本期申报表，可使用「申报前校验」。</p>
               </div>
               {riskDetectionStep === 'result' && <div className="header-actions">
                 <button
@@ -8958,7 +8965,7 @@ function App() {
             <header className="page-header">
               <div>
                 <h2>规则库</h2>
-                <p className="workspace-page-description">查询规则版本、适用范围和启用状态。</p>
+                <p className="workspace-page-description">企业预警与申报表校验分开。缺取数口径的候选项不参与报告评分。</p>
               </div>
               <div className="header-actions">
                 <button className="secondary-button" onClick={refreshRules}>
@@ -8976,6 +8983,12 @@ function App() {
                 )}
               </div>
             </header>
+            <WarningIndicatorCatalog />
+            <details className="panel warning-catalog">
+              <summary>本版规则调整</summary>
+              <p>R021、ON-091、ON-092 同期命中只留一条人数差异复核线索，不单凭人数差异列为高风险。ON-058 暂停评分，待区分一般计税和简易计税等口径。</p>
+              <p>申报表公式在「申报前校验」单独执行，不计入企业风险等级。</p>
+            </details>
             {canUseAdmin && (
               <section className="form-section rule-editor">
                 <div className="panel-title">
@@ -9232,7 +9245,7 @@ function App() {
                   <p>{rule.taxType || '未填写税种'} / {rule.enabled ? '启用' : '停用'}</p>
                   <div className="rule-tags">
                     <span>{ruleOrigin(rule)}</span>
-                    <span>{isExecutableCondition(rule.conditionJson) ? '可直接执行' : '未配置条件'}</span>
+                    <span>{!participatesInEnterpriseScoring(rule.code) ? '暂缓评分' : isExecutableCondition(rule.conditionJson) ? '已配置条件' : '未配置条件'}</span>
                     {rule.requiredFields.length > 0 && <span>需补资料</span>}
                   </div>
                   {conditionSummary(rule.conditionJson) !== '不参与自动检测' && <small>执行条件：{conditionSummary(rule.conditionJson)}</small>}
@@ -9244,7 +9257,7 @@ function App() {
                   {canUseAdmin && (
                     <div className="report-actions">
                       <button onClick={() => editManagedRule(rule)}>编辑</button>
-                      <button onClick={() => toggleManagedRule(rule)}>{rule.enabled ? '停用' : '启用'}</button>
+                      {participatesInEnterpriseScoring(rule.code) && <button onClick={() => toggleManagedRule(rule)}>{rule.enabled ? '停用' : '启用'}</button>}
                       <button className="danger-action" onClick={() => deleteManagedRule(rule)}>
                         <Trash2 /> 删除
                       </button>
@@ -12222,7 +12235,7 @@ function AiAssistantPage({
       const prefix = finding.level === 'ok' ? '通过' : finding.level === 'warning' ? '需复核' : '缺资料'
       return `- ${prefix}｜${finding.title}：${finding.detail}`
     })
-    appendAssistantSystemMessage(`基础合规校验已完成。本板块只按已录入资料做确定性校验，不代表最终税务结论。\n\n${lines.join('\n')}`)
+    appendAssistantSystemMessage(`已核查资料完整性及经营数据差异。申报表公式请到「申报前校验」核对；以下不是税务机关的申报校验结果。\n\n${lines.join('\n')}`)
   }
   const runAssistantRiskDetection = () => {
     if (!risks.length) {
