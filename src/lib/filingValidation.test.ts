@@ -20,6 +20,11 @@ describe('separate filing validations', () => {
     const data = { templateId: legacyVatTemplate, rowNo: '11', currentAmount: 0, cumulativeAmount: 500, currentTax: 99 }
     expect(vatFilingRowsFromArchive([{ data }, { data, confidence: 'low' }, { data: { ...data, templateId: 'vat_other_schedule_pdf_v1' } }])).toEqual([{ row: '11', amount: 0 }])
   })
+  it('shows a supported recalculation without treating an empty target as matched', () => {
+    const finding = validateVatFiling('legacy', toRows({ ...legacy, 20: '' })).at(-1)
+    expect(finding).toMatchObject({ status: 'missing', missing: ['20'], actualFen: undefined, expectedFen: 1025, inputs: [{ row: '17', amountFen: 11025 }, { row: '18', amountFen: 10000 }] })
+    expect(validateVatFiling('legacy', toRows({ ...legacy, 18: '' })).at(-1)?.expectedFen).toBeUndefined()
+  })
   it('separates pilot rows, preserving add-on deduction, simple calculation and prepayment', () => {
     const entries = toRows({ '0B01': 100, '0B02': 80, '0B03': 5, '0B04': 3, '0B05': 82, '0B06': 82, '0B07': 18, '0B08': 0, '0B09': 5, '0B10': 8, '0B11': 2, '0B20': 19, '0C01': 4, '0C02': 15 })
     expect(validateVatFiling('pilot', entries).every((row) => row.status === 'matched')).toBe(true)

@@ -24,7 +24,10 @@ export const filingFormulas = {
   ],
 } satisfies Record<VatFormVersion, readonly Formula[]>
 
-export type FilingFinding = { id: string; name: string; target: string; formula: string; status: FilingStatus; missing: string[]; actualFen?: number; expectedFen?: number }
+export type FilingFinding = {
+  id: string; name: string; target: string; formula: string; status: FilingStatus; missing: string[]
+  inputs: { row: string; amountFen?: number }[]; actualFen?: number; expectedFen?: number
+}
 
 function fen(input: unknown) {
   if (typeof input !== 'number' && typeof input !== 'string') return undefined
@@ -48,11 +51,12 @@ export function validateVatFiling(version: VatFormVersion, entries: readonly { r
     return values?.size === 1 ? values.values().next().value : undefined
   }
   return filingFormulas[version].map(({ id, name, target, formula, operands, calculate }) => {
+    const inputs = operands.map((row) => ({ row, amountFen: get(row) }))
+    const actualFen = get(target)
     const missing = [target, ...operands].filter((row) => get(row) === undefined)
-    if (missing.length) return { id, name, target, formula, status: 'missing', missing }
-    const actualFen = get(target)!
-    const expectedFen = calculate(operands.map((row) => get(row)!))
-    return { id, name, target, formula, status: actualFen === expectedFen ? 'matched' : 'difference', missing, actualFen, expectedFen }
+    const expectedFen = inputs.every((input) => input.amountFen !== undefined) ? calculate(inputs.map(({ amountFen }) => amountFen!)) : undefined
+    const status = missing.length ? 'missing' : actualFen === expectedFen ? 'matched' : 'difference'
+    return { id, name, target, formula, status, missing, inputs, actualFen, expectedFen }
   })
 }
 
