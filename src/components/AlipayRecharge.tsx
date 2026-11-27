@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { RefreshCcw } from 'lucide-react'
 import { apiGet, apiSend } from '../lib/apiClient'
-import { alipayOrderIdPattern } from '../lib/alipayCheckout'
+import { alipayOrderIdPattern, reserveAlipayCheckoutTab } from '../lib/alipayCheckout'
 import { WalletAmountPicker, WalletPaymentTier, WalletRechargeButton, WalletRechargePanel } from './PointsWallet'
 
 const endpoint = '/api/payments/alipay'
@@ -20,6 +20,7 @@ export function AlipayRecharge({ userId, returnOrderId, onPaid }: {
   const [order, setOrder] = useState<Order | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [checkoutFallback, setCheckoutFallback] = useState<{ orderId: string; href: string } | null>(null)
   const requestIds = useRef({ orders: { id: '', yuan: 0 }, 'test-order': { id: '', yuan: 0 } })
   const reportedPaid = useRef<string | null>(null)
 
@@ -33,11 +34,14 @@ export function AlipayRecharge({ userId, returnOrderId, onPaid }: {
   useEffect(() => {
     if (!orderId || !alipayOrderIdPattern.test(orderId)) return
     let active = true
+    let checking = false
     let timeout: ReturnType<typeof setTimeout>
     const deadline = Date.now() + 90_000
     const check = async () => {
-      if (!active) return
+      if (!active || checking) return
+      clearTimeout(timeout)
       if (document.visibilityState !== 'hidden') {
+        checking = true
         try {
           const result = await apiGet<{ order: Order }>(`${endpoint}/orders/${orderId}`)
           if (!active) return
@@ -53,12 +57,16 @@ export function AlipayRecharge({ userId, returnOrderId, onPaid }: {
             return
           }
           setError('暂未查询到到账状态。如已付款，请勿重复支付。')
+        } finally {
+          checking = false
         }
       }
       if (active && Date.now() < deadline) timeout = setTimeout(() => void check(), 6000)
     }
+    const checkOnReturn = () => { if (document.visibilityState === 'visible') void check() }
+    document.addEventListener('visibilitychange', checkOnReturn)
     void check()
-    return () => { active = false; clearTimeout(timeout) }
+    return () => { active = false; clearTimeout(timeout); document.removeEventListener('visibilitychange', checkOnReturn) }
   }, [orderId, storageKey])
 
   useEffect(() => {
@@ -78,6 +86,9 @@ export function AlipayRecharge({ userId, returnOrderId, onPaid }: {
     }
     setBusy(true)
     setError('')
+    setCheckoutFallback(null)
+    const checkoutTab = reserveAlipayCheckoutTab()
+    let navigated = false
     try {
       const result = await apiSend<{ order: Order; checkoutUrl: string | null }>(`${endpoint}/${route}`, 'POST', {
         requestId: requestIds.current[route].id, ...(route === 'orders' && { rechargeYuan: yuan }),
@@ -97,9 +108,18 @@ export function AlipayRecharge({ userId, returnOrderId, onPaid }: {
         throw new Error('支付宝收银台地址无效。')
       }
       sessionStorage.setItem(storageKey, result.order.id)
-      window.location.assign(target.href)
+      if (checkoutTab && !checkoutTab.closed) {
+        try {
+          checkoutTab.location.replace(target.href)
+          navigated = true
+        } catch { /* Offer the safe link below if the reserved tab can't navigate. */ }
+      }
+      if (!navigated) setCheckoutFallback({ orderId: result.order.id, href: target.href })
     } catch (cause) { setError(cause instanceof Error ? cause.message : '未能打开支付宝收银台。') }
-    finally { setBusy(false) }
+    finally {
+      if (!navigated && checkoutTab && !checkoutTab.closed) checkoutTab.close()
+      setBusy(false)
+    }
   }
 
   async function checkOrder() {
@@ -117,6 +137,7 @@ export function AlipayRecharge({ userId, returnOrderId, onPaid }: {
   const pendingStandard = order?.status === 'pending' && order.points >= 200 ? order : null
   const testTier = config?.test
   return <WalletRechargePanel provider="alipay" defaultOpen={Boolean(orderId)}>
+    {(config?.enabled || testTier) && <p className="wallet-channel-state">收银台会在新标签页打开，积分页保持不变。</p>}
     {config?.enabled && (pendingStandard ?
       <WalletPaymentTier amountFen={pendingStandard.amountFen} points={pendingStandard.points}>
         <WalletRechargeButton provider="alipay" disabled={disabled} pending onClick={() => void openCheckout('orders', pendingStandard.points)} />
@@ -137,6 +158,9 @@ export function AlipayRecharge({ userId, returnOrderId, onPaid }: {
       <p>如已付款，请先查询到账，不要重复付款。</p>
       <p className="wallet-order-code">{order && <span>¥{order.amountFen / 100} · {order.points} 积分</span>}订单号 <code>{orderId}</code></p>
       <button className="wallet-pay-button wallet-pay-button--secondary" type="button" onClick={() => void checkOrder()} disabled={busy}><RefreshCcw aria-hidden="true" />查询到账</button>
+      {order?.status === 'pending' && checkoutFallback?.orderId === orderId && <p role="status">
+        未能自动打开新标签页，<a href={checkoutFallback.href} target="_blank" rel="noopener noreferrer">点击打开支付宝收银台</a>。
+      </p>}
     </div>}
     {error && <p role="alert" className="wallet-notice wallet-notice--error">{error}</p>}
   </WalletRechargePanel>
