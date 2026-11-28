@@ -1,40 +1,45 @@
 import type { FilingStatus } from './filingValidation'
 import type { PdfTextRun } from './pdfTextExtractor'
 
-type Form = 'A105000' | 'A105060'
-type Identity = { taxId?: string; period?: string }
-type Source = { file: number; page: number; form: Form; row: 12 | 15 | 16 }
-type Row = { source: Source; cells: Cell[] }
-type Cell = number | 'blank' | 'unreadable'
-type Sheet = { form: Form; identity: Identity; hospitality?: Row; advertising?: Row }
+export type CitForm = 'A105000' | 'A105060'
+export type CitIdentity = { taxId?: string; period?: string; conflict?: boolean }
+type SourceLocation = { file: number; form: CitForm; row: 12 | 15 | 16 }
+export type CitSource = SourceLocation & ({ page: number } | {
+  sheet: string; range: string; cells: { label: string; address: string; text: string }[]
+})
+export type CitCell = number | 'blank' | 'unreadable'
+export type CitRow = { source: CitSource; cells: CitCell[] }
+export type CitSheet = { form: CitForm; identity: CitIdentity; hospitality?: CitRow; advertising?: CitRow }
 export type CitFinding = {
   id: string; title: string; location: string; status: FilingStatus; detail: string
-  actual?: number; expected?: number; sources: Source[]
+  actual?: number; expected?: number; sources: CitSource[]
 }
 
-const compact = (value: string) => value.normalize('NFKC').replace(/\s+/g, '')
+export const compactCitText = (value: string) => value.normalize('NFKC').replace(/\s+/g, '')
+const compact = compactCitText
 const normalize = (value: string) => compact(value).replace(/[−﹣–]/g, '-')
 const midpoint = (run: PdfTextRun) => run.x + run.width / 2
 const datePattern = '(20\\d{2})[年/.-](\\d{1,2})[月/.-](\\d{1,2})日?'
-const periodPattern = new RegExp(`(?:税款所属(?:期间|期|时间)|申报所属(?:期间|期)):?${datePattern}(?:至|到|~|－|—|-)${datePattern}`, 'g')
+const periodPattern = new RegExp(`(?:税款所属(?:期间|期|时间)|申报所属(?:期间|期)|报表所属(?:期间|期)):?${datePattern}(?:至|到|~|－|—|-)${datePattern}`, 'g')
 
 function only(values: Iterable<string>) {
   const unique = [...new Set(values)]
   return unique.length === 1 ? unique[0] : undefined
 }
 
-function findIdentity(text: string): Identity {
-  const taxId = only(Array.from(text.matchAll(/(?:纳税人识别号(?:\(统一社会信用代码\))?|统一社会信用代码):?([0-9A-Z]{18}|[0-9]{15})(?![0-9A-Z])/g), (match) => match[1]))
+export function findCitIdentity(text: string): CitIdentity {
+  const taxIds = Array.from(text.matchAll(/(?:纳税人识别号:?(?:\(统一社会信用代码\))?|统一社会信用代码):?([0-9A-Z]{18}|[0-9]{15})(?![0-9A-Z])/g), (match) => match[1])
   const validDate = (y: string, m: string, d: string) => {
     const iso = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
     const date = new Date(`${iso}T00:00:00Z`)
     return !Number.isNaN(+date) && date.toISOString().startsWith(iso) ? iso : undefined
   }
-  const period = only(Array.from(text.matchAll(periodPattern), ([, y1, m1, d1, y2, m2, d2]) => {
+  const periods = Array.from(text.matchAll(periodPattern), ([, y1, m1, d1, y2, m2, d2]) => {
     const start = validDate(y1, m1, d1), end = validDate(y2, m2, d2)
     return start && end && y1 === y2 && start <= end ? `${start} 至 ${end}` : ''
-  }).filter(Boolean))
-  return { taxId, period }
+  })
+  return { taxId: only(taxIds), period: only(periods.filter(Boolean)),
+    conflict: new Set(taxIds).size > 1 || new Set(periods).size > 1 || periods.includes('') }
 }
 
 function linesOf(runs: readonly PdfTextRun[]) {
@@ -50,8 +55,8 @@ function linesOf(runs: readonly PdfTextRun[]) {
   })
 }
 
-function readCell(runs: PdfTextRun[]): Cell {
-  const value = normalize(runs.map((run) => run.text).join(''))
+export function parseCitAmount(text: string): CitCell {
+  const value = normalize(text)
   if (!value || /^[-—]+$/.test(value)) return 'blank'
   if (!/^[+-]?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(value)) return 'unreadable'
   const cents = Math.round(Number(value.replace(/,/g, '')) * 100)
@@ -68,7 +73,7 @@ function placeValues(runs: PdfTextRun[], columns: number[], firstBoundary: numbe
     const column = bounds.findIndex((boundary) => x < boundary)
     groups[column < 0 ? columns.length - 1 : column].push(run)
   }
-  return groups.map(readCell)
+  return groups.map((runs) => parseCitAmount(runs.map((run) => run.text).join('')))
 }
 
 function headerCenters(runs: PdfTextRun[], labels: RegExp[]) {
@@ -88,14 +93,14 @@ function headerCenters(runs: PdfTextRun[], labels: RegExp[]) {
 }
 
 export function parseCitPdf(files: readonly (readonly PdfTextRun[][])[]) {
-  const sheets: Sheet[] = []
+  const sheets: CitSheet[] = []
   for (const [file, pages] of files.entries()) {
     const pageLines = pages.map(linesOf)
-    const meta = pageLines.map((lines) => findIdentity(lines.slice(0, 12).map((line) => line.text).join('')))
+    const meta = pageLines.map((lines) => findCitIdentity(lines.slice(0, 12).map((line) => line.text).join('')))
     const coverIndex = pageLines.findIndex((lines) => lines.slice(0, 6).some((line) => /^(?:A100000)?(?:中华人民共和国企业所得税年度纳税申报表|企业所得税年度纳税申报主表)/.test(line.text)))
     const cover = meta[coverIndex]
     const inherit = cover?.taxId && cover.period && !meta.some((item) =>
-      item.taxId && item.taxId !== cover.taxId || item.period && item.period !== cover.period) ? cover : {}
+      item.conflict || item.taxId && item.taxId !== cover.taxId || item.period && item.period !== cover.period) ? cover : {}
     for (const [pageIndex, lines] of pageLines.entries()) {
       const title = lines.slice(0, 12).map((line) => line.text)
       const upper = title.join('')
@@ -104,11 +109,11 @@ export function parseCitPdf(files: readonly (readonly PdfTextRun[][])[]) {
       const isAdjustment = adjustmentTitle >= 0 && upper.includes('A105000')
       const isAdvertising = advertisingTitle >= 0 && upper.includes('A105060')
       if (isAdjustment === isAdvertising) continue
-      const form: Form = isAdjustment ? 'A105000' : 'A105060'
+      const form: CitForm = isAdjustment ? 'A105000' : 'A105060'
       const local = meta[pageIndex]
-      const sheet: Sheet = { form, identity: { taxId: local.taxId || inherit.taxId, period: local.period || inherit.period } }
+      const sheet: CitSheet = { form, identity: { ...local, taxId: local.taxId || inherit.taxId, period: local.period || inherit.period } }
       const headers = isAdjustment ? [/^[账帐]载金额$/, /^税收金额$/, /^调增金额$/, /^调减金额$/] : [/^广告费和业务宣传费$/, /^保险企业手续费及佣金支出$/]
-      const body = (row: 12 | 15 | 16, label: RegExp): Row | undefined => {
+      const body = (row: 12 | 15 | 16, label: RegExp): CitRow | undefined => {
         const labelLines = lines.filter((line) => label.test(line.text))
         if (labelLines.length !== 1) return undefined
         const labelLine = labelLines[0]
@@ -138,7 +143,7 @@ export function parseCitPdf(files: readonly (readonly PdfTextRun[][])[]) {
   return sheets
 }
 
-export function validateCitAdjustments(sheets: readonly Sheet[]) {
+export function validateCitAdjustments(sheets: readonly CitSheet[]) {
   const mains = sheets.filter((sheet) => sheet.form === 'A105000')
   const annexes = sheets.filter((sheet) => sheet.form === 'A105060')
   const main = mains.length === 1 ? mains[0] : undefined
@@ -160,11 +165,11 @@ export function validateCitAdjustments(sheets: readonly Sheet[]) {
   if (!hospitality.detail) hospitality.detail = mains.length > 1 ? '读到多份 A105000，请只上传本次要核对的一份。' : '未读到 A105000 第 15 行的账载、税收或调增金额，不能视为 0。'
 
   const advertising: CitFinding = { id: 'advertising-transfer', title: '广告费及业务宣传费调增、调减', location: 'A105000 第 16 行 · A105060 第 12 行第 1 列', status: 'missing', detail: '', sources: [main?.advertising?.source, annex?.advertising?.source].flatMap((source) => source ? [source] : []) }
-  const sameFiling = main && annex && main.identity.taxId && main.identity.period &&
+  const sameFiling = main && annex && !main.identity.conflict && !annex.identity.conflict && main.identity.taxId && main.identity.period &&
     main.identity.taxId === annex.identity.taxId && main.identity.period === annex.identity.period
   if (mains.length > 1 || annexes.length > 1) advertising.detail = '读到重复税表，请只保留同一家企业、同一期的最终版本。'
   else if (!main || !annex) advertising.detail = '需要 A105000 和 A105060 两张表。'
-  else if (!sameFiling) advertising.detail = '无法确认两张表属于同一纳税人和同一税款所属期，请上传含申报封面的整套 PDF。'
+  else if (!sameFiling) advertising.detail = '无法确认两张表属于同一纳税人和同一税款所属期。请上传带申报封面的整套原表，或带主体和所属期的两张表。'
   else if (main.advertising && annex.advertising) {
     const [, , up, down] = main.advertising.cells
     const [adjustment] = annex.advertising.cells

@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, FileText, Upload } from 'lucide-react'
-import type { CitFinding } from '../lib/citAdjustmentFiling'
+import type { CitFinding, CitSheet, CitSource } from '../lib/citAdjustmentFiling'
 import { extractPdfTextRuns } from '../lib/pdfTextExtractor'
 import { OriginalPdf } from './FilingAnnexReview'
 import { FilingReviewSummary, type ReviewItem } from './FilingReviewSummary'
+
+const isPdf = (file: File) => /\.pdf$/i.test(file.name)
+const isWorkbook = (file: File) => /\.(?:xls|xlsx|xlsm)$/i.test(file.name)
+const describeSource = (source: CitSource) => 'page' in source ? `PDF 第 ${source.page} 页` : `Excel ${source.range}`
 
 export function CitFilingReview({ onBack }: { onBack: () => void }) {
   const input = useRef<HTMLInputElement>(null)
@@ -21,26 +25,32 @@ export function CitFilingReview({ onBack }: { onBack: () => void }) {
   async function check(files: File[]) {
     if (!files.length || locked.current) return
     setResult(null); setSource(undefined); setError('')
-    if (files.length > 5 || files.some((file) => !/\.pdf$/i.test(file.name)) ||
+    if (files.length > 15 || files.some((file) => !isPdf(file) && !isWorkbook(file)) ||
       files.reduce((sum, file) => sum + file.size, 0) > 35 * 1024 * 1024) {
-      setError('请选 1 至 5 个 PDF 文件，总大小不超过 35 MB。')
+      setError('请选同一家企业、同一期的 Excel 或文字版 PDF，最多 15 份，总大小不超过 35 MB。')
       return
     }
     locked.current = true
     setBusy(true)
     try {
       const { parseCitPdf, validateCitAdjustments } = await import('../lib/citAdjustmentFiling')
-      const packets = []
-      const notices = []
-      for (const file of files) {
-        try { packets.push(await extractPdfTextRuns(await file.arrayBuffer(), 120)) } catch {
-          notices.push(`${file.name} 未能读取。请使用未加密、120 页内的税务局原版 PDF。`)
-          packets.push([])
+      const packets: Awaited<ReturnType<typeof extractPdfTextRuns>>[] = []
+      const sheets: CitSheet[] = []
+      const notices: string[] = []
+      const workbook = files.some(isWorkbook) ? await import('../lib/citFilingWorkbook') : undefined
+      for (const [index, file] of files.entries()) {
+        packets.push([])
+        try {
+          const buffer = await file.arrayBuffer()
+          if (isPdf(file)) packets[index] = await extractPdfTextRuns(buffer, 120)
+          else if (workbook) sheets.push(...workbook.parseCitWorkbook(buffer, index))
+        } catch {
+          notices.push(`${file.name} 未能读取。请使用未加密的 ${isPdf(file) ? '文字版 PDF（不超过 120 页）' : 'Excel 原表'}。`)
         }
       }
-      const review = validateCitAdjustments(parseCitPdf(packets))
+      const review = validateCitAdjustments([...parseCitPdf(packets), ...sheets])
       if (!review.recognized) {
-        setError('没有识别到 A105000 或 A105060。请使用电子税务局导出的文字版 PDF，扫描件暂不能核对。')
+        setError(notices.length === files.length ? '本次文件都未能读取。请检查文件是否加密，或重新导出 Excel 或文字版 PDF。' : '没有识别到 A105000 或 A105060。请上传包含这两张表的 Excel 或文字版 PDF。')
         return
       }
       setResult({ files, findings: review.findings, period: review.period, notices })
@@ -51,7 +61,7 @@ export function CitFilingReview({ onBack }: { onBack: () => void }) {
   }
 
   const items: ReviewItem[] = result?.findings.map((item) => ({ ...item, links: item.sources.map((location) => ({
-    label: `查看 ${location.form} 第 ${location.row} 行 · PDF 第 ${location.page} 页`,
+    label: `查看 ${location.form} 第 ${location.row} 行 · ${describeSource(location)}`,
     open: () => setSource(location),
   })) })) || []
 
@@ -63,7 +73,7 @@ export function CitFilingReview({ onBack }: { onBack: () => void }) {
       <div className="filing-quick-links"><button type="button" className="filing-text-action" disabled={busy} onClick={source ? () => setSource(undefined) : onBack}><ArrowLeft size={15} aria-hidden="true" />{source ? '返回校验结果' : '返回申报前校验'}</button>
         {result && !source && <button type="button" className="filing-text-action" onClick={() => input.current?.click()}>更换文件</button>}
       </div>
-      <input ref={input} hidden type="file" aria-label="选择年度汇算申报表 PDF" accept=".pdf" multiple onChange={(event) => {
+      <input ref={input} hidden type="file" aria-label="选择年度汇算申报表文件" accept=".xls,.xlsx,.xlsm,.pdf" multiple onChange={(event) => {
         const files = Array.from(event.currentTarget.files || [])
         event.currentTarget.value = ''
         void check(files).catch(() => setError('暂时无法校验，请重试。'))
@@ -71,9 +81,9 @@ export function CitFilingReview({ onBack }: { onBack: () => void }) {
       {!result && <div className="filing-start">
         <div className="filing-start-icon"><FileText size={28} strokeWidth={1.6} aria-hidden="true" /></div>
         <h3>上传年度汇算申报表</h3>
-        <p>选一套含 A105000 和 A105060 的申报表，自动核对招待费和广告费的调整金额。</p>
+        <p>上传整套汇算表，自动识别 A105000 和 A105060，核对招待费和广告费的调整金额。</p>
         <div className="filing-start-actions"><button type="button" className="primary-button filing-action" disabled={busy} onClick={() => input.current?.click()}><Upload size={17} aria-hidden="true" /> {busy ? '正在校验…' : '上传并校验'}</button></div>
-        <p className="filing-notes">优先选择带申报封面的文字版 PDF。资料只在当前浏览器读取，不上传服务器。</p>
+        <p className="filing-notes">支持 Excel（.xls / .xlsx / .xlsm）和文字版 PDF。请一并提供申报封面；文件仅在浏览器内读取。</p>
       </div>}
       {busy && <p className="filing-live" role="status">正在读取原表金额与所属期…</p>}
       {error && <p className="filing-error" role="alert">{error}</p>}
@@ -82,7 +92,14 @@ export function CitFilingReview({ onBack }: { onBack: () => void }) {
       {result && source && <section className="filing-annex-sheet" aria-labelledby="cit-original-heading">
         <h3 id="cit-original-heading" tabIndex={-1}>{source.form} · 核对第 {source.row} 行</h3>
         <p className="filing-notes">{result.files[source.file].name}</p>
-        <OriginalPdf key={`${source.file}-${source.page}`} file={result.files[source.file]} pages={[source.page]} />
+        {'page' in source ? <OriginalPdf key={`${source.file}-${source.page}`} file={result.files[source.file]} pages={[source.page]} /> : <>
+          <p className="filing-pdf-bar">工作表：{source.sheet} · 单元格：{source.range}</p>
+          <div className="filing-table-frame" tabIndex={0} role="region" aria-label="Excel 原表栏次，可横向滚动">
+            <table className="filing-annex-grid"><thead><tr><th scope="col">栏次</th><th scope="col">单元格</th><th scope="col">原表值</th></tr></thead>
+              <tbody>{source.cells.map((cell) => <tr key={cell.address}><th scope="row">{cell.label}</th><td>{cell.address}</td><td data-numeric>{cell.text}</td></tr>)}</tbody></table>
+          </div>
+          <p className="filing-notes">公式按文件里保存的结果读取，不执行公式或宏。</p>
+        </>}
       </section>}
       <p className="filing-disclaimer">仅核对申报表已填金额，不向税务局提交，不计入企业风险评分。</p>
     </div>
