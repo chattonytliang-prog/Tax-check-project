@@ -4,7 +4,7 @@ import {
   reportAssessmentCoverage,
   reportAssessmentCoverageFacts,
 } from './reportAssessmentCoverage'
-import { reportFindingInputEvidenceList } from './reportFindingEvidence'
+import { reportFindingInputEvidenceList, reportOriginalReferenceText } from './reportFindingEvidence'
 import {
   reportPeriodEvidenceDisclaimer,
   reportPeriodEvidenceSourceList,
@@ -107,8 +107,8 @@ function structuredReportHtml(report: CompleteStructuredReportShape) {
         ${inputEvidence.length ? `
           <h4>本次采用数据（生成时快照）</h4>
           <table class="finding-input-evidence">
-            <tr><th>数据项</th><th>生成时取值</th><th>数据口径</th></tr>
-            ${inputEvidence.map((evidence) => `<tr><td>${escapeHtml(evidence.label)}</td><td>${escapeHtml(evidence.value)}</td><td>${escapeHtml(evidence.basis)}</td></tr>`).join('')}
+            <tr><th>数据项</th><th>生成时取值</th><th>取数依据与原表</th></tr>
+            ${inputEvidence.map((evidence) => `<tr><td>${escapeHtml(evidence.label)}</td><td>${escapeHtml(evidence.value)}</td><td>${escapeHtml(evidence.basis)}${evidence.sources?.length ? evidence.sources.map((source) => `<p>${escapeHtml(reportOriginalReferenceText(source))}</p>`).join('') : ' · 未记录原表栏次'}</td></tr>`).join('')}
           </table>
           <p class="muted">该快照用于复算本事项，不代表来源原件已逐项核验。</p>
         ` : ''}

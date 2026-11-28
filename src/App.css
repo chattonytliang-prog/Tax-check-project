@@ -5129,6 +5129,12 @@ textarea:focus {
   gap: 16px;
 }
 
+.report-finding-originals { margin-top: 4px; color: var(--muted); }
+.report-finding-originals summary { cursor: pointer; }
+.report-finding-originals ul { margin-block: 4px 0; padding-inline-start: 18px; }
+.report-finding-originals li { overflow-wrap: anywhere; }
+.report-finding-originals a { text-underline-offset: 3px; }
+
 .ai-review-panel {
   border: 1px solid rgba(18, 174, 234, 0.22);
   border-radius: 8px;

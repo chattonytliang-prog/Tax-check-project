@@ -60,6 +60,9 @@ function blankGroup(periodStart, periodEnd) {
     periodEnd,
     sourceKinds: new Set(),
     vatMain: {},
+    vatMainSeen: new Map(),
+    vatMainConflicts: new Set(),
+    vatMainSources: {},
     vatScheduleSalesByRow: new Map(),
     financial: {},
     cit: {},
@@ -84,6 +87,34 @@ function setValue(target, key, value) {
   if (number !== null) target[key] = number
 }
 
+function setVatMainValue(group, key, value, row, payload, formRow) {
+  const number = numberOrNull(value)
+  if (number === null || group.vatMainConflicts.has(key)) return
+  if (group.vatMainSeen.has(key) && group.vatMainSeen.get(key) !== number) {
+    group.vatMainConflicts.add(key)
+    delete group.vatMain[key]
+    delete group.vatMainSources[key]
+    return
+  }
+  group.vatMainSeen.set(key, number)
+  group.vatMain[key] = number
+  if (!row.source_file_id || payload.templateId !== 'vat_general_return_main_pdf_v1' || payload.templateValidationStatus !== 'passed') return
+  const page = Number(payload.sourcePageNo)
+  if (!Number.isSafeInteger(page) || page < 1) return
+  const sources = group.vatMainSources[key] ??= []
+  if (!sources.some((source) => source.sourceFileId === row.source_file_id && source.page === page)) {
+    sources.push({ sourceFileId: row.source_file_id, page, formRow, periodStart: row.period_start, periodEnd: row.period_end })
+  }
+}
+
+// In a recognized regular VAT main return these are the two current-period columns.
+function vatCurrentTotal(payload) {
+  const ordinary = numberOrNull(payload.currentAmount)
+  if (ordinary === null) return null
+  const refund = numberOrNull(payload.currentTax)
+  return (Math.round(ordinary * 100) + Math.round((refund ?? 0) * 100)) / 100
+}
+
 function lineName(payload) {
   return String(payload.lineName || payload.itemName || payload.accountName || '').replace(/\s+/g, '')
 }
@@ -103,15 +134,17 @@ function consumeRecord(group, row) {
   if (type === 'vat_return') {
     const formName = String(payload.formName || '')
     const isSchedule = /附列资料|附表|减免税|税额抵减/.test(formName)
-    if (!isSchedule) {
+    if (!isSchedule && subtype !== 'vat_return_schedule' && payload.templateValidationStatus !== 'failed') {
       if (rowNo === '1') {
-        setValue(group.vatMain, 'currentSales', payload.currentAmount)
-        setValue(group.vatMain, 'cumulativeSales', payload.cumulativeAmount)
+        setVatMainValue(group, 'currentSales', payload.currentAmount, row, payload, rowNo)
+        setVatMainValue(group, 'cumulativeSales', payload.cumulativeAmount, row, payload, rowNo)
+        setVatMainValue(group, 'taxableGeneral', vatCurrentTotal(payload), row, payload, rowNo)
       }
-      if (rowNo === '11') setValue(group.vatMain, 'outputTax', payload.currentAmount ?? payload.currentTax)
-      if (rowNo === '12') setValue(group.vatMain, 'inputTax', payload.currentAmount ?? payload.currentTax)
-      if (rowNo === '19') setValue(group.vatMain, 'taxPayable', payload.currentAmount ?? payload.currentTax)
-      if (rowNo === '20') setValue(group.vatMain, 'endingVatCredit', payload.currentAmount ?? payload.currentTax)
+      if (rowNo === '5') setVatMainValue(group, 'taxableSimple', vatCurrentTotal(payload), row, payload, rowNo)
+      if (rowNo === '11') setVatMainValue(group, 'outputTax', payload.currentAmount ?? payload.currentTax, row, payload, rowNo)
+      if (rowNo === '12') setVatMainValue(group, 'inputTax', payload.currentAmount ?? payload.currentTax, row, payload, rowNo)
+      if (rowNo === '24') setVatMainValue(group, 'taxPayable', vatCurrentTotal(payload), row, payload, rowNo)
+      if (rowNo === '20') setVatMainValue(group, 'endingVatCredit', payload.currentAmount ?? payload.currentTax, row, payload, rowNo)
     } else if (isVatScheduleOne(formName) && /^([1-9]|1\d)$/.test(rowNo)) {
       const currentAmount = numberOrNull(payload.currentAmount)
       if (currentAmount !== null) {
@@ -232,9 +265,20 @@ function buildPeriod(group) {
   const salaryDeclaredCount = group.iitPeople.size || group.payrollPeople.size || 0
   const payrollTotal = group.payrollGrossTotal || group.iitPayrollTotal
   const assetsTotal = group.financial.assetsEnding ?? group.cit.assetsAverage ?? 0
+  const generalSalesSources = group.vatMainSources.taxableGeneral || []
+  const simpleSalesSources = group.vatMainSources.taxableSimple || []
+  const sourceKey = (row) => `${row.sourceFileId}:${row.page}`
+  const simpleSourceKeys = new Set(simpleSalesSources.map(sourceKey))
+  const sameSource = new Set(generalSalesSources.map(sourceKey).filter((key) => simpleSourceKeys.has(key)))
+  const comparableTaxableSales = sameSource.size && group.vatMain.taxableGeneral !== undefined && group.vatMain.taxableSimple !== undefined
+  const taxableSalesEvidence = [...generalSalesSources, ...simpleSalesSources].filter((row) => sameSource.has(sourceKey(row)))
   const metricCoverage = []
   if (group.vatMain.currentSales !== undefined || group.ledgerRecordCount || group.financial.revenueCurrent !== undefined || group.cit.revenueCumulative !== undefined) metricCoverage.push('monthlyRevenue')
-  if (group.vatMain.currentSales !== undefined || scheduleSales(group) !== null) metricCoverage.push('taxableSales')
+  if (comparableTaxableSales) metricCoverage.push('taxableSales')
+  if (group.vatMain.outputTax !== undefined) metricCoverage.push('outputTax')
+  if (group.vatMain.inputTax !== undefined) metricCoverage.push('inputTax')
+  if (group.vatMain.taxPayable !== undefined) metricCoverage.push('vatTaxPayable')
+  if (group.vatMain.endingVatCredit !== undefined) metricCoverage.push('endingVatCredit')
   if (group.ledgerRecordCount || group.financial.costCurrent !== undefined || group.cit.costCumulative !== undefined) metricCoverage.push('monthlyCost')
   if (group.ledgerRecordCount || group.financial.profitCurrent !== undefined || group.cit.profitCumulative !== undefined) metricCoverage.push('monthlyProfit')
   if (group.outputInvoiceCount) metricCoverage.push('monthlyInvoice')
@@ -253,13 +297,23 @@ function buildPeriod(group) {
     savedAt: '源文件归档',
     sourceKinds: Array.from(group.sourceKinds).sort(),
     metricCoverage,
+    metricEvidence: Object.fromEntries([
+      ['taxableSales', comparableTaxableSales ? taxableSalesEvidence : []],
+      ...(metadata.analysisPeriodType === '月度' && group.vatMain.currentSales !== undefined ? [['monthlyRevenue', group.vatMainSources.currentSales]] : []),
+      ['outputTax', group.vatMainSources.outputTax],
+      ['inputTax', group.vatMainSources.inputTax],
+      ['vatTaxPayable', group.vatMainSources.taxPayable],
+      ['endingVatCredit', group.vatMainSources.endingVatCredit],
+    ].filter(([, evidence]) => evidence?.length)),
+    ...(group.vatMainConflicts.size ? { vatSourceConflict: true } : {}),
     metrics: {
       monthlyRevenue: totals.revenue / monthCount,
       monthlyCost: totals.cost / monthCount,
       monthlyProfit: totals.profit / monthCount,
       annualRevenue: metadata.analysisPeriodType === '年度' ? totals.revenue : 0,
       consecutive12MonthSales: metadata.analysisPeriodType === '年度' ? totals.revenue : 0,
-      taxableSales: metadata.analysisPeriodType === '月度' ? group.vatMain.currentSales ?? scheduleSales(group) ?? 0 : 0,
+      taxableSales: metadata.analysisPeriodType === '月度' && comparableTaxableSales
+        ? (Math.round(group.vatMain.taxableGeneral * 100) + Math.round(group.vatMain.taxableSimple * 100)) / 100 : 0,
       outputTax: group.vatMain.outputTax || 0,
       inputTax: group.vatMain.inputTax || 0,
       vatTaxPayable: group.vatMain.taxPayable || 0,
@@ -314,6 +368,9 @@ function closeEnough(left, right) {
 function crossValidate(periods) {
   const messages = []
   const warnings = []
+  for (const period of periods) {
+    if (period.vatSourceConflict) warnings.push(`${labelForPeriod(period)}：同一所属期的增值税主表金额有冲突，冲突栏次不参加风险判断，请确认正确版本。`)
+  }
   const periodByStart = new Map(periods.map((period) => [period.periodStartDate, period]))
   const monthly = periods.filter((period) => period.analysisPeriodType === '月度')
 

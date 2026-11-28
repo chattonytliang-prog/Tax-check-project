@@ -1,4 +1,5 @@
 export type AnalysisPeriodType = '' | '年度' | '季度' | '月度' | '年初至今' | '自定义期间'
+import type { ReportMetricEvidence } from './reportFindingEvidence'
 export type AnalysisQuarter = '' | 'Q1' | 'Q2' | 'Q3' | 'Q4'
 export type DataBasis = '' | '标准资料' | '申报数据' | '管理报表' | '暂估数据' | '混合口径'
 
@@ -34,6 +35,7 @@ export type PeriodEntry<TSnapshot extends PeriodClientFields = PeriodClientField
   months: string[]
   evidencePeriods?: string[]
   metricCoverage?: string[]
+  metricEvidence?: ReportMetricEvidence
   snapshot: TSnapshot
   savedAt: string
 }
@@ -266,7 +268,7 @@ export function summarizeCanonicalPeriodEntries<TEntry extends PeriodEntry>(_cli
     outputTax: sumValue('outputTax'),
     inputTax: sumValue('inputTax'),
     vatTaxPayable: sumValue('vatTaxPayable'),
-    endingVatCredit: latestValue('endingVatCredit'),
+    endingVatCredit: numericValue([...effectiveEntries].sort((left, right) => monthIndex(right.months.at(-1) || '') - monthIndex(left.months.at(-1) || ''))[0], 'endingVatCredit'),
     taxableSales: sumValue('taxableSales'),
   }
 }

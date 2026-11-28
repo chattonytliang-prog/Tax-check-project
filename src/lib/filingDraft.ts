@@ -34,7 +34,7 @@ export const vatFormLines = {
 }
 
 export type VatAmounts = Record<string, string[]>
-type VatMetadata = { taxpayer?: string; taxId?: string; periodStart?: string; periodEnd?: string; filledOn?: string }
+export type VatMetadata = { taxpayer?: string; taxId?: string; periodStart?: string; periodEnd?: string; filledOn?: string }
 export type VatDraftData = { version: VatFormVersion; meta: VatMetadata; amounts: VatAmounts; notices: string[] }
 type Grid = { name: string; rows: unknown[][] }
 const compact = (value: unknown) => String(value ?? '').normalize('NFKC').replace(/\s/g, '')
@@ -56,13 +56,13 @@ export function vatAmount(input: unknown) {
   return /^-?\d{1,11}(?:\.\d{1,2})?$/.test(ungrouped) ? Number(ungrouped).toFixed(2) : ''
 }
 
-function metadata(lines: string[]): VatMetadata {
+export function vatMetadata(lines: string[]): VatMetadata {
   const text = lines.join('\n').normalize('NFKC')
-  const periodLine = lines.findIndex((line) => /税\s*款\s*所\s*属/.test(line))
+  const periodLine = lines.findIndex((line) => /税\s*(?:[（(]费[）)]\s*)?款\s*所\s*属/.test(line))
   const periodText = periodLine < 0 ? '' : lines.slice(periodLine, periodLine + 2).join(' ').normalize('NFKC')
     .split(/填\s*表\s*日\s*期|纳\s*税\s*人|金\s*额\s*单\s*位/)[0]
   const taxPeriod = detectTaxDataPeriod(periodText)
-  const taxpayer = text.match(/纳税人名称[ \t]*[:：]?[ \t]*(?:\(公章\))?[ \t]*([^\n]*?)(?=[ \t]*\(公章\)|[ \t]*(?:金额单位|所属行业|填表日期|识别号|法定代表人|注册地址|生产经营地址)|\n|$)/)?.[1]?.trim()
+  const taxpayer = text.match(/纳税人名称[ \t]*(?:\(\s*公\s*章\s*\))?[ \t]*[:：]?[ \t]*(?:\(\s*公\s*章\s*\))?[ \t]*([^\n]*?)(?=[ \t]*\(\s*公\s*章\s*\)|[ \t]*(?:金额单位|所属行业|填表日期|识别号|法定代表人|注册地址|生产经营地址)|\n|$)/)?.[1]?.trim()
   const taxId = text.match(/(?:纳税人识别号[\s(统一社会信用代码)]*|统一社会信用代码\)?)[:：\s]*([0-9A-Z]{15,20})(?![0-9A-Z])/i)?.[1]
   const filledOn = text.match(/填表日期[:：\s]*([0-9年月日/\-. ]{8,18})/)?.[1]?.trim()
   return { ...taxPeriod, taxpayer: taxpayer && /[\p{Script=Han}a-z]/iu.test(taxpayer) && !['项目', '栏次'].includes(taxpayer) ? taxpayer : undefined, taxId, filledOn }
@@ -147,7 +147,7 @@ export function vatDraftFromWorkbook(sheets: Grid[]): VatDraftData {
       }), conflicts)
     }
     if (matched.size < 3) return []
-    return [result(version, metadata(before), amounts, conflicts, uncertain)]
+    return [result(version, vatMetadata(before), amounts, conflicts, uncertain)]
   })
   if (candidates.length > 1) throw new Error('文件里有多张增值税主表。请另存要核对的单期主表后重新上传。')
   if (!candidates.length) throw new Error('未识别到一般纳税人增值税主表。请上传带「栏次」和金额列的税局原表，不能只传附表或财务报表。')
@@ -155,7 +155,7 @@ export function vatDraftFromWorkbook(sheets: Grid[]): VatDraftData {
 }
 
 // Text PDFs only: never shift a value left when PDF text extraction omits an empty column.
-export function vatDraftFromPdf(pages: string[]): VatDraftData {
+export function vatDraftFromPdf(pages: string[], allowBlankMain = false): VatDraftData {
   const candidates = pages.flatMap((page) => {
     const key = compact(page)
     if (!key.includes('栏次') || !supportedHeader(key.split('栏次')[0]) || !/栏次.*一般项目.*即征即退项目/.test(key)) return []
@@ -172,19 +172,26 @@ export function vatDraftFromPdf(pages: string[]): VatDraftData {
       if (!fields) continue
       const codeIndex = columns.findIndex((cell, index) => vatRowCode(cell) === fields.code && validLabel(columns.slice(0, index).join(''), fields.label, fields.code))
       matched.add(fields.code)
-      const values = columns.slice(codeIndex + 1)
       const length = vatColumns[version].length
+      const remaining = columns.slice(codeIndex + 1)
+      const values = remaining.slice(-length)
+      const prefix = remaining.slice(0, -length)
+      const hasAmount = (token: string) => /^-?[\d,]+\.\d{1,2}$/.test(token) && !!vatAmount(token)
       const admissible = values.length === length && values.every((cell) => /^[—–-]+$/.test(cell) || /^-?[\d,]+\.\d{1,2}$/.test(cell) && vatAmount(cell))
-      if (!admissible || fields.blocked.some((index) => !/^[—–-]+$/.test(values[index]))) {
-        if (values.some((cell) => vatAmount(cell))) uncertain = true
+      const prefixIsFormula = !prefix.length || /[=(]/.test(columns[codeIndex]) && !prefix.some(hasAmount)
+      if (!admissible || !prefixIsFormula || fields.blocked.some((index) => !/^[—–-]+$/.test(values[index]))) {
+        if (values.some(hasAmount)) uncertain = true
         continue
       }
       mergeAmounts(amounts, fields.code, values.map(vatAmount), conflicts)
     }
-    return matched.size >= 3 ? [result(version, metadata(lines), amounts, conflicts, uncertain)] : []
+    return matched.size >= 3 ? [result(version, vatMetadata(lines), amounts, conflicts, uncertain)] : []
   })
   if (candidates.length !== 1) throw new Error(candidates.length ? 'PDF 中有多张主表，请上传单期主表。' : '未识别到可读的增值税主表。扫描件或特殊版式，请改用税局导出的 Excel 原表。')
   const draft = candidates[0]
-  if (!Object.values(draft.amounts).some((row) => row.some(Boolean))) throw new Error('这份 PDF 没有可安全定位的金额，请改用税局导出的 Excel 原表。')
+  if (!Object.values(draft.amounts).some((row) => row.some(Boolean))) {
+    if (!allowBlankMain) throw new Error('这份 PDF 没有可安全定位的金额，请改用税局导出的 Excel 原表。')
+    draft.notices.push('已识别 PDF 主表，但没有可安全定位的金额；未校验，建议改传 Excel 原表。')
+  }
   return draft
 }

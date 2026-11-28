@@ -247,7 +247,7 @@ describe('ruleEngine', () => {
     expect(conditionSummary({ field: 'privateAccountCollection', operator: '=', value: false })).toBe('个人账户收款 = 否')
     expect(conditionSummary({ field: 'annualRevenue', operator: '>', value: 5000000 })).toBe('年销售收入 > 5,000,000')
     expect(conditionSummary({ field: 'vatTaxPayable', operator: '<', value: 0, compareField: 'theoreticalVatTax', multiplier: 0.7 }))
-      .toBe('增值税应纳/入库税额 < 理论增值税税额 × 0.7')
+      .toBe('申报应纳增值税合计（非已入库额） < 理论增值税税额 × 0.7')
     expect(conditionSummary({ all: [{ field: 'a', operator: '=', value: 1 }] })).toContain('全部满足')
     expect(conditionSummary({ any: [{ field: 'a', operator: '=', value: 1 }] })).toContain('任一满足')
   })

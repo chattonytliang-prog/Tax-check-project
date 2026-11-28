@@ -469,7 +469,7 @@ export async function onRequestGet({ request, env }) {
       ),
       all(
         db,
-        `SELECT record_type, record_subtype, period_start, period_end, record_json
+        `SELECT source_file_id, record_type, record_subtype, period_start, period_end, record_json
          FROM tax_data_standard_records AS records
          WHERE owner_user_id = ? AND client_id = ?
            AND COALESCE(period_start, '') <> '' AND COALESCE(period_end, '') <> ''

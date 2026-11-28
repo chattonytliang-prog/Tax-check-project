@@ -37,7 +37,7 @@ describe('extractPdfTextPages', () => {
 
     await expect(extractPdfTextPages(new Uint8Array([1, 2, 3]).buffer)).resolves.toEqual(['first page', 'second'])
 
-    expect(getDocumentMock).toHaveBeenCalledWith({ data: new Uint8Array([1, 2, 3]) })
+    expect(getDocumentMock).toHaveBeenCalledWith({ data: new Uint8Array([1, 2, 3]), isEvalSupported: false })
     expect(getPageMock).toHaveBeenNthCalledWith(1, 1)
     expect(getPageMock).toHaveBeenNthCalledWith(2, 2)
     expect(cleanupMock).toHaveBeenCalledTimes(2)
@@ -66,6 +66,14 @@ describe('extractPdfTextPages', () => {
 
     await expect(extractPdfTextPages(new ArrayBuffer(0), onEmptyPage)).rejects.toThrow('render failed')
     expect(onEmptyPage).toHaveBeenCalledExactlyOnceWith(page, 2)
+    expect(destroyMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes over-limit documents before extracting any page', async () => {
+    const { extractPdfTextPages } = await import('./pdfTextExtractor')
+    getDocumentMock.mockReturnValue({ promise: Promise.resolve({ numPages: 101, getPage: getPageMock, destroy: destroyMock }) })
+    await expect(extractPdfTextPages(new ArrayBuffer(0), undefined, 100)).rejects.toThrow('超过 100 页')
+    expect(getPageMock).not.toHaveBeenCalled()
     expect(destroyMock).toHaveBeenCalledTimes(1)
   })
 })

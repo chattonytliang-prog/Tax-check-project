@@ -111,6 +111,17 @@ ${JSON.stringify(structuredReport || {}, null, 2)}
 ${content}`
 }
 
+function redactReportFileReferences(report) {
+  if (!report || typeof report !== 'object') return report
+  const redact = (findings) => Array.isArray(findings) ? findings.map((finding) => {
+    if (!Array.isArray(finding?.inputEvidence)) return finding
+    return { ...finding, inputEvidence: finding.inputEvidence.map(({ label, value, basis }) => ({ label, value, basis })) }
+  }) : findings
+  const copy = { ...report }
+  delete copy.periodEvidenceSources
+  return { ...copy, keyFindings: redact(report.keyFindings), detailedFindings: redact(report.detailedFindings) }
+}
+
 export async function onRequestPost({ request, env }) {
   try {
     if (!env.DEEPSEEK_API_KEY) {
@@ -165,7 +176,7 @@ export async function onRequestPost({ request, env }) {
           },
           {
             role: 'user',
-            content: buildPrompt(client, risks, savedReport.content, aiReview, establishmentFacts, savedReport.structured),
+            content: buildPrompt(client, risks, savedReport.content, aiReview, establishmentFacts, redactReportFileReferences(savedReport.structured)),
           },
         ],
         temperature: 0.2,

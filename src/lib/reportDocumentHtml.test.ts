@@ -94,6 +94,20 @@ const structuredReport: CompleteStructuredReportShape = {
 }
 
 describe('professionalReportDocumentHtml', () => {
+  it('exports original PDF name, page, row and period without embedding authenticated download URLs', () => {
+    const finding = structuredReport.keyFindings[0]
+    const report = { ...structuredReport, detailedFindings: [{
+      ...finding, inputEvidence: [{ label: '进项税额', value: '0', basis: '标准资料', sources: [{
+        sourceFileId: 'example-original', fileName: '示例原表 & 栏次.pdf', page: 2, formRow: '12',
+        periodStart: '2026-10-01', periodEnd: '2026-10-31', stored: true,
+      }] }],
+    }] }
+    for (const format of ['word', 'print'] as const) {
+      const doc = professionalReportDocumentHtml({ structured: report }, format)
+      expect(doc).toContain('示例原表 &amp; 栏次.pdf · 第 2 页 / 第 12 栏 · 2026-10-01 至 2026-10-31')
+      expect(doc).not.toContain('example-original')
+    }
+  })
   it('renders structured reports as escaped professional HTML', () => {
     const html = professionalReportDocumentHtml({
       clientName: '上海测试科技有限公司',

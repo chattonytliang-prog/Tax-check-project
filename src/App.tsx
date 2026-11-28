@@ -77,7 +77,11 @@ import { professionalReportDocumentHtml } from './lib/reportDocumentHtml'
 import { reportFileName } from './lib/reportFileName'
 import {
   buildReportFindingInputEvidence,
+  collectReportMetricEvidence,
   reportFindingInputEvidenceList,
+  reportOriginalReferenceText,
+  reportOriginalReferenceUrl,
+  type ReportMetricEvidence,
 } from './lib/reportFindingEvidence'
 import { reportFollowUpCadence } from './lib/reportFollowUpCadence'
 import {
@@ -254,6 +258,7 @@ type Client = {
   standardMetricCoverage?: string[]
   monthlyRevenue: number
   monthlyInvoice: number
+  standardMetricEvidence?: ReportMetricEvidence
   monthlyCost: number
   monthlyProfit: number
   annualRevenue: number
@@ -606,6 +611,7 @@ type TaxDataStandardPeriod = {
   metricCoverage?: string[]
   savedAt: string
   sourceKinds: string[]
+  metricEvidence?: ReportMetricEvidence
   metrics: Partial<Client>
 }
 
@@ -1501,7 +1507,7 @@ function standardClientFromIntake(client: Client, intake: ParsedTaxDataIntake) {
         if (rowNo === '1') { snapshot.taxableSales = value; setTotal('monthlyRevenue', value) }
         if (rowNo === '11') snapshot.outputTax = value
         if (rowNo === '12') snapshot.inputTax = value
-        if (rowNo === '19') snapshot.vatTaxPayable = value
+        if (rowNo === '24') snapshot.vatTaxPayable = value
         if (rowNo === '20') snapshot.endingVatCredit = value
       }
       if (record.recordType === 'financial_statement' && record.recordSubtype === 'income_statement') {
@@ -2496,7 +2502,7 @@ const candidateRules: RiskRule[] = [
     conditionJson: { field: 'vatTaxPayable', operator: '>', value: 0, compareField: 'taxableSales', multiplier: 0.045 },
     requiredFields: ['taxableSales'],
     trigger: (c) => c.taxableSales > 0 && c.vatTaxPayable > c.taxableSales * 0.045,
-    reason: (c) => `增值税应纳/入库税额 ${money(c.vatTaxPayable)}，应税销售额 ${money(c.taxableSales)}，税负率超过 4.5%。`,
+    reason: (c) => `申报应纳增值税合计 ${money(c.vatTaxPayable)}，应税销售额 ${money(c.taxableSales)}，税负率超过 4.5%。`,
     suggestion: '复核销项税额、进项抵扣、税率适用、简易计税和免税项目，说明税负率偏高原因。',
     materials: ['增值税申报表', '销项发票明细', '进项发票明细', '税负率测算表'],
   },
@@ -2510,7 +2516,7 @@ const candidateRules: RiskRule[] = [
     conditionJson: { all: [{ field: 'taxableSales', operator: '>', value: 0 }, { field: 'vatTaxPayable', operator: '<', value: 0, compareField: 'taxableSales', multiplier: 0.001 }] },
     requiredFields: ['taxableSales'],
     trigger: (c) => c.taxableSales > 0 && c.vatTaxPayable < c.taxableSales * 0.001,
-    reason: (c) => `增值税应纳/入库税额 ${money(c.vatTaxPayable)}，应税销售额 ${money(c.taxableSales)}，税负率低于 0.1%。`,
+    reason: (c) => `申报应纳增值税合计 ${money(c.vatTaxPayable)}，应税销售额 ${money(c.taxableSales)}，税负率低于 0.1%。`,
     suggestion: '重点核对收入申报完整性、进项税额真实性、留抵形成原因和优惠政策适用依据。',
     materials: ['增值税申报表', '收入明细', '进项抵扣明细', '优惠政策适用资料'],
   },
@@ -3210,6 +3216,7 @@ function normalizePeriodEntry(entry: Partial<ClientPeriodEntry>): ClientPeriodEn
     months,
     evidencePeriods: entry.evidencePeriods ? [...entry.evidencePeriods] : undefined,
     metricCoverage: entry.metricCoverage ? [...entry.metricCoverage] : undefined,
+    metricEvidence: entry.metricEvidence,
     snapshot,
     savedAt: entry.savedAt || formatDate(),
   }
@@ -3350,6 +3357,7 @@ function toClientSnapshot(client: Client): ClientSnapshot {
   const snapshot = { ...client } as Record<string, unknown>
   delete snapshot.manualDerivedFields
   delete snapshot.manualDerivedReasons
+  delete snapshot.standardMetricEvidence
   return snapshot as ClientSnapshot
 }
 
@@ -3413,6 +3421,9 @@ const reportCompletionSourceByField: Partial<Record<string, string>> = {
 }
 
 function buildDetectionClient(client: Client, selectedEntries: ClientPeriodEntry[], availableEntries: ClientPeriodEntry[]) {
+  const canonical = canonicalPeriodCover(selectedEntries)
+  const coverage = Array.from(new Set(selectedEntries.flatMap((entry) => entry.metricCoverage || [])))
+  const evidence = collectReportMetricEvidence(canonical, coverage.filter((field) => field !== 'endingVatCredit' || canonical.length === 1))
   return deriveClientMetrics({
     ...client,
     ...summarizeCanonicalPeriodEntries(client, selectedEntries),
@@ -3426,7 +3437,8 @@ function buildDetectionClient(client: Client, selectedEntries: ClientPeriodEntry
     projectScope: client.projectScope,
     groupName: client.groupName,
     entityRole: client.entityRole,
-    standardMetricCoverage: Array.from(new Set(selectedEntries.flatMap((entry) => entry.metricCoverage || []))),
+    standardMetricCoverage: coverage,
+    standardMetricEvidence: evidence,
     periodEntries: availableEntries,
   })
 }
@@ -3701,8 +3713,18 @@ function hydrateManagedRules(managed: ManagedRule[] = []) {
   })).sort((a, b) => a.code.localeCompare(b.code, 'zh-CN'))
 }
 
+function filingBackedRiskInputs(client: Client) {
+  const inputs = toClientSnapshot(client)
+  if (client.dataBasis === '标准资料') {
+    for (const field of ['taxableSales', 'outputTax', 'inputTax', 'vatTaxPayable', 'endingVatCredit']) {
+      if (!client.standardMetricEvidence?.[field]?.length) delete inputs[field]
+    }
+  }
+  return inputs
+}
+
 function riskRuleExecution(client: Client, rule: RiskRule) {
-  return evaluateRuleExecution(toClientSnapshot(client), {
+  return evaluateRuleExecution(filingBackedRiskInputs(client), {
     code: rule.code,
     enabled: true,
     conditionJson: riskRuleCondition(rule),
@@ -4180,17 +4202,19 @@ function findingAnalysisForRisk(client: Client, risk: RiskResult) {
   return `当前发现为：${reason}。该事项不直接等同于税务机关最终认定，但说明当前数据或业务安排存在需要复核的异常信号，应结合原始凭证、申报表和业务实质进一步确认。`
 }
 
-function buildStructuredRiskFinding(client: Client, risk: RiskResult): StructuredRiskFinding {
+function buildStructuredRiskFinding(client: Client, risk: RiskResult, periodSources: ReportPeriodEvidenceSource[]): StructuredRiskFinding {
   const template = deepReportRuleTemplates[risk.code]
   const condition = riskRuleCondition(risk)
   const inputEvidence = buildReportFindingInputEvidence({
     condition,
     requiredFields: risk.requiredFields,
-    values: toClientSnapshot(client),
+    values: filingBackedRiskInputs(client),
     standardMetricCoverage: client.standardMetricCoverage,
     explicitFields: client.manualDerivedFields,
     autoDerivedSources: reportAutoDerivedSources,
     additionalLabels: clientImportFieldLabels,
+    metricEvidence: client.standardMetricEvidence,
+    periodSources,
   })
   if (template) {
     return {
@@ -4254,7 +4278,7 @@ function buildStructuredReport(
   const completeness = getDataCompleteness(client, risks)
   const missingFields = validateClientForReport(client).map((issue) => issue.label)
   const findings = risks.map((risk, index) => ({
-    ...buildStructuredRiskFinding(client, risk),
+    ...buildStructuredRiskFinding(client, risk, periodEvidenceSources),
     findingRef: reportFindingReference(index),
     evidenceStatus: reportFindingEvidenceStatus(),
   }))
@@ -5519,23 +5543,7 @@ function App() {
     if (!selectedClient || !detectionPeriodEntries.length) return selectedClient
     const standardEntries = canonicalPeriodCover(detectionPeriodEntries)
     if (!standardEntries.length) return selectedClient
-    const standardMetricCoverage = Array.from(new Set(standardEntries.flatMap((entry) => entry.metricCoverage || [])))
-    return deriveClientMetrics({
-      ...selectedClient,
-      ...summarizeCanonicalPeriodEntries(selectedClient, standardEntries),
-      id: selectedClient.id,
-      name: selectedClient.name,
-      creditCode: selectedClient.creditCode,
-      region: selectedClient.region,
-      industry: selectedClient.industry,
-      taxpayerType: selectedClient.taxpayerType,
-      establishedAt: selectedClient.establishedAt,
-      projectScope: selectedClient.projectScope,
-      groupName: selectedClient.groupName,
-      entityRole: selectedClient.entityRole,
-      standardMetricCoverage,
-      periodEntries: detectionPeriodEntries,
-    })
+    return buildDetectionClient(selectedClient, standardEntries, detectionPeriodEntries)
   }, [detectionPeriodEntries, selectedClient])
   const analysisClients = useMemo(() => clients.map((client) => (
     sourceBackedOverviewClient?.id === client.id ? sourceBackedOverviewClient : client
@@ -7026,6 +7034,7 @@ function App() {
   ) => {
     if (reportInFlight.current) return
     const reportClient = deriveClientMetrics({ ...client, periodEntries: [] })
+    const aiClient = { ...reportClient, standardMetricEvidence: undefined }
     const risks = detectRisks(reportClient, managedRules)
     const skippedRules = getSkippedRules(reportClient, managedRules)
     const evaluatedRuleCount = getSourceRules(managedRules).length
@@ -7060,7 +7069,7 @@ function App() {
       risks,
       content: sanitizePublicReportContent(buildProfessionalReportContent(structuredReport)),
       structured: structuredReport,
-      aiSource: { client: reportClient, risks: risksForAi },
+      aiSource: { client: aiClient, risks: risksForAi },
     }
     const fingerprint = JSON.stringify({ ownerUserId: authUser?.id, draft })
     const baseReport: Report = reportRetryDraft.current?.fingerprint === fingerprint
@@ -7111,7 +7120,7 @@ function App() {
       let reviewModel = ''
       try {
         const reviewResponse = await apiSend<{ review: AiReview; model: string; usage?: unknown }>('/api/ai/review', 'POST', {
-          client: reportClient,
+          client: aiClient,
           risks: risksForAi,
         })
         aiReview = reviewResponse.review
@@ -10786,19 +10795,27 @@ function StructuredReportPreview({
                   <h5>本次采用数据（生成时快照）</h5>
                   <div className="finding-input-evidence-wrap">
                     <table className="finding-input-evidence">
-                      <thead><tr><th>数据项</th><th>生成时取值</th><th>数据口径</th></tr></thead>
+                      <thead><tr><th>数据项</th><th>生成时取值</th><th>取数依据与原表</th></tr></thead>
                       <tbody>
                         {reportFindingInputEvidenceList(finding.inputEvidence).map((evidence) => (
                           <tr key={`${finding.id}-${evidence.label}`}>
                             <td>{evidence.label}</td>
                             <td>{evidence.value}</td>
-                            <td>{evidence.basis}</td>
+                            <td>
+                              {evidence.basis}
+                              {evidence.sources?.length ? <details className="report-finding-originals">
+                                <summary>查看原表位置（{evidence.sources.length}）</summary>
+                                <ul>{evidence.sources.map((source) => <li key={`${source.sourceFileId}-${source.page}-${source.formRow}`}>
+                                  {source.stored ? <a href={reportOriginalReferenceUrl(source)} target="_blank" rel="noreferrer">{reportOriginalReferenceText(source)}</a> : reportOriginalReferenceText(source)}
+                                </li>)}</ul>
+                              </details> : <small className="finding-evidence-note"> · 未记录原表栏次</small>}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                  <p className="finding-evidence-note">该快照用于复算本事项，不代表来源原件已逐项核验。</p>
+                  <p className="finding-evidence-note">原表位置用于复核取数，不代表原件真实性已核验。</p>
                 </>
               ) : null}
               <h5>潜在税务风险分析</h5>

@@ -49,6 +49,47 @@ function iitLine(month, personName, currentIncome, taxableIncome = 0) {
 }
 
 describe('buildStandardPeriods', () => {
+  it('uses current general plus simplified sales from the same return and uses line 24, not 19, for tax due', () => {
+    const vat = (code, currentAmount, currentTax, page = 1) => ({
+      ...row('vat_return', 'vat_main', '2025-12-01', '2025-12-31', {
+        rowNo: code, currentAmount, currentTax, sourcePageNo: page,
+        templateId: 'vat_general_return_main_pdf_v1', templateValidationStatus: 'passed',
+      }),
+      source_file_id: 'same-archive',
+    })
+    const facts = [vat('1', 100, 10), vat('5', 20, 3), vat('19', 84, 7), vat('24', 31, 6)]
+    const period = buildStandardPeriods(facts).periods[0]
+    expect(period.metrics).toMatchObject({ taxableSales: 133, vatTaxPayable: 37 })
+    expect(period.metricEvidence.taxableSales.map((source) => source.formRow)).toEqual(['1', '5'])
+    expect(period.metricEvidence.vatTaxPayable[0].formRow).toBe('24')
+    const partial = buildStandardPeriods([facts[0], vat('5', 20, 3, 2), facts[2]]).periods[0]
+    expect(partial.metricCoverage).not.toContain('taxableSales')
+    expect(partial.metricCoverage).not.toContain('vatTaxPayable')
+  })
+  it('does not choose a version by upload order: only identical source values are traceable', () => {
+    const build = (value) => [
+      { ...vatMonth('2025-12', 1000, 1000), source_file_id: 'case-main' },
+      ...[['case-a', 0], ['case-b', value]].map(([source_file_id, currentAmount]) => ({
+        ...row('vat_return', 'vat_main', '2025-12-01', '2025-12-31', {
+          rowNo: '12', lineName: '进项税额', currentAmount, sourcePageNo: 2,
+          templateId: 'vat_general_return_main_pdf_v1', templateValidationStatus: 'passed',
+        }),
+        source_file_id,
+      })),
+    ]
+    const same = buildStandardPeriods(build(0)).periods[0]
+    expect(same.metrics.inputTax).toBe(0)
+    expect(same.metricEvidence.inputTax).toEqual([
+      { sourceFileId: 'case-a', page: 2, formRow: '12', periodStart: '2025-12-01', periodEnd: '2025-12-31' },
+      { sourceFileId: 'case-b', page: 2, formRow: '12', periodStart: '2025-12-01', periodEnd: '2025-12-31' },
+    ])
+    for (const records of [build(20), build(20).reverse()]) {
+      const summary = buildStandardPeriods(records)
+      expect(summary.periods[0].metricCoverage).not.toContain('inputTax')
+      expect(summary.periods[0].metricEvidence.inputTax).toBeUndefined()
+      expect(summary.crossValidation.warnings.join(' ')).toContain('主表金额有冲突')
+    }
+  })
   it('uses current-quarter financial amounts and cross-checks them against monthly VAT', () => {
     const rows = [
       vatMonth('2025-04', 163434.52, 2959063.72),
@@ -259,5 +300,14 @@ describe('buildStandardPeriods', () => {
     expect(month.sourceMetrics.inputInvoiceAmount).toBe(800)
     expect(month.metrics.taxableSales).toBe(0)
     expect(month.metricCoverage).not.toContain('taxableSales')
+  })
+
+  it('records a salary declaration and allows an explicit zero VAT input only with a source', () => {
+    const month = buildStandardPeriods([
+      row('iit_withholding', 'iit_line', '2025-12-01', '2025-12-31', { personName: '样例', currentIncome: 300 }),
+      row('vat_return', 'vat_main', '2025-12-01', '2025-12-31', { rowNo: '12', lineName: '进项税额', currentAmount: 0 }),
+    ]).periods[0]
+    expect(month.metricCoverage).toEqual(expect.arrayContaining(['salaryDeclaredCount', 'inputTax']))
+    expect(month.metrics.inputTax).toBe(0)
   })
 })

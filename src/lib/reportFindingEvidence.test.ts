@@ -1,10 +1,27 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildReportFindingInputEvidence,
+  collectReportMetricEvidence,
   reportFindingInputEvidenceList,
+  reportOriginalReferenceUrl,
 } from './reportFindingEvidence'
 
 describe('report finding input evidence', () => {
+  it('uses the exact file, period, PDF page and form row; does not guess from another month or archive', () => {
+    const source = { sourceFileId: 'file-abs', periodStart: '2026-10-01', periodEnd: '2026-10-31', page: 2, formRow: '12' }
+    const metricEvidence = { inputTax: [source] }
+    const file = { ...source, fileName: '示例申报表.pdf', documentType: 'vat_return', recordCount: 4, stored: true, parseStatus: 'parsed' }
+    const input = { requiredFields: ['inputTax'], values: { inputTax: 0 }, standardMetricCoverage: ['inputTax'], metricEvidence }
+    const references = buildReportFindingInputEvidence({ ...input, periodSources: [file] })[0].sources
+    expect(references).toEqual([{ ...source, fileName: file.fileName, stored: true }])
+    expect(reportOriginalReferenceUrl(references![0])).toBe('/api/tax-data/source?sourceFileId=file-abs#page=2')
+    for (const different of [{ ...file, sourceFileId: 'other-source' }, { ...file, periodStart: '2026-11-01' }, { ...file, fileName: '示例资料.zip' }]) {
+      expect(buildReportFindingInputEvidence({ ...input, periodSources: [different] })[0]).not.toHaveProperty('sources')
+    }
+    expect(collectReportMetricEvidence([
+      { metricCoverage: ['inputTax'], metricEvidence }, { metricCoverage: ['inputTax'] },
+    ], ['inputTax'])).toEqual({})
+  })
   it('freezes composite-condition values with honest data-basis labels', () => {
     const result = buildReportFindingInputEvidence({
       condition: {
@@ -29,7 +46,7 @@ describe('report finding input evidence', () => {
 
     expect(result).toEqual([
       { label: '增值税应税销售额', value: '1,234,567.89', basis: '标准资料已形成指标' },
-      { label: '增值税应纳/入库税额', value: '8,000', basis: '资料或用户明确值' },
+      { label: '申报应纳增值税合计（非已入库额）', value: '8,000', basis: '资料或用户明确值' },
       { label: '存在未开票收入', value: '是', basis: '企业档案或已选期间数据' },
       { label: '月收入', value: '100,000', basis: '系统推导（季度收入 / 3）' },
     ])

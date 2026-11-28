@@ -128,7 +128,7 @@ export const conditionFields: Array<{ value: string; label: string }> = [
   { value: 'redVatSpecialInvoiceAmount', label: '红字专票金额' },
   { value: 'outputTax', label: '销项税额' },
   { value: 'inputTax', label: '进项税额' },
-  { value: 'vatTaxPayable', label: '增值税应纳/入库税额' },
+  { value: 'vatTaxPayable', label: '申报应纳增值税合计（非已入库额）' },
   { value: 'taxableSales', label: '增值税应税销售额' },
   { value: 'theoreticalVatTax', label: '理论增值税税额' },
   { value: 'budgetVatTax', label: '预算增值税税额' },
