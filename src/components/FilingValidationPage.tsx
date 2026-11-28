@@ -6,6 +6,7 @@ import { vatAmount, vatColumns, vatDraftFromArchive, vatFormGroups, vatFormLines
 import { annexCellId, checkVatAnnexes, checkVatAnnexInternal, updateAnnexAmount, vatAnnexOrder, type AnnexField, type VatAnnex } from '../lib/filingAnnexes'
 import { FilingAnnexReview } from './FilingAnnexReview'
 import { FilingReviewSummary, type ReviewItem } from './FilingReviewSummary'
+import { CitFilingReview } from './CitFilingReview'
 import './FilingValidationPage.css'
 
 type ArchiveSource = { id: string; fileName: string; documentType: string; periodStart: string; periodEnd: string; parseStatus: string; recordCount: number }
@@ -69,6 +70,7 @@ export function FilingValidationPage({ clients, selectedClientId, onSelectClient
   const [sourceId, setSourceId] = useState('')
   const [draft, setDraft] = useState<Draft | null>(null)
   const [view, setView] = useState<'start' | 'result' | 'form'>('start')
+  const [annual, setAnnual] = useState(false)
   const [busy, setBusy] = useState<'archive' | 'file' | 'manual' | null>(null)
   const [error, setError] = useState('')
   const [annexId, setAnnexId] = useState('')
@@ -182,10 +184,12 @@ export function FilingValidationPage({ clients, selectedClientId, onSelectClient
   const blankDraft = draft?.origin === 'manual' && !Object.values(draft.amounts).some((row) => row.some(Boolean)) && !draft.annexes.some((annex) => annex.grid?.some((row) => row.some((cell) => cell.input && vatAmount(cell.raw))))
   const wrongDates = draft?.meta.periodStart && draft.meta.periodEnd && draft.meta.periodStart > draft.meta.periodEnd
 
+  if (annual) return <CitFilingReview onBack={() => setAnnual(false)} />
   return <section className={`page filing-page filing-view-${view}`}>
     <div className="filing-layout">
       <header className="filing-page-heading"><div><p className="filing-kicker">增值税 · 一般纳税人</p><h2>申报前校验</h2></div>
-        <a className="filing-link" href={filingSources[draft?.version || 'legacy']} target="_blank" rel="noreferrer">税局表样 ↗</a>
+        <div className="filing-heading-actions"><button type="button" className="filing-text-action" disabled={!!busy} onClick={() => setAnnual(true)}>企业所得税 · 年度汇算校验 <ArrowRight size={15} aria-hidden="true" /></button>
+          <a className="filing-link" href={filingSources[draft?.version || 'legacy']} target="_blank" rel="noreferrer">税局表样 ↗</a></div>
       </header>
       <input className="filing-file-input" hidden ref={fileInput} type="file" multiple accept=".xlsx,.xls,.pdf" onChange={(event) => { const files = Array.from(event.currentTarget.files || []); event.currentTarget.value = ''; void loadFiles(files) }} />
       {view === 'start' && <div className="filing-start">

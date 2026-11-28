@@ -21,7 +21,7 @@ function Item({ item }: { item: ReviewItem }) {
 }
 
 export function FilingReviewSummary({ items, taxpayer, period, source, notices, onOpen }: {
-  items: ReviewItem[]; taxpayer: string; period: string; source: string; notices: string[]; onOpen: () => void;
+  items: ReviewItem[]; taxpayer: string; period: string; source: string; notices: string[]; onOpen?: () => void;
 }) {
   const differences = items.filter((item) => item.status === 'difference')
   const unchecked = items.filter((item) => item.status === 'missing')
@@ -35,7 +35,7 @@ export function FilingReviewSummary({ items, taxpayer, period, source, notices, 
       <span className="filing-result-mark"><Icon size={22} aria-hidden="true" /></span>
       <div role="status"><p className="filing-kicker">校验结果</p><h3 id="filing-result-title">{title}</h3><p id="filing-result-count">已核对 {checked} 项{unchecked.length ? `，另有 ${unchecked.length} 项未核对` : ''}。</p></div>
     </div>
-    <div className="filing-result-meta-line"><div><strong>{taxpayer}</strong><p>{period}</p></div><button type="button" className="filing-text-action" onClick={onOpen}><FileText size={16} aria-hidden="true" /> 查看已填表</button></div>
+    <div className="filing-result-meta-line"><div><strong>{taxpayer}</strong><p>{period}</p></div>{onOpen && <button type="button" className="filing-text-action" onClick={onOpen}><FileText size={16} aria-hidden="true" /> 查看已填表</button>}</div>
     <p className="filing-notes">仅核对本次支持的表内公式和主附表金额，不判断申报是否通过。</p>
     {differences.length > 0 && <div className="filing-result-items" aria-label="需要核对的差异">{differences.map((item) => <Item key={item.id} item={item} />)}</div>}
     {(unchecked.length > 0 || notices.length > 0) && <details className="filing-result-disclosure"><summary>{unchecked.length ? `查看 ${unchecked.length} 项未核对的原因` : '查看资料提示'} <ChevronDown size={15} aria-hidden="true" /></summary>

@@ -1,6 +1,29 @@
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
 
+export type PdfTextRun = { text: string; x: number; y: number; width: number }
+
+export async function extractPdfTextRuns(buffer: ArrayBuffer, maxPages: number) {
+  if (typeof window !== 'undefined') pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
+  const task = pdfjs.getDocument({ data: new Uint8Array(buffer), isEvalSupported: false })
+  const document = await task.promise
+  try {
+    if (document.numPages > maxPages) throw new Error('PDF 页数超过读取上限。')
+    const pages: PdfTextRun[][] = []
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+      const page = await document.getPage(pageNumber)
+      const content = await page.getTextContent()
+      pages.push(content.items.flatMap((item) => 'str' in item && item.str.trim()
+        && item.transform[0] > 0 && item.transform[3] > 0 && !item.transform[1] && !item.transform[2]
+        ? [{ text: item.str, x: item.transform[4], y: item.transform[5], width: item.width }] : []))
+      page.cleanup()
+    }
+    return pages
+  } finally {
+    await document.destroy()
+  }
+}
+
 export async function extractPdfTextPages(
   buffer: ArrayBuffer,
   onEmptyPage?: (page: Awaited<ReturnType<pdfjs.PDFDocumentProxy['getPage']>>, pageNumber: number) => Promise<void>,

@@ -12,6 +12,7 @@
 .filing-page [id] { scroll-margin-top: 20px; }
 .filing-page-heading { display: flex; justify-content: space-between; gap: 8px 24px; flex-wrap: wrap; align-items: end; padding: 8px 0 15px; border-bottom: 1px solid var(--filing-rule); }
 .filing-page-heading h2 { margin: 0; font-size: clamp(25px, 3vw, 34px); font-weight: 720; letter-spacing: -.025em; }
+.filing-heading-actions { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; }
 .filing-page .filing-kicker { color: var(--filing-accent); font-size: 12px; font-weight: 700; margin: 0 0 5px; letter-spacing: .04em; }
 .filing-link { color: var(--filing-accent); font-size: 13px; text-underline-offset: 4px; white-space: nowrap; }
 .filing-start { text-align: center; padding: clamp(46px, 8vw, 104px) 12px clamp(38px, 6vw, 76px); border-bottom: 1px solid var(--filing-rule); }

@@ -5,7 +5,7 @@ import { renderOriginalPdfPage } from '../lib/pdfTextExtractor'
 const stateLabels: Record<VatAnnex['state'], string> = { verified: '已带入', unconfirmed: '待确认来源', duplicate: '同类多份', conflict: '主体或期间不符', pdf: 'PDF 原页' }
 const showFen = (amount?: number) => amount === undefined ? '—' : (amount / 100).toFixed(2)
 
-function OriginalPdf({ file, pages }: { file: File; pages: number[] }) {
+export function OriginalPdf({ file, pages }: { file: File; pages: number[] }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const [index, setIndex] = useState(0)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
